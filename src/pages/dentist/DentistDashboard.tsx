@@ -10,56 +10,28 @@ import {
   Users,
   Clock,
 } from "lucide-react";
+import { useDentistAppointments } from "@/lib/dentistAppointmentStore";
+import { toMinutes, toLabel } from "@/lib/dentistSchedules";
 
-const iso = (d: Date) => d.toISOString().split("T")[0];
-const today = iso(new Date());
-const addDays = (n: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return iso(d);
-};
-
-type Appointment = {
-  id: number;
-  patient: string;
-  service: string;
-  date: string;
-  time: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled" | "rejected";
-  type: "online" | "walk-in";
-};
-
-// Sample appointments scoped to the logged-in dentist
-const appointments: Appointment[] = [
-  { id: 1, patient: "Maria Garcia", service: "Tooth Extraction", date: today, time: "9:00 AM", status: "completed", type: "online" },
-  { id: 2, patient: "James Wilson", service: "Dental Cleaning", date: today, time: "10:30 AM", status: "confirmed", type: "online" },
-  { id: 3, patient: "Emma Davis", service: "Root Canal", date: today, time: "11:00 AM", status: "confirmed", type: "walk-in" },
-  { id: 4, patient: "Carlo Reyes", service: "Check-up", date: today, time: "1:00 PM", status: "pending", type: "walk-in" },
-  { id: 5, patient: "Ana Santos", service: "Teeth Whitening", date: addDays(1), time: "2:30 PM", status: "confirmed", type: "online" },
-  { id: 6, patient: "Juan Dela Cruz", service: "Filling", date: addDays(2), time: "10:00 AM", status: "confirmed", type: "online" },
-  { id: 7, patient: "Maria Santos", service: "Orthodontics (Braces)", date: addDays(3), time: "2:00 PM", status: "pending", type: "online" },
-  { id: 8, patient: "Pedro Reyes", service: "EXO (Bunot)", date: addDays(-1), time: "9:00 AM", status: "completed", type: "walk-in" },
-  { id: 9, patient: "Lisa Anderson", service: "Dental Cleaning", date: addDays(-2), time: "4:00 PM", status: "completed", type: "online" },
-];
+const today = new Date().toISOString().split("T")[0];
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
   confirmed: "bg-success/10 text-success border-success/20",
   pending: "bg-warning/10 text-warning border-warning/20",
+  rescheduled: "bg-warning/10 text-warning border-warning/20",
   cancelled: "bg-destructive/10 text-destructive border-destructive/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-const toMinutes = (t: string) => {
-  const [time, mer] = t.split(" ");
-  let [h, m] = time.split(":").map(Number);
-  if (mer === "PM" && h !== 12) h += 12;
-  if (mer === "AM" && h === 12) h = 0;
-  return h * 60 + m;
-};
-
 export default function DentistDashboard() {
   const { user } = useAuth();
+  const allAppointments = useDentistAppointments();
+
+  const appointments = useMemo(
+    () => allAppointments.filter(a => !user?.name || a.dentist === user.name),
+    [allAppointments, user],
+  );
 
   const stats = useMemo(() => {
     const todays = appointments.filter(a => a.date === today);
@@ -71,7 +43,7 @@ export default function DentistDashboard() {
       completed: completed.length,
       totalPatientsToday: todays.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
     };
-  }, []);
+  }, [appointments]);
 
   const todaysSchedule = useMemo(() => {
     const now = new Date().getHours() * 60 + new Date().getMinutes();
@@ -79,7 +51,7 @@ export default function DentistDashboard() {
       .filter(a => a.date === today)
       .sort((a, b) => toMinutes(a.time) - toMinutes(b.time))
       .map(a => ({ ...a, upcoming: toMinutes(a.time) >= now }));
-  }, []);
+  }, [appointments]);
 
   return (
     <div className="space-y-6">
@@ -111,7 +83,7 @@ export default function DentistDashboard() {
                   <div>
                     <p className="font-medium text-sm text-foreground">{apt.patient}</p>
                     <p className="text-xs text-muted-foreground">
-                      {apt.service} • {apt.time} • {apt.type === "walk-in" ? "Walk-in" : "Online"}
+                      {apt.service} • {toLabel(toMinutes(apt.time))} • {apt.type === "walk-in" ? "Walk-in" : "Online"}
                     </p>
                   </div>
                   <Badge variant="outline" className={statusColors[apt.status]}>

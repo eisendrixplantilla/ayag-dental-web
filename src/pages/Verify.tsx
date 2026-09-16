@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { getRoleHome } from "@/lib/roleHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -16,8 +17,9 @@ export default function Verify() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await verify(code);
+      const verifiedUser = await verify(code);
       toast.success("Account verified!");
+      navigate(getRoleHome(verifiedUser.role), { replace: true });
     } catch (err: any) {
       toast.error(err.message);
     }

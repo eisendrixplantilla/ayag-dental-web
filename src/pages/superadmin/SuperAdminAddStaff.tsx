@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -117,8 +118,8 @@ export default function SuperAdminAddStaff() {
           </div>
           <div><Label>Username *</Label><Input value={form.username} onChange={e => set("username", e.target.value)} /></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><Label>Password *</Label><Input type="password" value={form.password} onChange={e => set("password", e.target.value)} /></div>
-            <div><Label>Confirm Password *</Label><Input type="password" value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} /></div>
+            <div><Label>Password *</Label><PasswordInput value={form.password} onChange={e => set("password", e.target.value)} /></div>
+            <div><Label>Confirm Password *</Label><PasswordInput value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} /></div>
           </div>
           <div className="flex gap-2 pt-2">
             <Button className="gradient-primary text-primary-foreground" onClick={submit}>Save</Button>

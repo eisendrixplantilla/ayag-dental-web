@@ -22,6 +22,7 @@ import {
   useDentistAppointments, useDentalRecords, createDentalRecord, correctDentalRecord,
   type DentalRecord,
 } from "@/lib/dentistAppointmentStore";
+import { getPatientAccounts } from "@/contexts/AuthContext";
 
 const emptyForm = {
   date: new Date().toISOString().split("T")[0],
@@ -39,11 +40,10 @@ export default function DentistRecords() {
   const appointments = useDentistAppointments();
   const records = useDentalRecords();
 
-  const patients = useMemo(() => {
-    const names = new Map<string, string>();
-    appointments.forEach(a => names.set(a.patient, a.service));
-    return [...names.keys()];
-  }, [appointments]);
+  const patients = useMemo(
+    () => Array.from(new Set(getPatientAccounts().map(p => p.name))).sort((a, b) => a.localeCompare(b)),
+    [],
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);

@@ -3,6 +3,7 @@ import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, History, Bell } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 type AppointmentStatus = "pending" | "confirmed" | "completed" | "cancelled" | "rejected";
 
@@ -41,6 +42,7 @@ const formatShortDate = (d: Date) =>
   d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export default function PatientDashboard() {
+  const { user } = useAuth();
   const { upcoming, nextConfirmed, totalVisits, reminders } = useMemo(() => {
     const today = startOfToday();
 
@@ -82,7 +84,7 @@ export default function PatientDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold font-heading text-foreground">My Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, John Smith</p>
+        <p className="text-muted-foreground">Welcome back, {user?.name}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

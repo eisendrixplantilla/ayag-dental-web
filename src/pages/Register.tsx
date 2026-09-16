@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, emailExists } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,12 +15,22 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+  const [emailError, setEmailError] = useState("");
+
   const { register, isLoading } = useAuth();
   const navigate = useNavigate();
 
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setEmailError(value.trim() && emailExists(value) ? "An account with this email already exists" : "");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (emailExists(email)) {
+      setEmailError("An account with this email already exists");
+      return;
+    }
     try {
       await register(name, email, password, "patient");
       toast.success("Account created! Please verify your email.");
@@ -58,17 +69,26 @@ export default function Register() {
                 <Label htmlFor="email">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} className="pl-10" required />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={e => handleEmailChange(e.target.value)}
+                    className={`pl-10 ${emailError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    required
+                  />
                 </div>
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input id="password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="pl-10" required minLength={6} />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+                  <PasswordInput id="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="pl-10" required minLength={6} />
                 </div>
               </div>
-              <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={isLoading}>
+              <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={isLoading || !!emailError}>
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Create Account
               </Button>

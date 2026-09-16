@@ -6,6 +6,12 @@
       "runtimeExecutable": "C:\\xampp\\php\\php.exe",
       "runtimeArgs": ["C:\\xampp\\htdocs\\bright-grin-care-laravel\\artisan", "serve", "--port=8000"],
       "port": 8000
+    },
+    {
+      "name": "vite",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 8080
     }
   ]
 }

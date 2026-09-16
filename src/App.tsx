@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { getRoleHome } from "@/lib/roleHome";
 
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -47,13 +48,6 @@ import DentistProfile from "./pages/dentist/DentistProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
-
-function getRoleHome(role: string) {
-  if (role === "superadmin") return "/superadmin";
-  if (role === "admin") return "/admin";
-  if (role === "dentist") return "/dentist";
-  return "/patient";
-}
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const { user } = useAuth();

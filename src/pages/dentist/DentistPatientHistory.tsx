@@ -2,14 +2,18 @@ import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  User, CalendarDays, FileText, Stethoscope, Pill, NotebookPen, Lock,
+  User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown,
 } from "lucide-react";
 import {
   useDentistAppointments, useDentalRecords,
 } from "@/lib/dentistAppointmentStore";
+import { getPatientAccounts } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 
 interface PatientProfile {
   name: string;
@@ -46,27 +50,31 @@ export default function DentistPatientHistory() {
   const appointments = useDentistAppointments();
   const dentalRecords = useDentalRecords();
   const [selected, setSelected] = useState<string>("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const registeredPatients = useMemo(() => getPatientAccounts(), []);
 
   const patientNames = useMemo(
-    () => Array.from(new Set(appointments.map(a => a.patient))),
-    [appointments],
+    () => Array.from(new Set(registeredPatients.map(p => p.name))).sort((a, b) => a.localeCompare(b)),
+    [registeredPatients],
   );
 
   const profile: PatientProfile | null = useMemo(() => {
     if (!selected) return null;
     const apt = appointments.find(a => a.patient === selected);
+    const account = registeredPatients.find(p => p.name === selected);
     const extra = extraProfiles[selected] ?? {};
     return {
       name: selected,
       contact: apt?.contact ?? "—",
-      email: apt?.email ?? "—",
+      email: apt?.email ?? account?.email ?? "—",
       age: extra.age ?? 0,
       gender: extra.gender ?? "—",
       address: extra.address ?? "—",
       bloodType: extra.bloodType ?? "—",
       allergies: extra.allergies ?? "—",
     };
-  }, [selected, appointments]);
+  }, [selected, appointments, registeredPatients]);
 
   const history = useMemo(() => byDateDesc(appointments.filter(a => a.patient === selected)), [appointments, selected]);
   const records = useMemo(() => byDateDesc(dentalRecords.filter(r => r.patient === selected)), [dentalRecords, selected]);
@@ -85,17 +93,46 @@ export default function DentistPatientHistory() {
             </Badge>
           </p>
         </div>
-        <div className="w-full sm:w-64">
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a patient" />
-            </SelectTrigger>
-            <SelectContent>
-              {patientNames.map(name => (
-                <SelectItem key={name} value={name}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="w-full sm:w-72">
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={pickerOpen}
+                className="w-full justify-between font-normal"
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  {selected || "Search for a patient..."}
+                </span>
+                <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+              <Command>
+                <CommandInput placeholder="Search patients..." />
+                <CommandList>
+                  <CommandEmpty>No patients found.</CommandEmpty>
+                  <CommandGroup>
+                    {patientNames.map(name => (
+                      <CommandItem
+                        key={name}
+                        value={name}
+                        onSelect={() => {
+                          setSelected(name === selected ? "" : name);
+                          setPickerOpen(false);
+                        }}
+                      >
+                        <Check className={cn("mr-2 w-4 h-4", selected === name ? "opacity-100" : "opacity-0")} />
+                        {name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
