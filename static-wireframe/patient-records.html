@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dental Records - Ayag Dental Clinic</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header"><img src="clinic-logo.png" alt=""><span>Ayag Dental</span></div>
+      <div class="sidebar-label">Menu</div>
+      <ul class="sidebar-menu">
+        <li><a href="patient-dashboard.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Dashboard</a></li>
+        <li><a href="patient-book.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Book Appointment</a></li>
+        <li><a href="patient-appointments.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> My Appointments</a></li>
+        <li><a href="patient-records.html" class="active"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Dental Records</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="sidebar-user"><div class="label">Logged in as</div><div class="name">John Smith</div><div class="role">Patient</div></div>
+        <button class="btn-signout"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign Out</button>
+      </div>
+    </aside>
+    <div class="main-area">
+      <header class="topbar"><span><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span></header>
+      <main class="content space-y">
+        <div><h1>Dental Records</h1><p class="text-muted">Your complete dental history and records</p></div>
+        <div class="card">
+          <div class="card-content">
+            <div class="tabs-list">
+              <button class="tab-btn active"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Visit History</button>
+              <button class="tab-btn"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Procedures</button>
+              <button class="tab-btn">💊 Prescriptions</button>
+            </div>
+            <div class="space-y-sm">
+              <div class="flex gap-4" style="padding:16px; border-radius:8px; background:hsl(200 20% 95%/0.5)">
+                <div class="icon-box"><span class="text-primary"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span></div>
+                <div style="flex:1">
+                  <div class="flex justify-between items-center"><p class="font-semibold">Filling</p><span class="badge badge-secondary">Tooth #14</span></div>
+                  <p class="text-sm text-muted">Feb 10, 2024 • Dr. Sarah Chen</p>
+                  <p class="text-sm text-muted mt-4">Composite filling on tooth #14. No complications.</p>
+                </div>
+              </div>
+              <div class="flex gap-4" style="padding:16px; border-radius:8px; background:hsl(200 20% 95%/0.5)">
+                <div class="icon-box"><span class="text-primary"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span></div>
+                <div style="flex:1">
+                  <div class="flex justify-between items-center"><p class="font-semibold">Tooth Extraction</p><span class="badge badge-secondary">Tooth #48</span></div>
+                  <p class="text-sm text-muted">Jan 15, 2024 • Dr. Mike Johnson</p>
+                  <p class="text-sm text-muted mt-4">Wisdom tooth extraction (lower right). Post-op care instructions given.</p>
+                </div>
+              </div>
+              <div class="flex gap-4" style="padding:16px; border-radius:8px; background:hsl(200 20% 95%/0.5)">
+                <div class="icon-box"><span class="text-primary"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span></div>
+                <div style="flex:1">
+                  <div class="flex justify-between items-center"><p class="font-semibold">Dental Cleaning</p><span class="badge badge-secondary">Tooth Full</span></div>
+                  <p class="text-sm text-muted">Dec 5, 2023 • Dr. Sarah Chen</p>
+                  <p class="text-sm text-muted mt-4">Routine cleaning. Minor plaque buildup. Recommended flossing daily.</p>
+                </div>
+              </div>
+              <div class="flex gap-4" style="padding:16px; border-radius:8px; background:hsl(200 20% 95%/0.5)">
+                <div class="icon-box"><span class="text-primary"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span></div>
+                <div style="flex:1">
+                  <div class="flex justify-between items-center"><p class="font-semibold">Check-up</p><span class="badge badge-secondary">Tooth Full</span></div>
+                  <p class="text-sm text-muted">Oct 20, 2023 • Dr. Sarah Chen</p>
+                  <p class="text-sm text-muted mt-4">General check-up. All clear. Next visit in 3 months.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Ayag Dental Clinic</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <img src="clinic-logo.png" alt="Ayag Dental Clinic">
+        <h1>Ayag Dental Clinic</h1>
+      </div>
+      <div class="card" style="box-shadow: var(--shadow-elevated)">
+        <div class="card-header text-center">
+          <h2 class="card-title" style="justify-content:center; font-size:20px;">Welcome Back</h2>
+          <p class="card-description">Sign in to your account</p>
+        </div>
+        <div class="card-content">
+          <form class="space-y-sm">
+            <div>
+              <label class="label">Email</label>
+              <div class="input-icon">
+                <span class="icon">✉</span>
+                <input class="input" type="email" placeholder="you@example.com">
+              </div>
+            </div>
+            <div>
+              <label class="label">Password</label>
+              <div class="input-icon">
+                <span class="icon">🔒</span>
+                <input class="input" type="password" placeholder="••••••••">
+              </div>
+            </div>
+            <div style="text-align:right">
+              <a href="forgot-password.html" class="text-xs text-primary link">Forgot password?</a>
+            </div>
+            <button class="btn btn-primary w-full" type="button">Sign In</button>
+          </form>
+          <p class="text-center text-sm text-muted mt-4">
+            Don't have an account? <a href="register.html" class="link">Create Account</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

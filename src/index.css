@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 200 20% 98%;
+    --foreground: 200 50% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 50% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 50% 10%;
+
+    --primary: 174 62% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 200 60% 94%;
+    --secondary-foreground: 200 50% 15%;
+
+    --muted: 200 20% 95%;
+    --muted-foreground: 200 15% 45%;
+
+    --accent: 199 80% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 20% 90%;
+    --input: 200 20% 90%;
+    --ring: 174 62% 38%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 200 30% 12%;
+    --sidebar-foreground: 200 20% 90%;
+    --sidebar-primary: 174 62% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 30% 18%;
+    --sidebar-accent-foreground: 200 20% 90%;
+    --sidebar-border: 200 30% 20%;
+    --sidebar-ring: 174 62% 50%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --font-heading: 'Plus Jakarta Sans', sans-serif;
+    --font-body: 'Inter', sans-serif;
+
+    --gradient-primary: linear-gradient(135deg, hsl(174 62% 38%), hsl(199 80% 50%));
+    --gradient-sidebar: linear-gradient(180deg, hsl(200 30% 12%), hsl(200 35% 8%));
+    --shadow-card: 0 1px 3px 0 hsl(200 20% 10% / 0.06), 0 1px 2px -1px hsl(200 20% 10% / 0.06);
+    --shadow-elevated: 0 10px 25px -5px hsl(200 20% 10% / 0.1), 0 8px 10px -6px hsl(200 20% 10% / 0.06);
+  }
+
+  .dark {
+    --background: 200 30% 6%;
+    --foreground: 200 20% 95%;
+    --card: 200 30% 10%;
+    --card-foreground: 200 20% 95%;
+    --popover: 200 30% 10%;
+    --popover-foreground: 200 20% 95%;
+    --primary: 174 62% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 30% 15%;
+    --secondary-foreground: 200 20% 90%;
+    --muted: 200 30% 15%;
+    --muted-foreground: 200 15% 55%;
+    --accent: 199 80% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 30% 18%;
+    --input: 200 30% 18%;
+    --ring: 174 62% 50%;
+    --sidebar-background: 200 35% 6%;
+    --sidebar-foreground: 200 20% 90%;
+    --sidebar-primary: 174 62% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 30% 12%;
+    --sidebar-accent-foreground: 200 20% 90%;
+    --sidebar-border: 200 30% 14%;
+    --sidebar-ring: 174 62% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  .gradient-sidebar {
+    background: var(--gradient-sidebar);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+}
+
+/* ---------- Print styles: dashboards print statistics only ---------- */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* hide sidebar chrome, mobile trigger, and the sticky header */
+  [data-sidebar],
+  [data-sidebar="trigger"],
+  [data-sidebar="rail"],
+  [class*="h-svh"],
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .shadow-card,
+  .shadow-elevated {
+    box-shadow: none !important;
+  }
+
+  .shadow-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

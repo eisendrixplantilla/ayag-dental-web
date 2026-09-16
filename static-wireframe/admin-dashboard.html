@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Ayag Dental Clinic</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="clinic-logo.png" alt="Ayag Dental Clinic">
+        <span>Ayag Dental</span>
+      </div>
+      <div class="sidebar-label">Menu</div>
+      <ul class="sidebar-menu">
+        <li><a href="admin-dashboard.html" class="active"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Dashboard</a></li>
+        <li><a href="admin-patients.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Patient Records</a></li>
+        <li><a href="admin-accounts.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Patient Accounts</a></li>
+        <li><a href="admin-appointments.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Walk-in Appointments</a></li>
+        <li><a href="admin-online-appointments.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Online Appointments</a></li>
+        <li><a href="admin-sales.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Sales</a></li>
+        <li><a href="admin-inventory.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Inventory</a></li>
+        <li><a href="admin-reports.html"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Reports</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="label">Logged in as</div>
+          <div class="name">Dr. Sarah Chen</div>
+          <div class="role">Clinic Staff</div>
+        </div>
+        <button class="btn-signout"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign Out</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main-area">
+      <header class="topbar">
+        <span><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
+      </header>
+      <main class="content space-y">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="text-muted">Welcome back, Dr. Sarah Chen</p>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Today's Appointments</div>
+            <div class="stat-value">14</div>
+            <div class="stat-trend up">3 remaining</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Walk-in Patients</div>
+            <div class="stat-value">2</div>
+            <div class="stat-trend">Today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Daily Earnings</div>
+            <div class="stat-value">₱24,500</div>
+            <div class="stat-trend up">+18% vs yesterday</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Next Open Slot</div>
+            <div class="stat-value">04</div>
+            <div class="stat-trend">Robert Brown • Check-up</div>
+          </div>
+        </div>
+
+        <div class="grid-2-col">
+          <!-- Today's Appointments -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">🕐 Today's Appointments</h3>
+            </div>
+            <div class="card-content space-y-xs">
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Maria Garcia</div>
+                  <div class="item-meta">Tooth Extraction • 9:00 AM</div>
+                </div>
+                <span class="badge badge-success">completed</span>
+              </div>
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">James Wilson</div>
+                  <div class="item-meta">Dental Cleaning • 10:30 AM</div>
+                </div>
+                <span class="badge badge-accent">in-progress</span>
+              </div>
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Emma Davis</div>
+                  <div class="item-meta">Root Canal • 11:00 AM</div>
+                </div>
+                <span class="badge badge-warning">waiting</span>
+              </div>
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Robert Brown</div>
+                  <div class="item-meta">Check-up • 1:00 PM</div>
+                </div>
+                <span class="badge badge-secondary">scheduled</span>
+              </div>
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Lisa Anderson</div>
+                  <div class="item-meta">Filling • 2:30 PM</div>
+                </div>
+                <span class="badge badge-secondary">scheduled</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Walk-in Patients -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Walk-in Patients Today</h3>
+            </div>
+            <div class="card-content space-y-xs">
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Carlo Reyes</div>
+                  <div class="item-meta">Tooth Extraction • Assigned by Dr. Ayag</div>
+                </div>
+                <span class="badge badge-accent">Assigned</span>
+              </div>
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="item-name">Ana Santos</div>
+                  <div class="item-meta">Check-up • Assigned by Dr. Santos</div>
+                </div>
+                <span class="badge badge-accent">Assigned</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Online Appointments -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Online Appointments</h3>
+          </div>
+          <div class="card-content space-y-xs">
+            <div class="list-item">
+              <div class="item-info">
+                <div class="item-name">Juan Dela Cruz</div>
+                <div class="item-meta">Teeth Whitening • 2024-03-20 at 10:00 AM</div>
+              </div>
+              <span class="badge badge-warning">pending</span>
+            </div>
+            <div class="list-item">
+              <div class="item-info">
+                <div class="item-name">Maria Santos</div>
+                <div class="item-meta">Root Canal • 2024-03-21 at 2:00 PM</div>
+              </div>
+              <span class="badge badge-warning">pending</span>
+            </div>
+            <div class="list-item">
+              <div class="item-info">
+                <div class="item-name">Pedro Reyes</div>
+                <div class="item-meta">Orthodontics (Braces) • 2024-03-22 at 9:00 AM</div>
+              </div>
+              <span class="badge badge-success">confirmed</span>
+            </div>
+            <div class="list-item">
+              <div class="item-info">
+                <div class="item-name">Ana Garcia</div>
+                <div class="item-meta">EXO (Bunot) • 2024-03-19 at 3:30 PM</div>
+              </div>
+              <span class="badge badge-destructive">declined</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
