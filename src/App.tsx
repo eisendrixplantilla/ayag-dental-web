@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { getRoleHome } from "@/lib/roleHome";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -123,6 +124,7 @@ const App = () => (
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
+      <SpeedInsights />
     </TooltipProvider>
   </QueryClientProvider>
 );
