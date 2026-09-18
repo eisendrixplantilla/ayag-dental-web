@@ -202,8 +202,8 @@ export default function DentistAppointments() {
                     <div className="flex lg:hidden justify-end">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline">
-                            Actions <MoreVertical className="w-4 h-4 ml-1" />
+                          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Actions">
+                            <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-popover">
