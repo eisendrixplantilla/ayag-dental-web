@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Package, Plus, Search, AlertTriangle, Edit } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 const mockInventory = [
   { id: "I001", name: "Dental Composite Resin", category: "Filling", quantity: 45, minStock: 20, unit: "tubes", status: "ok" },
@@ -18,11 +19,67 @@ const mockInventory = [
   { id: "I006", name: "Orthodontic Wire", category: "Ortho", quantity: 3, minStock: 10, unit: "rolls", status: "low" },
 ];
 
+const inventorySchema = z.object({
+  name: z.string().trim().min(1, "Item name is required"),
+  category: z.string().trim().min(1, "Category is required"),
+  quantity: z.coerce.number().int().min(0, "Quantity must be valid"),
+  minStock: z.coerce.number().int().min(0, "Min stock must be valid"),
+  unit: z.string().trim().min(1, "Unit is required"),
+});
+
 export default function AdminInventory() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const filtered = mockInventory.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
-  const lowStock = mockInventory.filter(i => i.status === "low").length;
+  const [inventory, setInventory] = useState(mockInventory);
+  const [editingItem, setEditingItem] = useState<typeof mockInventory[0] | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", category: "", quantity: "", minStock: "", unit: "" });
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const filtered = inventory.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const lowStock = inventory.filter(i => i.status === "low").length;
+
+  const openEdit = (item: typeof mockInventory[0]) => {
+    setEditingItem(item);
+    setEditForm({ name: item.name, category: item.category, quantity: String(item.quantity), minStock: String(item.minStock), unit: item.unit });
+    setEditErrors({});
+  };
+
+  const handleEditFormChange = (field: string, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    if (editErrors[field]) {
+      setEditErrors(prev => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
+  const handleUpdate = () => {
+    if (!editingItem) return;
+    const parsed = inventorySchema.safeParse(editForm);
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      parsed.error.errors.forEach(e => {
+        const field = e.path[0] as string;
+        if (!errors[field]) errors[field] = e.message;
+      });
+      setEditErrors(errors);
+      return;
+    }
+
+    setInventory(prev => prev.map(i => i.id === editingItem.id ? {
+      ...i,
+      name: parsed.data.name,
+      category: parsed.data.category,
+      quantity: parsed.data.quantity,
+      minStock: parsed.data.minStock,
+      unit: parsed.data.unit,
+      status: parsed.data.quantity < parsed.data.minStock ? "low" : "ok",
+    } : i));
+
+    toast.success("Item updated successfully");
+    setEditingItem(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -93,13 +150,49 @@ export default function AdminInventory() {
                       {item.status === "low" ? "Low Stock" : "In Stock"}
                     </Badge>
                   </TableCell>
-                  <TableCell><Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="w-4 h-4" /></Button></TableCell>
+                  <TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}><Edit className="w-4 h-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingItem} onOpenChange={(o) => !o && setEditingItem(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-heading">Edit Inventory Item</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Item Name</Label>
+              <Input placeholder="Item name" value={editForm.name} onChange={e => handleEditFormChange("name", e.target.value)} />
+              {editErrors.name && <p className="text-xs text-destructive mt-1">{editErrors.name}</p>}
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Input placeholder="Category" value={editForm.category} onChange={e => handleEditFormChange("category", e.target.value)} />
+              {editErrors.category && <p className="text-xs text-destructive mt-1">{editErrors.category}</p>}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Quantity</Label>
+                <Input type="number" placeholder="0" value={editForm.quantity} onChange={e => handleEditFormChange("quantity", e.target.value)} />
+                {editErrors.quantity && <p className="text-xs text-destructive mt-1">{editErrors.quantity}</p>}
+              </div>
+              <div>
+                <Label>Min Stock</Label>
+                <Input type="number" placeholder="0" value={editForm.minStock} onChange={e => handleEditFormChange("minStock", e.target.value)} />
+                {editErrors.minStock && <p className="text-xs text-destructive mt-1">{editErrors.minStock}</p>}
+              </div>
+              <div>
+                <Label>Unit</Label>
+                <Input placeholder="pcs" value={editForm.unit} onChange={e => handleEditFormChange("unit", e.target.value)} />
+                {editErrors.unit && <p className="text-xs text-destructive mt-1">{editErrors.unit}</p>}
+              </div>
+            </div>
+            <Button className="w-full gradient-primary text-primary-foreground" onClick={handleUpdate}>Save Changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -36,6 +36,9 @@ export default function AdminPatients() {
   const [patients, setPatients] = useState(mockPatients);
   const [form, setForm] = useState({ name: "", age: "", phone: "", email: "", address: "" });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [editingPatient, setEditingPatient] = useState<typeof mockPatients[0] | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", age: "", phone: "", email: "", address: "" });
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
   const filtered = patients.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase());
@@ -102,6 +105,64 @@ export default function AdminPatients() {
       setFormErrors({});
       navigate("/admin/patients");
     }, 1200);
+  };
+
+  const openEdit = (p: typeof mockPatients[0]) => {
+    setEditingPatient(p);
+    setEditForm({ name: p.name, age: String(p.age), phone: p.phone, email: p.email, address: p.address });
+    setEditErrors({});
+  };
+
+  const handleEditFormChange = (field: string, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    if (editErrors[field] || editErrors["general"]) {
+      setEditErrors(prev => {
+        const next = { ...prev };
+        delete next[field];
+        delete next["general"];
+        return next;
+      });
+    }
+  };
+
+  const handleUpdate = () => {
+    if (!editingPatient) return;
+    const parsed = patientSchema.safeParse(editForm);
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      parsed.error.errors.forEach(e => {
+        const field = e.path[0] as string;
+        if (!errors[field]) errors[field] = e.message;
+      });
+      setEditErrors(errors);
+      return;
+    }
+
+    const emailExists = patients.find(p => p.id !== editingPatient.id && p.email.toLowerCase() === parsed.data.email.toLowerCase());
+    const phoneExists = patients.find(p => p.id !== editingPatient.id && p.phone === parsed.data.phone);
+
+    if (emailExists || phoneExists) {
+      const errors: Record<string, string> = {};
+      if (emailExists) errors.email = "A patient with this email already exists";
+      if (phoneExists) errors.phone = "A patient with this contact number already exists";
+      setEditErrors(errors);
+      return;
+    }
+
+    setPatients(prev => prev.map(p => p.id === editingPatient.id ? {
+      ...p,
+      name: parsed.data.name,
+      age: parsed.data.age,
+      phone: parsed.data.phone,
+      email: parsed.data.email,
+      address: parsed.data.address,
+    } : p));
+
+    toast.success("Patient updated successfully", {
+      description: `${parsed.data.name}'s record has been updated.`,
+    });
+
+    setEditingPatient(null);
   };
 
   return (
@@ -201,7 +262,7 @@ export default function AdminPatients() {
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -210,6 +271,43 @@ export default function AdminPatients() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingPatient} onOpenChange={(o) => !o && setEditingPatient(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-heading">Edit Patient</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Full Name <span className="text-destructive">*</span></Label>
+              <Input placeholder="Patient name" value={editForm.name} onChange={e => handleEditFormChange("name", e.target.value)} />
+              {editErrors.name && <p className="text-xs text-destructive mt-1">{editErrors.name}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Age <span className="text-destructive">*</span></Label>
+                <Input type="number" placeholder="Age" value={editForm.age} onChange={e => handleEditFormChange("age", e.target.value)} />
+                {editErrors.age && <p className="text-xs text-destructive mt-1">{editErrors.age}</p>}
+              </div>
+              <div>
+                <Label>Phone <span className="text-destructive">*</span></Label>
+                <Input placeholder="Phone number" value={editForm.phone} onChange={e => handleEditFormChange("phone", e.target.value)} />
+                {editErrors.phone && <p className="text-xs text-destructive mt-1">{editErrors.phone}</p>}
+              </div>
+            </div>
+            <div>
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" placeholder="Email" value={editForm.email} onChange={e => handleEditFormChange("email", e.target.value)} />
+              {editErrors.email && <p className="text-xs text-destructive mt-1">{editErrors.email}</p>}
+            </div>
+            <div>
+              <Label>Address <span className="text-destructive">*</span></Label>
+              <Input placeholder="Address" value={editForm.address} onChange={e => handleEditFormChange("address", e.target.value)} />
+              {editErrors.address && <p className="text-xs text-destructive mt-1">{editErrors.address}</p>}
+            </div>
+            {editErrors.general && <p className="text-sm text-destructive">{editErrors.general}</p>}
+            <Button className="w-full gradient-primary text-primary-foreground" onClick={handleUpdate}>Save Changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
