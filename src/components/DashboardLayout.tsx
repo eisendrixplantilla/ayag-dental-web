@@ -36,6 +36,7 @@ const superAdminNav = [
   { title: "Archive", url: "/superadmin/archives", icon: Archive },
   { title: "System Settings", url: "/superadmin/settings", icon: Settings },
   { title: "Reports & Analytics", url: "/superadmin/reports", icon: BarChart3 },
+  { title: "Profile", url: "/superadmin/profile", icon: UserCog },
 ];
 
 const dentistNav = [

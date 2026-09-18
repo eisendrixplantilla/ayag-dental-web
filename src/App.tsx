@@ -38,6 +38,7 @@ import SuperAdminAddStaff from "./pages/superadmin/SuperAdminAddStaff";
 import SuperAdminArchives from "./pages/superadmin/SuperAdminArchives";
 import SuperAdminSettings from "./pages/superadmin/SuperAdminSettings";
 import SuperAdminReports from "./pages/superadmin/SuperAdminReports";
+import SuperAdminProfile from "./pages/superadmin/SuperAdminProfile";
 
 import DentistDashboard from "./pages/dentist/DentistDashboard";
 import DentistSchedule from "./pages/dentist/DentistSchedule";
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Route path="/superadmin/archives" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminArchives /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/settings" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminSettings /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/reports" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminReports /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/profile" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminProfile /></DashboardLayout></ProtectedRoute>} />
 
       {/* Dentist Routes */}
       <Route path="/dentist" element={<ProtectedRoute roles={["dentist"]}><DashboardLayout><DentistDashboard /></DashboardLayout></ProtectedRoute>} />
