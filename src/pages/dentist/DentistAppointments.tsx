@@ -16,8 +16,11 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, MoreVertical } from "lucide-react";
 import {
   useDentistAppointments, rescheduleAppointment, cancelAppointment, completeConsultation,
   type DentistAppointment,
@@ -175,7 +178,8 @@ export default function DentistAppointments() {
                     <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-2 justify-end">
+                    {/* Full button row on larger screens */}
+                    <div className="hidden lg:flex flex-wrap gap-2 justify-end">
                       <Button size="sm" variant="outline" onClick={() => setDetails(apt)}>
                         <Eye className="w-4 h-4 mr-1" /> View Details
                       </Button>
@@ -192,6 +196,35 @@ export default function DentistAppointments() {
                           </Button>
                         </>
                       )}
+                    </div>
+
+                    {/* Compact dropdown on phone/tablet */}
+                    <div className="flex lg:hidden justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline">
+                            Actions <MoreVertical className="w-4 h-4 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover">
+                          <DropdownMenuItem onClick={() => setDetails(apt)}>
+                            <Eye className="w-4 h-4 mr-2" /> View Details
+                          </DropdownMenuItem>
+                          {actionable(apt.status) && (
+                            <>
+                              <DropdownMenuItem onClick={() => openConsult(apt)}>
+                                <Stethoscope className="w-4 h-4 mr-2" /> Start Consultation
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openResched(apt)}>
+                                <CalendarClock className="w-4 h-4 mr-2" /> Reschedule
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openCancel(apt)} className="text-destructive focus:text-destructive">
+                                <XCircle className="w-4 h-4 mr-2" /> Cancel
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
