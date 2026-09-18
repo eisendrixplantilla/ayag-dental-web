@@ -203,7 +203,7 @@ export default function DentistAppointments() {
                       <Button size="icon" variant="ghost" className="h-8 w-8" title="View Details" onClick={() => setDetails(apt)}>
                         <Eye className="w-4 h-4" />
                       </Button>
-                      {actionable(apt.status) && (
+                      {actionable(apt.status) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More options">
@@ -222,6 +222,8 @@ export default function DentistAppointments() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      ) : (
+                        <div className="h-8 w-8" aria-hidden="true" />
                       )}
                     </div>
                   </TableCell>
