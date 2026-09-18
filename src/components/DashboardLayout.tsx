@@ -27,6 +27,7 @@ const patientNav = [
   { title: "Book Appointment", url: "/patient/book", icon: CalendarPlus },
   { title: "My Appointments", url: "/patient/appointments", icon: CalendarDays },
   { title: "Dental Records", url: "/patient/records", icon: FolderOpen },
+  { title: "Profile", url: "/patient/profile", icon: UserCog },
 ];
 
 const superAdminNav = [

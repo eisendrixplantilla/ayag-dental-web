@@ -30,6 +30,7 @@ import PatientBook from "./pages/patient/PatientBook";
 import PatientAppointments from "./pages/patient/PatientAppointments";
 import PatientQueue from "./pages/patient/PatientQueue";
 import PatientRecords from "./pages/patient/PatientRecords";
+import PatientProfile from "./pages/patient/PatientProfile";
 
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 import SuperAdminStaff from "./pages/superadmin/SuperAdminStaff";
@@ -90,6 +91,7 @@ function AppRoutes() {
       <Route path="/patient/appointments" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/queue" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientQueue /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/records" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientRecords /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/patient/profile" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientProfile /></DashboardLayout></ProtectedRoute>} />
 
       {/* Super Admin Routes */}
       <Route path="/superadmin" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminDashboard /></DashboardLayout></ProtectedRoute>} />
