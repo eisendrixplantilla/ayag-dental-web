@@ -117,6 +117,30 @@
   }
 }
 
+/* ---------- Native date/time picker icon ---------- */
+input[type="date"],
+input[type="time"] {
+  color-scheme: light;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  padding: 4px;
+  margin-right: -4px;
+  border-radius: 6px;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+input[type="date"]:hover::-webkit-calendar-picker-indicator,
+input[type="time"]:hover::-webkit-calendar-picker-indicator,
+input[type="date"]:focus::-webkit-calendar-picker-indicator,
+input[type="time"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  background-color: hsl(var(--muted));
+}
+
 /* ---------- Print styles: dashboards print statistics only ---------- */
 @media print {
   * {
