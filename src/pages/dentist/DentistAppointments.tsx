@@ -20,7 +20,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, MoreVertical } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown } from "lucide-react";
 import {
   useDentistAppointments, rescheduleAppointment, cancelAppointment, completeConsultation,
   type DentistAppointment,
@@ -198,33 +198,31 @@ export default function DentistAppointments() {
                       )}
                     </div>
 
-                    {/* Compact dropdown on phone/tablet */}
-                    <div className="flex lg:hidden justify-end">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Actions">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover">
-                          <DropdownMenuItem onClick={() => setDetails(apt)}>
-                            <Eye className="w-4 h-4 mr-2" /> View Details
-                          </DropdownMenuItem>
-                          {actionable(apt.status) && (
-                            <>
-                              <DropdownMenuItem onClick={() => openConsult(apt)}>
-                                <Stethoscope className="w-4 h-4 mr-2" /> Start Consultation
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openResched(apt)}>
-                                <CalendarClock className="w-4 h-4 mr-2" /> Reschedule
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openCancel(apt)} className="text-destructive focus:text-destructive">
-                                <XCircle className="w-4 h-4 mr-2" /> Cancel
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    {/* Compact controls on phone/tablet */}
+                    <div className="flex lg:hidden items-center gap-1 justify-end">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" title="View Details" onClick={() => setDetails(apt)}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {actionable(apt.status) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More options">
+                              <ChevronDown className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-popover">
+                            <DropdownMenuItem onClick={() => openConsult(apt)}>
+                              <Stethoscope className="w-4 h-4 mr-2" /> Start Consultation
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openResched(apt)}>
+                              <CalendarClock className="w-4 h-4 mr-2" /> Reschedule
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openCancel(apt)} className="text-destructive focus:text-destructive">
+                              <XCircle className="w-4 h-4 mr-2" /> Cancel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
