@@ -196,7 +196,7 @@ export default function PatientAppointments() {
                             {format(apt.date, "PPP")} at {timeLabel(apt.time)} • {apt.dentist}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
                             <Eye className="w-4 h-4" />

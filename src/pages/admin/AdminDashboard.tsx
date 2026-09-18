@@ -144,7 +144,7 @@ export default function AdminDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="text-left text-xs text-muted-foreground border-b border-border">
                 <th className="py-2 pr-4 font-medium">Patient</th>

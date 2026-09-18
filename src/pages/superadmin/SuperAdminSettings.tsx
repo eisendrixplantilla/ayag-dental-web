@@ -46,10 +46,10 @@ export default function SuperAdminSettings() {
         <CardContent>
           <div className="space-y-3">
             {clinicHours.map((h, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
+              <div key={i} className="flex flex-wrap items-center gap-2 sm:gap-4 p-3 rounded-lg bg-muted/50">
                 <p className="w-24 font-medium text-foreground">{h.day}</p>
                 {h.enabled ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Input type="time" defaultValue={h.open} className="w-32" />
                     <span className="text-muted-foreground">to</span>
                     <Input type="time" defaultValue={h.close} className="w-32" />

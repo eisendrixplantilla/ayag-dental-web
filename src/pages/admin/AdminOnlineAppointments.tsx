@@ -111,8 +111,8 @@ export default function AdminOnlineAppointments() {
 
       <Card className="shadow-card">
         <CardContent className="pt-6">
-          <div className="grid gap-3 md:grid-cols-5">
-            <div className="relative md:col-span-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="relative sm:col-span-2 lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>

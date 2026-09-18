@@ -63,12 +63,12 @@ export default function AdminAccounts() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <div>
                 <Label className="text-xs text-muted-foreground">From</Label>
                 <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
