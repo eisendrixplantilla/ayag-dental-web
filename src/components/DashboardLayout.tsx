@@ -20,6 +20,7 @@ const adminNav = [
   { title: "Patient Records", url: "/admin/patients", icon: FolderOpen },
   { title: "Patient Accounts", url: "/admin/accounts", icon: Users },
   { title: "Reports", url: "/admin/reports", icon: FileText },
+  { title: "Profile", url: "/admin/profile", icon: UserCog },
 ];
 
 const patientNav = [

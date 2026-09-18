@@ -24,6 +24,7 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminTreatment from "./pages/admin/AdminTreatment";
 import AdminAccounts from "./pages/admin/AdminAccounts";
 import AdminOnlineAppointments from "./pages/admin/AdminOnlineAppointments";
+import AdminProfile from "./pages/admin/AdminProfile";
 
 import PatientDashboard from "./pages/patient/PatientDashboard";
 import PatientBook from "./pages/patient/PatientBook";
@@ -85,6 +86,7 @@ function AppRoutes() {
       <Route path="/admin/inventory" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminInventory /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/sales" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminSales /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminReports /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/profile" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminProfile /></DashboardLayout></ProtectedRoute>} />
 
       {/* Patient Routes */}
       <Route path="/patient" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientDashboard /></DashboardLayout></ProtectedRoute>} />
