@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import bcrypt from "bcryptjs";
-import { sql } from "../_lib/db";
+import { sql } from "../lib/db";
 
 const DEFAULT_USERS = [
   { email: "admin@admin.com", name: "Dr. Sarah Chen", role: "admin", password: "admin123" },

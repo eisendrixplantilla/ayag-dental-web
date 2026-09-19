@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { sql } from "../_lib/db";
-import { isOtpFormatValid } from "../_lib/otp";
-import { signSession } from "../_lib/auth";
+import { sql } from "../lib/db";
+import { isOtpFormatValid } from "../lib/otp";
+import { signSession } from "../lib/auth";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
