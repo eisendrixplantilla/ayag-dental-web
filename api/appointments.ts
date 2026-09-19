@@ -114,16 +114,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const message = status === "confirmed"
         ? "Please arrive 10 minutes early and bring a valid ID."
         : [updatedRow.reason, updatedRow.remarks].filter(Boolean).join(" — ");
-      sendAppointmentEmail({
-        email: updatedRow.email,
-        status,
-        patientName: updatedRow.patient_name,
-        service: updatedRow.service,
-        dentistName: updatedRow.dentist_name,
-        date: new Date(updatedRow.date).toISOString().slice(0, 10),
-        time: updatedRow.time,
-        message,
-      }).catch((err) => console.error("Appointment email failed:", err));
+      // Awaited (not fire-and-forget): Vercel can freeze the function as soon as the response is
+      // sent, which would silently kill an un-awaited email send before it completes.
+      try {
+        await sendAppointmentEmail({
+          email: updatedRow.email,
+          status,
+          patientName: updatedRow.patient_name,
+          service: updatedRow.service,
+          dentistName: updatedRow.dentist_name,
+          date: new Date(updatedRow.date).toISOString().slice(0, 10),
+          time: updatedRow.time,
+          message,
+        });
+      } catch (err) {
+        console.error("Appointment email failed:", err);
+      }
     }
 
     return res.status(200).json({ appointment: mapRow(updatedRow) });
