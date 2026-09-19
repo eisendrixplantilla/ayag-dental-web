@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,76 +8,70 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
 
-type Status = "pending" | "confirmed" | "rejected";
-
-interface Appointment {
-  id: string;
-  patient: string;
-  email: string;
-  phone: string;
-  service: string;
-  dentist: string;
-  date: string;
-  time: string;
-  type: "Online" | "Walk-in";
-  status: Status;
-  reason?: string;
-}
-
-const initialAppointments: Appointment[] = [
-  { id: "AP001", patient: "Juan Dela Cruz", email: "juan.delacruz@email.com", phone: "09171234567", service: "Teeth Whitening", dentist: "Dr. Ayag", date: "2024-03-20", time: "10:00 AM", type: "Online", status: "pending" },
-  { id: "AP002", patient: "Maria Santos", email: "maria.santos@email.com", phone: "09181234567", service: "Root Canal", dentist: "Dr. Santos", date: "2024-03-21", time: "2:00 PM", type: "Online", status: "pending" },
-  { id: "AP003", patient: "Pedro Reyes", email: "pedro.reyes@email.com", phone: "09191234567", service: "Orthodontics (Braces)", dentist: "Dr. Reyes", date: "2024-03-22", time: "9:00 AM", type: "Walk-in", status: "confirmed" },
-  { id: "AP004", patient: "Ana Garcia", email: "ana.garcia@email.com", phone: "09201234567", service: "EXO (Bunot)", dentist: "Dr. Cruz", date: "2024-03-19", time: "3:30 PM", type: "Online", status: "rejected", reason: "Dentist unavailable on the selected date." },
-  { id: "AP005", patient: "Liza Manalo", email: "liza.manalo@email.com", phone: "09211234567", service: "Oral Prophylaxis", dentist: "Dr. Ayag", date: "2024-03-23", time: "11:00 AM", type: "Walk-in", status: "pending" },
-];
-
-const statusColors: Record<Status, string> = {
+const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   confirmed: "bg-success/10 text-success border-success/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
 export default function AdminOnlineAppointments() {
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dentistFilter, setDentistFilter] = useState("all");
 
+  const load = () => {
+    setLoading(true);
+    getAppointments()
+      .then(setAppointments)
+      .catch(() => toast.error("Failed to load appointments"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
   const dentists = useMemo(
-    () => Array.from(new Set(appointments.map(a => a.dentist))).sort(),
+    () => Array.from(new Set(appointments.map(a => a.dentistName).filter(Boolean))).sort() as string[],
     [appointments]
   );
 
   const filtered = useMemo(() => appointments.filter(a => {
-    const matchesSearch = !search || a.patient.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search || a.patientName.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
     const matchesDate = !dateFilter || a.date === dateFilter;
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
-    const matchesDentist = dentistFilter === "all" || a.dentist === dentistFilter;
+    const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
     return matchesSearch && matchesDate && matchesStatus && matchesDentist;
   }), [appointments, search, dateFilter, statusFilter, dentistFilter]);
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
-
   const clearFilters = () => {
     setSearch(""); setDateFilter(""); setStatusFilter("all"); setDentistFilter("all");
   };
 
-  const handleApprove = (apt: Appointment) => {
-    setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: "confirmed" } : a));
-    toast.success(`Appointment ${apt.id} confirmed`, {
-      description: `Confirmation email sent to ${apt.email}`,
-    });
+  const handleApprove = async (apt: Appointment) => {
+    setSaving(true);
+    try {
+      await confirmAppointment(apt.id);
+      toast.success(`Appointment confirmed`, { description: `Confirmation email sent to ${apt.email}` });
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm appointment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openReject = (apt: Appointment) => {
@@ -86,15 +80,21 @@ export default function AdminOnlineAppointments() {
     setRejectOpen(true);
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selected || !reason.trim()) return;
-    setAppointments(prev => prev.map(a => a.id === selected.id ? { ...a, status: "rejected", reason: reason.trim() } : a));
-    toast.success(`Appointment ${selected.id} rejected`, {
-      description: `Rejection email sent to ${selected.email} with the reason provided.`,
-    });
-    setRejectOpen(false);
-    setSelected(null);
-    setReason("");
+    setSaving(true);
+    try {
+      await rejectAppointment(selected.id, reason.trim());
+      toast.success(`Appointment rejected`, { description: `Rejection email sent to ${selected.email} with the reason provided.` });
+      setRejectOpen(false);
+      setSelected(null);
+      setReason("");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reject appointment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openDetails = (apt: Appointment) => {
@@ -147,6 +147,9 @@ export default function AdminOnlineAppointments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -164,13 +167,13 @@ export default function AdminOnlineAppointments() {
             <TableBody>
               {filtered.map(apt => (
                 <TableRow key={apt.id}>
-                  <TableCell className="font-mono text-xs">{apt.id}</TableCell>
-                  <TableCell className="font-medium">{apt.patient}</TableCell>
+                  <TableCell className="font-mono text-xs">{apt.id.slice(0, 8)}</TableCell>
+                  <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell>{apt.service}</TableCell>
-                  <TableCell>{apt.dentist}</TableCell>
+                  <TableCell>{apt.dentistName}</TableCell>
                   <TableCell>{apt.date}</TableCell>
                   <TableCell>{apt.time}</TableCell>
-                  <TableCell><Badge variant="secondary">{apt.type}</Badge></TableCell>
+                  <TableCell><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
                   <TableCell>
                     <div className="flex gap-2 justify-end">
@@ -179,7 +182,7 @@ export default function AdminOnlineAppointments() {
                       </Button>
                       {apt.status === "pending" && (
                         <>
-                          <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => handleApprove(apt)}>
+                          <Button size="sm" className="gradient-primary text-primary-foreground" disabled={saving} onClick={() => handleApprove(apt)}>
                             <CheckCircle className="w-4 h-4 mr-1" /> Approve
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => openReject(apt)}>
@@ -196,6 +199,7 @@ export default function AdminOnlineAppointments() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -209,14 +213,14 @@ export default function AdminOnlineAppointments() {
           {selectedLive && (
             <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-1.5 text-sm">
               <p><span className="font-semibold text-foreground">Appointment ID:</span> {selectedLive.id}</p>
-              <p><span className="font-semibold text-foreground">Patient Name:</span> {selectedLive.patient}</p>
-              <p><span className="font-semibold text-foreground">Contact Number:</span> {selectedLive.phone}</p>
+              <p><span className="font-semibold text-foreground">Patient Name:</span> {selectedLive.patientName}</p>
+              <p><span className="font-semibold text-foreground">Contact Number:</span> {selectedLive.contact}</p>
               <p><span className="font-semibold text-foreground">Email Address:</span> {selectedLive.email}</p>
               <p><span className="font-semibold text-foreground">Selected Service:</span> {selectedLive.service}</p>
-              <p><span className="font-semibold text-foreground">Assigned Dentist:</span> {selectedLive.dentist}</p>
+              <p><span className="font-semibold text-foreground">Assigned Dentist:</span> {selectedLive.dentistName}</p>
               <p><span className="font-semibold text-foreground">Appointment Date:</span> {selectedLive.date}</p>
               <p><span className="font-semibold text-foreground">Appointment Time:</span> {selectedLive.time}</p>
-              <p><span className="font-semibold text-foreground">Appointment Type:</span> {selectedLive.type}</p>
+              <p><span className="font-semibold text-foreground">Appointment Type:</span> {selectedLive.type === "walk-in" ? "Walk-in" : "Online"}</p>
               <p className="flex items-center gap-2"><span className="font-semibold text-foreground">Current Status:</span>
                 <Badge variant="outline" className={statusColors[selectedLive.status]}>{selectedLive.status}</Badge>
               </p>
@@ -260,7 +264,7 @@ export default function AdminOnlineAppointments() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleReject} disabled={!reason.trim()}>
+            <Button variant="destructive" onClick={handleReject} disabled={!reason.trim() || saving}>
               <Mail className="w-4 h-4 mr-1" /> Reject & Notify
             </Button>
           </DialogFooter>

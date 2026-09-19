@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,12 +20,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown } from "lucide-react";
-import {
-  useDentistAppointments, rescheduleAppointment, cancelAppointment, completeConsultation,
-  type DentistAppointment,
-} from "@/lib/dentistAppointmentStore";
+import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2 } from "lucide-react";
+import { createDentalRecord } from "@/lib/dentistAppointmentStore";
 import { dentistSchedules, generateSlots, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -42,7 +40,19 @@ const emptyRecord = {
 
 export default function DentistAppointments() {
   const { user } = useAuth();
-  const appointments = useDentistAppointments();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    getAppointments()
+      .then(setAppointments)
+      .catch(() => toast({ title: "Failed to load appointments", variant: "destructive" }))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
 
   const schedule = useMemo(
     () => dentistSchedules.find(s => s.id === user?.id) ?? dentistSchedules.find(s => s.name === user?.name),
@@ -51,15 +61,15 @@ export default function DentistAppointments() {
 
   const mine = useMemo(
     () => appointments
-      .filter(a => !user?.name || a.dentist === user.name)
+      .filter(a => !user?.name || a.dentistName === user.name)
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)),
     [appointments, user],
   );
 
-  const [details, setDetails] = useState<DentistAppointment | null>(null);
-  const [consult, setConsult] = useState<DentistAppointment | null>(null);
-  const [resched, setResched] = useState<DentistAppointment | null>(null);
-  const [cancelApt, setCancelApt] = useState<DentistAppointment | null>(null);
+  const [details, setDetails] = useState<Appointment | null>(null);
+  const [consult, setConsult] = useState<Appointment | null>(null);
+  const [resched, setResched] = useState<Appointment | null>(null);
+  const [cancelApt, setCancelApt] = useState<Appointment | null>(null);
 
   const [recordForm, setRecordForm] = useState(emptyRecord);
   const [rsReason, setRsReason] = useState("");
@@ -81,35 +91,44 @@ export default function DentistAppointments() {
     return generateSlots(merged, parseISO(rsDate));
   }, [rsDate, schedule, mine]);
 
-  const openResched = (apt: DentistAppointment) => {
+  const openResched = (apt: Appointment) => {
     setRsReason(""); setRsRemarks(""); setRsDate(""); setRsSlot("");
     setResched(apt);
   };
-  const openCancel = (apt: DentistAppointment) => {
+  const openCancel = (apt: Appointment) => {
     setCxReason(""); setCxRemarks(""); setCancelApt(apt);
   };
-  const openConsult = (apt: DentistAppointment) => {
+  const openConsult = (apt: Appointment) => {
     setRecordForm(emptyRecord); setConsult(apt);
   };
 
-  const submitConsult = () => {
+  const submitConsult = async () => {
     if (!consult) return;
     if (!recordForm.procedure.trim() || !recordForm.diagnosis.trim()) {
       toast({ title: "Missing information", description: "Procedure and diagnosis are required.", variant: "destructive" });
       return;
     }
-    completeConsultation(consult.id, {
-      patient: consult.patient,
-      dentist: consult.dentist,
-      date: consult.date,
-      service: consult.service,
-      ...recordForm,
-    });
-    toast({ title: "Consultation saved", description: `Dental record added to ${consult.patient}'s history. Appointment marked as Completed.` });
-    setConsult(null);
+    setSaving(true);
+    try {
+      await completeAppointment(consult.id);
+      createDentalRecord({
+        patient: consult.patientName,
+        dentist: consult.dentistName ?? "",
+        date: consult.date,
+        service: consult.service,
+        ...recordForm,
+      });
+      toast({ title: "Consultation saved", description: `Dental record added to ${consult.patientName}'s history. Appointment marked as Completed.` });
+      setConsult(null);
+      load();
+    } catch (err) {
+      toast({ title: "Failed to save consultation", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const submitResched = () => {
+  const submitResched = async () => {
     if (!resched) return;
     if (!rsReason.trim()) {
       toast({ title: "Reason required", description: "Please enter the reason for rescheduling.", variant: "destructive" });
@@ -119,20 +138,36 @@ export default function DentistAppointments() {
       toast({ title: "Schedule required", description: "Please select a new date and an available time slot.", variant: "destructive" });
       return;
     }
-    rescheduleAppointment(resched.id, { date: rsDate, time: rsSlot, reason: rsReason, remarks: rsRemarks });
-    toast({ title: "Appointment rescheduled", description: `Email notification sent to ${resched.email} with the new schedule.` });
-    setResched(null);
+    setSaving(true);
+    try {
+      await rescheduleAppointment(resched.id, { date: rsDate, time: rsSlot, reason: rsReason, remarks: rsRemarks });
+      toast({ title: "Appointment rescheduled", description: `Email notification sent to ${resched.email} with the new schedule.` });
+      setResched(null);
+      load();
+    } catch (err) {
+      toast({ title: "Failed to reschedule", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const submitCancel = () => {
+  const submitCancel = async () => {
     if (!cancelApt) return;
     if (!cxReason.trim()) {
       toast({ title: "Reason required", description: "Please enter the cancellation reason.", variant: "destructive" });
       return;
     }
-    cancelAppointment(cancelApt.id, cxReason, cxRemarks);
-    toast({ title: "Appointment cancelled", description: `Email notification sent to ${cancelApt.email}.` });
-    setCancelApt(null);
+    setSaving(true);
+    try {
+      await cancelAppointment(cancelApt.id, cxReason, cxRemarks);
+      toast({ title: "Appointment cancelled", description: `Email notification sent to ${cancelApt.email}.` });
+      setCancelApt(null);
+      load();
+    } catch (err) {
+      toast({ title: "Failed to cancel", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const actionable = (s: string) => s === "pending" || s === "confirmed" || s === "rescheduled";
@@ -149,6 +184,9 @@ export default function DentistAppointments() {
           <CardTitle className="font-heading text-lg">Assigned Appointments</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -170,7 +208,7 @@ export default function DentistAppointments() {
               )}
               {mine.map(apt => (
                 <TableRow key={apt.id}>
-                  <TableCell className="font-medium">{apt.patient}</TableCell>
+                  <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell>{apt.service}</TableCell>
                   <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
                   <TableCell>{toLabel(toMinutes(apt.time))}</TableCell>
@@ -231,6 +269,7 @@ export default function DentistAppointments() {
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -242,9 +281,9 @@ export default function DentistAppointments() {
           </DialogHeader>
           {details && (
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <Field label="Patient Name" value={details.patient} />
-              <Field label="Contact Number" value={details.contact} />
-              <Field label="Email Address" value={details.email} />
+              <Field label="Patient Name" value={details.patientName} />
+              <Field label="Contact Number" value={details.contact ?? "—"} />
+              <Field label="Email Address" value={details.email ?? "—"} />
               <Field label="Selected Service" value={details.service} />
               <Field label="Appointment Date" value={format(parseISO(details.date), "MMMM d, yyyy")} />
               <Field label="Appointment Time" value={toLabel(toMinutes(details.time))} />
@@ -263,7 +302,7 @@ export default function DentistAppointments() {
           <DialogHeader>
             <DialogTitle className="font-heading">Dental Record Form</DialogTitle>
             <DialogDescription>
-              {consult && `${consult.patient} • ${consult.service} • ${format(parseISO(consult.date), "MMM d, yyyy")}`}
+              {consult && `${consult.patientName} • ${consult.service} • ${format(parseISO(consult.date), "MMM d, yyyy")}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -290,7 +329,7 @@ export default function DentistAppointments() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConsult(null)}>Cancel</Button>
-            <Button onClick={submitConsult}>Save Consultation</Button>
+            <Button onClick={submitConsult} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Consultation</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -339,7 +378,7 @@ export default function DentistAppointments() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResched(null)}>Cancel</Button>
-            <Button onClick={submitResched}>Save Changes</Button>
+            <Button onClick={submitResched} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -363,7 +402,7 @@ export default function DentistAppointments() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelApt(null)}>Back</Button>
-            <Button variant="destructive" onClick={submitCancel}>Save</Button>
+            <Button variant="destructive" onClick={submitCancel} disabled={saving}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,0 +1,92 @@
+import { api } from "@/contexts/AuthContext";
+
+export type AptStatus = "pending" | "confirmed" | "completed" | "cancelled" | "rejected" | "rescheduled";
+
+export interface Appointment {
+  id: string;
+  patientId: string | null;
+  patientName: string;
+  contact: string | null;
+  email: string | null;
+  dentistId: string | null;
+  dentistName: string | null;
+  service: string;
+  date: string; // yyyy-MM-dd
+  time: string; // HH:mm
+  type: "online" | "walk-in";
+  status: AptStatus;
+  reason: string | null;
+  remarks: string | null;
+  createdAt: string;
+}
+
+export interface AppointmentInput {
+  patientId?: string;
+  patientName: string;
+  contact?: string;
+  email?: string;
+  dentistId?: string;
+  dentistName?: string;
+  service: string;
+  date: string;
+  time: string;
+  type: "online" | "walk-in";
+  reason?: string;
+}
+
+export interface AppointmentFilters {
+  patientId?: string;
+  dentistId?: string;
+  date?: string;
+  status?: AptStatus;
+  type?: "online" | "walk-in";
+}
+
+export async function getAppointments(filters: AppointmentFilters = {}): Promise<Appointment[]> {
+  const params = new URLSearchParams(filters as Record<string, string>);
+  const query = params.toString();
+  const data = await api<{ appointments: Appointment[] }>(`/appointments${query ? `?${query}` : ""}`);
+  return data.appointments;
+}
+
+export async function getAppointment(id: string): Promise<Appointment> {
+  const data = await api<{ appointment: Appointment }>(`/appointments?id=${encodeURIComponent(id)}`);
+  return data.appointment;
+}
+
+export async function createAppointment(input: AppointmentInput): Promise<Appointment> {
+  const data = await api<{ appointment: Appointment }>("/appointments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return data.appointment;
+}
+
+export interface AppointmentUpdate {
+  status?: AptStatus;
+  date?: string;
+  time?: string;
+  reason?: string;
+  remarks?: string;
+  dentistId?: string;
+  dentistName?: string;
+}
+
+export async function updateAppointment(id: string, patch: AppointmentUpdate): Promise<Appointment> {
+  const data = await api<{ appointment: Appointment }>(`/appointments?id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return data.appointment;
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  await api(`/appointments?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export const confirmAppointment = (id: string) => updateAppointment(id, { status: "confirmed" });
+export const rejectAppointment = (id: string, reason: string) => updateAppointment(id, { status: "rejected", reason });
+export const cancelAppointment = (id: string, reason: string, remarks?: string) => updateAppointment(id, { status: "cancelled", reason, remarks });
+export const rescheduleAppointment = (id: string, data: { date: string; time: string; reason: string; remarks?: string }) =>
+  updateAppointment(id, { status: "rescheduled", ...data });
+export const completeAppointment = (id: string) => updateAppointment(id, { status: "completed" });

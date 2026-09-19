@@ -28,11 +28,22 @@ CREATE INDEX IF NOT EXISTS idx_otp_codes_email_purpose ON otp_codes(email, purpo
 CREATE TABLE IF NOT EXISTS patient_profiles (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   phone TEXT,
+  address TEXT,
+  age INTEGER,
+  gender TEXT,
+  blood_type TEXT,
+  allergies TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   last_login TIMESTAMPTZ,
   archived_at TIMESTAMPTZ,
   archived_by TEXT
 );
+
+ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS age INTEGER;
+ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS blood_type TEXT;
+ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS allergies TEXT;
 
 CREATE TABLE IF NOT EXISTS staff_profiles (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

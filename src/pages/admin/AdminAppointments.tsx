@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,33 +6,19 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon } from "lucide-react";
+import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { dentistSchedules, generateSlots, toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { getAppointments, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
   "Denture (Pustiso)", "Implant", "Surgery", "TMJ", "Root Canal",
   "Teeth Whitening", "Fixed Bridge",
-];
-
-interface WalkInEntry {
-  id: string;
-  patient: string;
-  service: string;
-  date: string;
-  dentist: string;
-  time: string;
-  status: string;
-}
-
-const initialWalkIns: WalkInEntry[] = [
-  { id: "W001", patient: "Carlo Reyes", service: "Tooth Extraction", date: "2024-03-15", dentist: "Dr. Ayag", time: "9:00 AM", status: "confirmed" },
-  { id: "W002", patient: "Ana Santos", service: "Check-up", date: "2024-03-15", dentist: "Dr. Santos", time: "2:00 PM", status: "confirmed" },
 ];
 
 export default function AdminAppointments() {
@@ -41,29 +27,56 @@ export default function AdminAppointments() {
   const [dentist, setDentist] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
-  const [walkIns, setWalkIns] = useState<WalkInEntry[]>(initialWalkIns);
+  const [walkIns, setWalkIns] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const schedule = dentistSchedules.find(d => d.name === dentist);
   const slots = useMemo(() => generateSlots(schedule, date), [schedule, date]);
-  const selectedLabel = slots.find(s => s.value === time)?.label ?? "";
 
-  const handleAdd = () => {
+  const load = () => {
+    setLoading(true);
+    getAppointments({ type: "walk-in" })
+      .then(setWalkIns)
+      .catch(() => toast.error("Failed to load walk-in appointments"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  const handleAdd = async () => {
     if (!patientName || !service || !dentist || !date || !time) {
       toast.error("Please fill in all required fields");
       return;
     }
-    const entry: WalkInEntry = {
-      id: `W${String(walkIns.length + 1).padStart(3, "0")}`,
-      patient: patientName,
-      service,
-      date: format(date, "yyyy-MM-dd"),
-      dentist,
-      time: selectedLabel,
-      status: "confirmed",
-    };
-    setWalkIns(prev => [...prev, entry]);
-    setPatientName(""); setService(""); setDentist(""); setDate(undefined); setTime("");
-    toast.success("Walk-in appointment confirmed!");
+    setSaving(true);
+    try {
+      await createAppointment({
+        patientName,
+        dentistName: dentist,
+        service,
+        date: toKey(date),
+        time,
+        type: "walk-in",
+      });
+      setPatientName(""); setService(""); setDentist(""); setDate(undefined); setTime("");
+      toast.success("Walk-in appointment confirmed!");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add walk-in appointment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    try {
+      await deleteAppointment(id);
+      toast.success("Removed");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove appointment");
+    }
   };
 
   return (
@@ -172,8 +185,8 @@ export default function AdminAppointments() {
             <span className="text-success font-medium">Confirmed</span> — no approval needed.
           </p>
 
-          <Button className="w-full gradient-primary text-primary-foreground" disabled={!patientName || !service || !dentist || !date || !time} onClick={handleAdd}>
-            <UserPlus className="w-4 h-4 mr-2" /> Add Walk-in Appointment
+          <Button className="w-full gradient-primary text-primary-foreground" disabled={!patientName || !service || !dentist || !date || !time || saving} onClick={handleAdd}>
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />} Add Walk-in Appointment
           </Button>
         </CardContent>
       </Card>
@@ -181,10 +194,13 @@ export default function AdminAppointments() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-primary" /> Today's Walk-in Appointments
+            <CalendarDays className="w-5 h-5 text-primary" /> Walk-in Appointments
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -200,14 +216,14 @@ export default function AdminAppointments() {
             <TableBody>
               {walkIns.map(w => (
                 <TableRow key={w.id}>
-                  <TableCell className="font-medium">{w.patient}</TableCell>
+                  <TableCell className="font-medium">{w.patientName}</TableCell>
                   <TableCell>{w.service}</TableCell>
-                  <TableCell>{w.dentist}</TableCell>
+                  <TableCell>{w.dentistName}</TableCell>
                   <TableCell>{w.date}</TableCell>
-                  <TableCell>{w.time}</TableCell>
-                  <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">Confirmed</Badge></TableCell>
+                  <TableCell>{toLabel(toMinutes(w.time))}</TableCell>
+                  <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setWalkIns(prev => prev.filter(x => x.id !== w.id)); toast.success("Removed"); }}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(w.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </TableCell>
@@ -218,6 +234,7 @@ export default function AdminAppointments() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </div>

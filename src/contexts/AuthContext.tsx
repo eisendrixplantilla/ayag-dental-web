@@ -27,7 +27,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = "ayag_auth_token";
 const USER_KEY = "ayag_auth_user";
 
-async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -168,10 +168,12 @@ export function useAuth() {
 }
 
 export async function getPatientAccounts(): Promise<User[]> {
-  const res = await fetch("/api/patients");
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.patients as User[];
+  try {
+    const data = await api<{ patients: User[] }>("/patients");
+    return data.patients;
+  } catch {
+    return [];
+  }
 }
 
 export async function emailExists(email: string): Promise<boolean> {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,17 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Users, Plus, Search, Eye, Edit } from "lucide-react";
+import { Users, Plus, Search, Eye, Edit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
-
-const mockPatients = [
-  { id: "P001", name: "Maria Garcia", age: 32, phone: "09123456789", email: "maria@email.com", address: "Quezon City", lastVisit: "2024-03-10", status: "active" },
-  { id: "P002", name: "James Wilson", age: 45, phone: "09234567890", email: "james@email.com", address: "Manila", lastVisit: "2024-03-08", status: "active" },
-  { id: "P003", name: "Emma Davis", age: 28, phone: "09345678901", email: "emma@email.com", address: "Pasig", lastVisit: "2024-02-28", status: "active" },
-  { id: "P004", name: "Robert Brown", age: 55, phone: "09456789012", email: "robert@email.com", address: "Makati", lastVisit: "2024-01-15", status: "inactive" },
-  { id: "P005", name: "Lisa Anderson", age: 38, phone: "09567890123", email: "lisa@email.com", address: "Taguig", lastVisit: "2024-03-12", status: "active" },
-];
+import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
@@ -27,25 +20,35 @@ const patientSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
 });
 
+type FormState = { name: string; age: string; phone: string; email: string; address: string };
+const emptyForm: FormState = { name: "", age: "", phone: "", email: "", address: "" };
+
 export default function AdminPatients() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [patients, setPatients] = useState(mockPatients);
-  const [form, setForm] = useState({ name: "", age: "", phone: "", email: "", address: "" });
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [editingPatient, setEditingPatient] = useState<typeof mockPatients[0] | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", age: "", phone: "", email: "", address: "" });
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [editForm, setEditForm] = useState<FormState>(emptyForm);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
-  const filtered = patients.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase());
-    const matchesFrom = !fromDate || p.lastVisit >= fromDate;
-    const matchesTo = !toDate || p.lastVisit <= toDate;
-    return matchesSearch && matchesFrom && matchesTo;
-  });
+  const load = () => {
+    setLoading(true);
+    getPatients()
+      .then(setPatients)
+      .catch(() => toast.error("Failed to load patients"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  const filtered = patients.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleFormChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -59,7 +62,7 @@ export default function AdminPatients() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const parsed = patientSchema.safeParse(form);
     if (!parsed.success) {
       const errors: Record<string, string> = {};
@@ -71,45 +74,30 @@ export default function AdminPatients() {
       return;
     }
 
-    const emailExists = patients.find(p => p.email.toLowerCase() === parsed.data.email.toLowerCase());
-    const phoneExists = patients.find(p => p.phone === parsed.data.phone);
-
-    if (emailExists || phoneExists) {
-      const errors: Record<string, string> = {};
-      if (emailExists) errors.email = "A patient with this email already exists";
-      if (phoneExists) errors.phone = "A patient with this contact number already exists";
-      setFormErrors(errors);
-      return;
-    }
-
-    const newId = `P${String(patients.length + 1).padStart(3, "0")}`;
-    const today = new Date().toISOString().split("T")[0];
-    setPatients(prev => [...prev, {
-      id: newId,
-      name: parsed.data.name,
-      age: parsed.data.age,
-      phone: parsed.data.phone,
-      email: parsed.data.email,
-      address: parsed.data.address,
-      lastVisit: today,
-      status: "active",
-    }]);
-
-    toast.success("Patient saved successfully", {
-      description: `${parsed.data.name} has been added to Patient Records.`,
-    });
-
-    setTimeout(() => {
+    setSaving(true);
+    try {
+      await createPatient({
+        name: parsed.data.name,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        address: parsed.data.address,
+        age: parsed.data.age,
+      });
+      toast.success("Patient saved successfully", { description: `${parsed.data.name} has been added to Patient Records.` });
       setShowAdd(false);
-      setForm({ name: "", age: "", phone: "", email: "", address: "" });
+      setForm(emptyForm);
       setFormErrors({});
-      navigate("/admin/patients");
-    }, 1200);
+      load();
+    } catch (err) {
+      setFormErrors({ general: err instanceof Error ? err.message : "Failed to save patient" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const openEdit = (p: typeof mockPatients[0]) => {
+  const openEdit = (p: Patient) => {
     setEditingPatient(p);
-    setEditForm({ name: p.name, age: String(p.age), phone: p.phone, email: p.email, address: p.address });
+    setEditForm({ name: p.name, age: p.age != null ? String(p.age) : "", phone: p.phone ?? "", email: p.email, address: p.address ?? "" });
     setEditErrors({});
   };
 
@@ -125,7 +113,7 @@ export default function AdminPatients() {
     }
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!editingPatient) return;
     const parsed = patientSchema.safeParse(editForm);
     if (!parsed.success) {
@@ -138,31 +126,22 @@ export default function AdminPatients() {
       return;
     }
 
-    const emailExists = patients.find(p => p.id !== editingPatient.id && p.email.toLowerCase() === parsed.data.email.toLowerCase());
-    const phoneExists = patients.find(p => p.id !== editingPatient.id && p.phone === parsed.data.phone);
-
-    if (emailExists || phoneExists) {
-      const errors: Record<string, string> = {};
-      if (emailExists) errors.email = "A patient with this email already exists";
-      if (phoneExists) errors.phone = "A patient with this contact number already exists";
-      setEditErrors(errors);
-      return;
+    setSaving(true);
+    try {
+      await updatePatient(editingPatient.id, {
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        address: parsed.data.address,
+        age: parsed.data.age,
+      });
+      toast.success("Patient updated successfully", { description: `${parsed.data.name}'s record has been updated.` });
+      setEditingPatient(null);
+      load();
+    } catch (err) {
+      setEditErrors({ general: err instanceof Error ? err.message : "Failed to update patient" });
+    } finally {
+      setSaving(false);
     }
-
-    setPatients(prev => prev.map(p => p.id === editingPatient.id ? {
-      ...p,
-      name: parsed.data.name,
-      age: parsed.data.age,
-      phone: parsed.data.phone,
-      email: parsed.data.email,
-      address: parsed.data.address,
-    } : p));
-
-    toast.success("Patient updated successfully", {
-      description: `${parsed.data.name}'s record has been updated.`,
-    });
-
-    setEditingPatient(null);
   };
 
   return (
@@ -207,7 +186,9 @@ export default function AdminPatients() {
                 {formErrors.address && <p className="text-xs text-destructive mt-1">{formErrors.address}</p>}
               </div>
               {formErrors.general && <p className="text-sm text-destructive">{formErrors.general}</p>}
-              <Button className="w-full gradient-primary text-primary-foreground" onClick={handleSave}>Save Patient</Button>
+              <Button className="w-full gradient-primary text-primary-foreground" disabled={saving} onClick={handleSave}>
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Patient
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -215,35 +196,22 @@ export default function AdminPatients() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" />
-              </div>
-              {(fromDate || toDate) && (
-                <Button variant="ghost" size="sm" onClick={() => { setFromDate(""); setToDate(""); }}>Clear</Button>
-              )}
-            </div>
+          <div className="relative min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
           </div>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Age</TableHead>
                 <TableHead>Phone</TableHead>
-                <TableHead>Last Visit</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -251,13 +219,12 @@ export default function AdminPatients() {
             <TableBody>
               {filtered.map(p => (
                 <TableRow key={p.id}>
-                  <TableCell className="font-mono text-sm">{p.id}</TableCell>
                   <TableCell>
                     <button className="font-medium text-primary hover:underline" onClick={() => navigate(`/admin/patients/${p.id}`)}>{p.name}</button>
                   </TableCell>
-                  <TableCell>{p.age}</TableCell>
-                  <TableCell>{p.phone}</TableCell>
-                  <TableCell>{p.lastVisit}</TableCell>
+                  <TableCell>{p.age ?? "—"}</TableCell>
+                  <TableCell>{p.phone ?? "—"}</TableCell>
+                  <TableCell>{p.email}</TableCell>
                   <TableCell><Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge></TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -267,8 +234,12 @@ export default function AdminPatients() {
                   </TableCell>
                 </TableRow>
               ))}
+              {filtered.length === 0 && (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -294,9 +265,9 @@ export default function AdminPatients() {
               </div>
             </div>
             <div>
-              <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" placeholder="Email" value={editForm.email} onChange={e => handleEditFormChange("email", e.target.value)} />
-              {editErrors.email && <p className="text-xs text-destructive mt-1">{editErrors.email}</p>}
+              <Label>Email</Label>
+              <Input type="email" value={editForm.email} disabled />
+              <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
             </div>
             <div>
               <Label>Address <span className="text-destructive">*</span></Label>
@@ -304,7 +275,9 @@ export default function AdminPatients() {
               {editErrors.address && <p className="text-xs text-destructive mt-1">{editErrors.address}</p>}
             </div>
             {editErrors.general && <p className="text-sm text-destructive">{editErrors.general}</p>}
-            <Button className="w-full gradient-primary text-primary-foreground" onClick={handleUpdate}>Save Changes</Button>
+            <Button className="w-full gradient-primary text-primary-foreground" disabled={saving} onClick={handleUpdate}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
