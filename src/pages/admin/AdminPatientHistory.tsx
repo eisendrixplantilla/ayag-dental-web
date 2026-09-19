@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, User, CalendarDays, FileText, Loader2 } from "lucide-react";
 import { getPatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { toast } from "sonner";
 
 const statusClass = (s: string) =>
@@ -21,15 +22,17 @@ export default function AdminPatientHistory() {
   const navigate = useNavigate();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [records, setRecords] = useState<DentalRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    Promise.all([getPatient(id), getAppointments({ patientId: id })])
-      .then(([p, a]) => {
+    Promise.all([getPatient(id), getAppointments({ patientId: id }), getDentalRecords({ patientId: id })])
+      .then(([p, a, r]) => {
         setPatient(p);
         setAppointments(a.sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time)));
+        setRecords(r);
       })
       .catch(() => toast.error("Failed to load patient history"))
       .finally(() => setLoading(false));
@@ -135,13 +138,35 @@ export default function AdminPatientHistory() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />Dental Records
+            <FileText className="w-5 h-5 text-primary" />Dental Records ({records.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Dental records (diagnosis, procedures, prescriptions, and treatment notes) are recorded by the dentist during consultation and will appear here in a future update.
-          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Service</TableHead>
+                <TableHead>Procedure</TableHead>
+                <TableHead>Diagnosis</TableHead>
+                <TableHead>Dentist</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {records.map(r => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.date}</TableCell>
+                  <TableCell>{r.service ?? "—"}</TableCell>
+                  <TableCell>{r.procedure}</TableCell>
+                  <TableCell>{r.diagnosis}</TableCell>
+                  <TableCell>{r.dentistName ?? "—"}</TableCell>
+                </TableRow>
+              ))}
+              {records.length === 0 && (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No dental records yet</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

@@ -7,82 +7,47 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown,
+  User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown, Loader2,
 } from "lucide-react";
-import {
-  useDentistAppointments, useDentalRecords,
-} from "@/lib/dentistAppointmentStore";
-import { getPatientAccounts, type User as AuthUser } from "@/contexts/AuthContext";
+import { getPatients, type Patient } from "@/lib/api/patients";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
 
-interface PatientProfile {
-  name: string;
-  contact: string;
-  email: string;
-  age: number;
-  gender: string;
-  address: string;
-  bloodType: string;
-  allergies: string;
-}
-
-const extraProfiles: Record<string, Partial<PatientProfile>> = {
-  "Maria Garcia": { age: 32, gender: "Female", address: "12 Rizal St., Tuguegarao City", bloodType: "O+", allergies: "Penicillin" },
-  "James Wilson": { age: 45, gender: "Male", address: "45 Bonifacio Ave., Tuguegarao City", bloodType: "A+", allergies: "None" },
-  "Emma Davis": { age: 28, gender: "Female", address: "8 Luna St., Tuguegarao City", bloodType: "B+", allergies: "Latex" },
-  "Carlo Reyes": { age: 36, gender: "Male", address: "21 Gomez St., Tuguegarao City", bloodType: "O+", allergies: "None" },
-  "Ana Santos": { age: 29, gender: "Female", address: "63 Burgos St., Tuguegarao City", bloodType: "B-", allergies: "None" },
-  "Juan Dela Cruz": { age: 41, gender: "Male", address: "9 Paco St., Tuguegarao City", bloodType: "A-", allergies: "Aspirin" },
-  "Pedro Reyes": { age: 50, gender: "Male", address: "33 Luna St., Tuguegarao City", bloodType: "AB+", allergies: "None" },
-};
-
 const statusClass = (s: string) =>
-  s === "completed"
+  s === "completed" || s === "confirmed"
     ? "bg-success/10 text-success border-success/20"
     : s === "cancelled" || s === "rejected"
     ? "bg-destructive/10 text-destructive border-destructive/20"
     : "bg-warning/10 text-warning border-warning/20";
 
-const byDateDesc = <T extends { date: string }>(rows: T[]) =>
-  [...rows].sort((a, b) => b.date.localeCompare(a.date));
-
 export default function DentistPatientHistory() {
-  const appointments = useDentistAppointments();
-  const dentalRecords = useDentalRecords();
-  const [selected, setSelected] = useState<string>("");
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [records, setRecords] = useState<DentalRecord[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const [registeredPatients, setRegisteredPatients] = useState<AuthUser[]>([]);
   useEffect(() => {
-    getPatientAccounts().then(setRegisteredPatients);
+    getPatients().then(setPatients).catch(() => {});
   }, []);
 
-  const patientNames = useMemo(
-    () => Array.from(new Set(registeredPatients.map(p => p.name))).sort((a, b) => a.localeCompare(b)),
-    [registeredPatients],
-  );
+  const selected = useMemo(() => patients.find(p => p.id === selectedId) ?? null, [patients, selectedId]);
 
-  const profile: PatientProfile | null = useMemo(() => {
-    if (!selected) return null;
-    const apt = appointments.find(a => a.patient === selected);
-    const account = registeredPatients.find(p => p.name === selected);
-    const extra = extraProfiles[selected] ?? {};
-    return {
-      name: selected,
-      contact: apt?.contact ?? "—",
-      email: apt?.email ?? account?.email ?? "—",
-      age: extra.age ?? 0,
-      gender: extra.gender ?? "—",
-      address: extra.address ?? "—",
-      bloodType: extra.bloodType ?? "—",
-      allergies: extra.allergies ?? "—",
-    };
-  }, [selected, appointments, registeredPatients]);
+  useEffect(() => {
+    if (!selectedId) { setAppointments([]); setRecords([]); return; }
+    setLoading(true);
+    Promise.all([getAppointments({ patientId: selectedId }), getDentalRecords({ patientId: selectedId })])
+      .then(([a, r]) => {
+        setAppointments(a.sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time)));
+        setRecords(r);
+      })
+      .finally(() => setLoading(false));
+  }, [selectedId]);
 
-  const history = useMemo(() => byDateDesc(appointments.filter(a => a.patient === selected)), [appointments, selected]);
-  const records = useMemo(() => byDateDesc(dentalRecords.filter(r => r.patient === selected)), [dentalRecords, selected]);
-  const procedures = useMemo(() => records.map(r => ({ date: r.date, procedure: r.procedure, dentist: r.dentist, outcome: "Completed" })), [records]);
-  const prescriptions = useMemo(() => records.filter(r => r.prescription).map(r => ({ date: r.date, medication: r.prescription, dentist: r.dentist })), [records]);
+  const procedures = useMemo(() => records.map(r => ({ date: r.date, procedure: r.procedure, dentist: r.dentistName ?? "—", outcome: "Completed" })), [records]);
+  const prescriptions = useMemo(() => records.filter(r => r.prescription).map(r => ({ date: r.date, medication: r.prescription!, dentist: r.dentistName ?? "—" })), [records]);
 
   return (
     <div className="space-y-6">
@@ -107,7 +72,7 @@ export default function DentistPatientHistory() {
               >
                 <span className="flex items-center gap-2 truncate">
                   <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                  {selected || "Search for a patient..."}
+                  {selected?.name || "Search for a patient..."}
                 </span>
                 <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
               </Button>
@@ -118,17 +83,17 @@ export default function DentistPatientHistory() {
                 <CommandList>
                   <CommandEmpty>No patients found.</CommandEmpty>
                   <CommandGroup>
-                    {patientNames.map(name => (
+                    {patients.map(p => (
                       <CommandItem
-                        key={name}
-                        value={name}
+                        key={p.id}
+                        value={p.name}
                         onSelect={() => {
-                          setSelected(name === selected ? "" : name);
+                          setSelectedId(p.id === selectedId ? "" : p.id);
                           setPickerOpen(false);
                         }}
                       >
-                        <Check className={cn("mr-2 w-4 h-4", selected === name ? "opacity-100" : "opacity-0")} />
-                        {name}
+                        <Check className={cn("mr-2 w-4 h-4", selectedId === p.id ? "opacity-100" : "opacity-0")} />
+                        {p.name}
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -139,12 +104,14 @@ export default function DentistPatientHistory() {
         </div>
       </div>
 
-      {!profile ? (
+      {!selected ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
             Select a patient to view their full history.
           </CardContent>
         </Card>
+      ) : loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
         <>
           <Card className="shadow-card">
@@ -156,14 +123,14 @@ export default function DentistPatientHistory() {
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                 {[
-                  ["Full Name", profile.name],
-                  ["Age", profile.age ? String(profile.age) : "—"],
-                  ["Gender", profile.gender],
-                  ["Contact Number", profile.contact],
-                  ["Email Address", profile.email],
-                  ["Address", profile.address],
-                  ["Blood Type", profile.bloodType],
-                  ["Allergies", profile.allergies],
+                  ["Full Name", selected.name],
+                  ["Age", selected.age != null ? String(selected.age) : "—"],
+                  ["Gender", selected.gender ?? "—"],
+                  ["Contact Number", selected.phone ?? "—"],
+                  ["Email Address", selected.email],
+                  ["Address", selected.address ?? "—"],
+                  ["Blood Type", selected.bloodType ?? "—"],
+                  ["Allergies", selected.allergies ?? "—"],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <p className="text-xs text-muted-foreground">{label}</p>
@@ -192,9 +159,9 @@ export default function DentistPatientHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {history.length === 0 ? (
+                  {appointments.length === 0 ? (
                     <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No appointments on record.</TableCell></TableRow>
-                  ) : history.map(a => (
+                  ) : appointments.map(a => (
                     <TableRow key={a.id}>
                       <TableCell>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
                       <TableCell>{a.time}</TableCell>
@@ -230,7 +197,7 @@ export default function DentistPatientHistory() {
                   ) : records.map(r => (
                     <TableRow key={r.id}>
                       <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell>{r.service}</TableCell>
+                      <TableCell>{r.service ?? "—"}</TableCell>
                       <TableCell>{r.diagnosis}</TableCell>
                       <TableCell>{r.treatmentNotes || "—"}</TableCell>
                     </TableRow>

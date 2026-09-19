@@ -17,12 +17,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { FilePlus2, FileEdit, History, Eye } from "lucide-react";
+import { FilePlus2, FileEdit, History, Eye, Loader2 } from "lucide-react";
 import {
-  useDentistAppointments, useDentalRecords, createDentalRecord, correctDentalRecord,
-  type DentalRecord,
-} from "@/lib/dentistAppointmentStore";
-import { getPatientAccounts } from "@/contexts/AuthContext";
+  getDentalRecords, getDentalRecord, createDentalRecord, correctDentalRecord,
+  type DentalRecord, type DentalRecordAudit,
+} from "@/lib/api/dentalRecords";
+import { getPatients, type Patient } from "@/lib/api/patients";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
 
 const emptyForm = {
   date: new Date().toISOString().split("T")[0],
@@ -37,14 +38,24 @@ const emptyForm = {
 
 export default function DentistRecords() {
   const { user } = useAuth();
-  const appointments = useDentistAppointments();
-  const records = useDentalRecords();
+  const [records, setRecords] = useState<DentalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
-  const [patients, setPatients] = useState<string[]>([]);
+  const load = () => {
+    setLoading(true);
+    getDentalRecords()
+      .then(setRecords)
+      .catch(() => toast({ title: "Failed to load dental records", variant: "destructive" }))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
   useEffect(() => {
-    getPatientAccounts().then(accounts => {
-      setPatients(Array.from(new Set(accounts.map(p => p.name))).sort((a, b) => a.localeCompare(b)));
-    });
+    getPatients().then(setPatients).catch(() => {});
+    getAppointments().then(setAppointments).catch(() => {});
   }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -56,6 +67,8 @@ export default function DentistRecords() {
   const [editReason, setEditReason] = useState("");
 
   const [viewTarget, setViewTarget] = useState<DentalRecord | null>(null);
+  const [viewAudits, setViewAudits] = useState<DentalRecordAudit[]>([]);
+  const [viewLoading, setViewLoading] = useState(false);
 
   const openCreate = () => {
     setForm(emptyForm);
@@ -63,25 +76,36 @@ export default function DentistRecords() {
     setCreateOpen(true);
   };
 
-  const submitCreate = () => {
+  const submitCreate = async () => {
     if (!form.date || !form.patient || !form.diagnosis.trim() || !form.procedure.trim()) {
       toast({ title: "Missing information", description: "Consultation date, patient, diagnosis and procedure are required.", variant: "destructive" });
       return;
     }
-    createDentalRecord({
-      patient: form.patient,
-      dentist: user?.name ?? "Dentist",
-      date: form.date,
-      service,
-      diagnosis: form.diagnosis.trim(),
-      procedure: form.procedure.trim(),
-      toothNumber: form.toothNumber.trim() || undefined,
-      prescription: form.prescription.trim(),
-      treatmentNotes: form.treatmentNotes.trim(),
-      nextVisit: form.nextVisit || undefined,
-    });
-    toast({ title: "Dental record saved", description: "The record now appears in the patient's Dental Records and Patient History." });
-    setCreateOpen(false);
+    const patient = patients.find(p => p.name === form.patient);
+    setSaving(true);
+    try {
+      await createDentalRecord({
+        patientId: patient?.id,
+        patientName: form.patient,
+        dentistId: user?.id,
+        dentistName: user?.name ?? "Dentist",
+        date: form.date,
+        service,
+        diagnosis: form.diagnosis.trim(),
+        procedure: form.procedure.trim(),
+        toothNumber: form.toothNumber.trim() || undefined,
+        prescription: form.prescription.trim() || undefined,
+        treatmentNotes: form.treatmentNotes.trim() || undefined,
+        nextVisit: form.nextVisit || undefined,
+      });
+      toast({ title: "Dental record saved", description: "The record now appears in the patient's Dental Records and Patient History." });
+      setCreateOpen(false);
+      load();
+    } catch (err) {
+      toast({ title: "Failed to save record", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openEdit = (r: DentalRecord) => {
@@ -89,15 +113,15 @@ export default function DentistRecords() {
       diagnosis: r.diagnosis,
       procedure: r.procedure,
       toothNumber: r.toothNumber ?? "",
-      prescription: r.prescription,
-      treatmentNotes: r.treatmentNotes,
+      prescription: r.prescription ?? "",
+      treatmentNotes: r.treatmentNotes ?? "",
       nextVisit: r.nextVisit ?? "",
     });
     setEditReason("");
     setEditTarget(r);
   };
 
-  const submitEdit = () => {
+  const submitEdit = async () => {
     if (!editTarget) return;
     if (!editReason.trim()) {
       toast({ title: "Correction reason required", description: "A reason is required for audit purposes.", variant: "destructive" });
@@ -107,20 +131,39 @@ export default function DentistRecords() {
       toast({ title: "Missing information", description: "Diagnosis and procedure are required.", variant: "destructive" });
       return;
     }
-    correctDentalRecord(
-      editTarget.id,
-      {
+    setSaving(true);
+    try {
+      await correctDentalRecord(editTarget.id, {
+        reason: editReason.trim(),
         diagnosis: editForm.diagnosis.trim(),
         procedure: editForm.procedure.trim(),
         toothNumber: editForm.toothNumber.trim() || undefined,
-        prescription: editForm.prescription.trim(),
-        treatmentNotes: editForm.treatmentNotes.trim(),
+        prescription: editForm.prescription.trim() || undefined,
+        treatmentNotes: editForm.treatmentNotes.trim() || undefined,
         nextVisit: editForm.nextVisit || undefined,
-      },
-      editReason.trim(),
-    );
-    toast({ title: "Record corrected", description: "The correction was saved with an audit trail entry." });
-    setEditTarget(null);
+      });
+      toast({ title: "Record corrected", description: "The correction was saved with an audit trail entry." });
+      setEditTarget(null);
+      load();
+    } catch (err) {
+      toast({ title: "Failed to save correction", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openView = async (r: DentalRecord) => {
+    setViewTarget(r);
+    setViewAudits([]);
+    setViewLoading(true);
+    try {
+      const { audits } = await getDentalRecord(r.id);
+      setViewAudits(audits);
+    } catch {
+      // audit trail is best-effort
+    } finally {
+      setViewLoading(false);
+    }
   };
 
   return (
@@ -140,6 +183,9 @@ export default function DentistRecords() {
           <CardTitle className="font-heading text-lg">Saved Dental Records</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -164,7 +210,7 @@ export default function DentistRecords() {
                 records.map(r => (
                   <TableRow key={r.id}>
                     <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                    <TableCell className="font-medium">{r.patient}</TableCell>
+                    <TableCell className="font-medium">{r.patientName}</TableCell>
                     <TableCell>{r.service}</TableCell>
                     <TableCell>{r.procedure}</TableCell>
                     <TableCell>{r.toothNumber || "—"}</TableCell>
@@ -172,7 +218,7 @@ export default function DentistRecords() {
                     <TableCell>{r.prescription || "—"}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2 justify-end">
-                        <Button size="sm" variant="outline" onClick={() => setViewTarget(r)}>
+                        <Button size="sm" variant="outline" onClick={() => openView(r)}>
                           <Eye className="w-4 h-4 mr-1" /> View
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
@@ -185,6 +231,7 @@ export default function DentistRecords() {
               )}
             </TableBody>
           </Table>
+          )}
           <p className="text-xs text-muted-foreground mt-4">
             Dental records cannot be deleted to preserve medical record integrity. Corrections are saved with an audit trail.
           </p>
@@ -207,13 +254,13 @@ export default function DentistRecords() {
               <div className="space-y-2">
                 <Label>Patient Name *</Label>
                 <Select value={form.patient} onValueChange={v => {
-                  const apt = appointments.find(a => a.patient === v);
+                  const apt = appointments.find(a => a.patientName === v);
                   setForm({ ...form, patient: v });
                   if (apt) setService(apt.service);
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
                   <SelectContent className="bg-popover">
-                    {patients.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    {patients.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -247,7 +294,7 @@ export default function DentistRecords() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={submitCreate}>Save Record</Button>
+            <Button onClick={submitCreate} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Record</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -295,7 +342,7 @@ export default function DentistRecords() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
-            <Button onClick={submitEdit}>Save Correction</Button>
+            <Button onClick={submitEdit} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Correction</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -309,27 +356,29 @@ export default function DentistRecords() {
           {viewTarget && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <Field label="Patient" value={viewTarget.patient} />
+                <Field label="Patient" value={viewTarget.patientName} />
                 <Field label="Consultation Date" value={format(parseISO(viewTarget.date), "MMMM d, yyyy")} />
-                <Field label="Service" value={viewTarget.service} />
+                <Field label="Service" value={viewTarget.service ?? "—"} />
                 <Field label="Tooth Number" value={viewTarget.toothNumber || "—"} />
                 <Field label="Diagnosis" value={viewTarget.diagnosis} />
                 <Field label="Procedure Performed" value={viewTarget.procedure} />
                 <div className="col-span-2"><Field label="Prescription" value={viewTarget.prescription || "—"} /></div>
                 <div className="col-span-2"><Field label="Treatment Notes" value={viewTarget.treatmentNotes || "—"} /></div>
                 <Field label="Next Visit" value={viewTarget.nextVisit ? format(parseISO(viewTarget.nextVisit), "MMMM d, yyyy") : "—"} />
-                <Field label="Attending Dentist" value={viewTarget.dentist} />
+                <Field label="Attending Dentist" value={viewTarget.dentistName ?? "—"} />
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
                   <History className="w-3.5 h-3.5" /> Audit Trail
                 </p>
-                {(viewTarget.audit?.length ?? 0) === 0 ? (
+                {viewLoading ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+                ) : viewAudits.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No corrections have been made to this record.</p>
                 ) : (
                   <div className="space-y-2">
-                    {viewTarget.audit!.map((a, i) => (
-                      <div key={i} className="rounded-lg border border-border p-3 text-xs space-y-1">
+                    {viewAudits.map((a) => (
+                      <div key={a.id} className="rounded-lg border border-border p-3 text-xs space-y-1">
                         <div className="flex items-center justify-between">
                           <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">Corrected</Badge>
                           <span className="text-muted-foreground">{format(parseISO(a.editedAt), "MMM d, yyyy h:mm a")}</span>

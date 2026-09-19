@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2 } from "lucide-react";
-import { createDentalRecord } from "@/lib/dentistAppointmentStore";
+import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { dentistSchedules, generateSlots, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
 
@@ -111,12 +111,19 @@ export default function DentistAppointments() {
     setSaving(true);
     try {
       await completeAppointment(consult.id);
-      createDentalRecord({
-        patient: consult.patientName,
-        dentist: consult.dentistName ?? "",
+      await createDentalRecord({
+        appointmentId: consult.id,
+        patientId: consult.patientId ?? undefined,
+        patientName: consult.patientName,
+        dentistId: consult.dentistId ?? undefined,
+        dentistName: consult.dentistName ?? undefined,
         date: consult.date,
         service: consult.service,
-        ...recordForm,
+        procedure: recordForm.procedure,
+        diagnosis: recordForm.diagnosis,
+        treatmentNotes: recordForm.treatmentNotes || undefined,
+        prescription: recordForm.prescription || undefined,
+        nextVisit: recordForm.nextVisit || undefined,
       });
       toast({ title: "Consultation saved", description: `Dental record added to ${consult.patientName}'s history. Appointment marked as Completed.` });
       setConsult(null);
