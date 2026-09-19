@@ -12,7 +12,7 @@ function mapRow(r: any) {
     dentistId: r.dentist_id,
     dentistName: r.dentist_name,
     service: r.service,
-    date: r.date,
+    date: new Date(r.date).toISOString().slice(0, 10),
     time: r.time,
     type: r.type,
     status: r.status,
