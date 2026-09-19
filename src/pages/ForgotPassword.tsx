@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Mail, Lock, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -134,7 +135,7 @@ export default function ForgotPassword() {
                   We've sent a reset code to <span className="font-medium text-foreground">{email}</span>. Please check your inbox.
                 </p>
                 <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={code} onChange={setCode}>
+                  <InputOTP maxLength={6} value={code} onChange={setCode} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric">
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />

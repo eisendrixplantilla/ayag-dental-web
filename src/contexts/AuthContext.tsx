@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { isAccountActive } from "@/lib/accountStore";
 import { sendOtpEmail } from "@/lib/emailjs";
+import { generateOtp, isOtpFormatValid, isOtpExpired, OTP_TTL_MS, type OtpTicket } from "@/lib/otp";
 
 
 export type UserRole = "admin" | "patient" | "superadmin" | "dentist";
@@ -65,10 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [pendingUser, setPendingUser] = useState<User | null>(null);
-  const [pendingCode, setPendingCode] = useState<string | null>(null);
+  const [pendingCode, setPendingCode] = useState<OtpTicket | null>(null);
   const [pendingPassword, setPendingPassword] = useState<string | null>(null);
   const [pendingResetEmail, setPendingResetEmail] = useState<string | null>(null);
-  const [pendingResetCode, setPendingResetCode] = useState<string | null>(null);
+  const [pendingResetCode, setPendingResetCode] = useState<OtpTicket | null>(null);
 
   const setUser = useCallback((u: User | null) => {
     setUserState(u);
@@ -107,16 +108,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       throw new Error("An account with this email already exists");
     }
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const ticket = generateOtp();
     try {
-      await sendOtpEmail(email, code);
+      await sendOtpEmail(email, ticket.code, OTP_TTL_MS / 60_000);
     } catch {
       setIsLoading(false);
       throw new Error("Failed to send verification email. Please try again.");
     }
     const newUser: User = { id: Date.now().toString(), email, name, role, verified: false };
     setPendingUser(newUser);
-    setPendingCode(code);
+    setPendingCode(ticket);
     setPendingPassword(password);
     setIsLoading(false);
   }, []);
@@ -124,7 +125,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const verify = useCallback(async (code: string) => {
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 600));
-    if (code !== pendingCode) {
+    if (!isOtpFormatValid(code)) {
+      setIsLoading(false);
+      throw new Error("Enter the 6-digit code sent to your email");
+    }
+    if (isOtpExpired(pendingCode)) {
+      setIsLoading(false);
+      throw new Error("This code has expired. Please register again to get a new one.");
+    }
+    if (code !== pendingCode?.code) {
       setIsLoading(false);
       throw new Error("Invalid verification code");
     }
@@ -152,22 +161,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const forgotPassword = useCallback(async (email: string) => {
     setIsLoading(true);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const found = MOCK_USERS.some(u => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (!found) {
+      setIsLoading(false);
+      throw new Error("No account found with this email address");
+    }
+    const ticket = generateOtp();
     try {
-      await sendOtpEmail(email, code);
+      await sendOtpEmail(email, ticket.code, OTP_TTL_MS / 60_000);
     } catch {
       setIsLoading(false);
       throw new Error("Failed to send reset code. Please try again.");
     }
     setPendingResetEmail(email);
-    setPendingResetCode(code);
+    setPendingResetCode(ticket);
     setIsLoading(false);
   }, []);
 
   const verifyResetCode = useCallback(async (code: string) => {
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 600));
-    if (code !== pendingResetCode) {
+    if (!isOtpFormatValid(code)) {
+      setIsLoading(false);
+      throw new Error("Enter the 6-digit code sent to your email");
+    }
+    if (isOtpExpired(pendingResetCode)) {
+      setIsLoading(false);
+      throw new Error("This code has expired. Please request a new one.");
+    }
+    if (code !== pendingResetCode?.code) {
       setIsLoading(false);
       throw new Error("Invalid reset code");
     }
@@ -177,9 +199,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetPassword = useCallback(async (code: string, newPassword: string) => {
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 600));
-    if (code !== pendingResetCode) {
+    if (!isOtpFormatValid(code) || isOtpExpired(pendingResetCode) || code !== pendingResetCode?.code) {
       setIsLoading(false);
-      throw new Error("Invalid reset code");
+      throw new Error("Invalid or expired reset code");
     }
     const found = MOCK_USERS.find(u => u.email === pendingResetEmail);
     if (!found) {

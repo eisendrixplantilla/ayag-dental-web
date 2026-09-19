@@ -5,6 +5,7 @@ import { getRoleHome } from "@/lib/roleHome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Stethoscope, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -46,7 +47,7 @@ export default function Verify() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="flex justify-center">
-                <InputOTP maxLength={6} value={code} onChange={setCode}>
+                <InputOTP maxLength={6} value={code} onChange={setCode} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric">
                   <InputOTPGroup>
                     <InputOTPSlot index={0} />
                     <InputOTPSlot index={1} />
