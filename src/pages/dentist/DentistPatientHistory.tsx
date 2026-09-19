@@ -46,8 +46,14 @@ export default function DentistPatientHistory() {
       .finally(() => setLoading(false));
   }, [selectedId]);
 
-  const procedures = useMemo(() => records.map(r => ({ date: r.date, procedure: r.procedure, dentist: r.dentistName ?? "—", outcome: "Completed" })), [records]);
-  const prescriptions = useMemo(() => records.filter(r => r.prescription).map(r => ({ date: r.date, medication: r.prescription!, dentist: r.dentistName ?? "—" })), [records]);
+  const procedures = useMemo(
+    () => records.flatMap(r => r.treatments.map(t => ({ date: r.date, procedure: t.serviceName ?? "—", dentist: r.dentistName ?? "—", outcome: "Completed" }))),
+    [records],
+  );
+  const prescriptions = useMemo(
+    () => records.flatMap(r => r.prescriptions.map(p => ({ date: r.date, medication: p.medicine, dentist: r.dentistName ?? "—" }))),
+    [records],
+  );
 
   return (
     <div className="space-y-6">
@@ -186,7 +192,7 @@ export default function DentistPatientHistory() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Service</TableHead>
+                    <TableHead>Procedures</TableHead>
                     <TableHead>Diagnosis</TableHead>
                     <TableHead>Treatment Notes</TableHead>
                   </TableRow>
@@ -197,7 +203,7 @@ export default function DentistPatientHistory() {
                   ) : records.map(r => (
                     <TableRow key={r.id}>
                       <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell>{r.service ?? "—"}</TableCell>
+                      <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                       <TableCell>{r.diagnosis}</TableCell>
                       <TableCell>{r.treatmentNotes || "—"}</TableCell>
                     </TableRow>

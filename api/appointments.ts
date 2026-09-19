@@ -14,10 +14,13 @@ function mapRow(r: any) {
     service: r.service,
     date: new Date(r.date).toISOString().slice(0, 10),
     time: r.time,
+    endTime: r.end_time,
     type: r.type,
     status: r.status,
     reason: r.reason,
     remarks: r.remarks,
+    rescheduleCount: r.reschedule_count,
+    createdBy: r.created_by,
     createdAt: r.created_at,
   };
 }
@@ -68,9 +71,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const patientId = session.role === "patient" ? session.sub : (req.body?.patientId ?? null);
     const status = type === "walk-in" ? "confirmed" : "pending";
+    const createdBy = session.role === "patient" ? "patient" : session.role;
     const inserted = await sql`
-      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type, status, reason)
-      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${type}, ${status}, ${reason ?? null})
+      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type, status, reason, created_by)
+      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
       RETURNING *
     `;
     return res.status(201).json({ appointment: mapRow(inserted[0]) });
@@ -87,6 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { status, date, time, reason, remarks, dentistId, dentistName } = req.body ?? {};
+    const rescheduleIncrement = status === "rescheduled" ? 1 : 0;
     const updated = await sql`
       UPDATE appointments SET
         status = COALESCE(${status ?? null}, status),
@@ -95,7 +100,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reason = COALESCE(${reason ?? null}, reason),
         remarks = COALESCE(${remarks ?? null}, remarks),
         dentist_id = COALESCE(${dentistId ?? null}, dentist_id),
-        dentist_name = COALESCE(${dentistName ?? null}, dentist_name)
+        dentist_name = COALESCE(${dentistName ?? null}, dentist_name),
+        reschedule_count = reschedule_count + ${rescheduleIncrement}
       WHERE id = ${id}
       RETURNING *
     `;

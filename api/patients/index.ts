@@ -3,12 +3,28 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { sql } from "../_lib/db.js";
 import { getSessionFromRequest } from "../_lib/auth.js";
+import { splitName, joinName } from "../_lib/name.js";
 
-const PATIENT_FIELDS = `
-  u.id, u.email, u.name, u.role, u.verified, u.created_at,
-  p.phone, p.address, p.age, p.gender, p.blood_type AS "bloodType", p.allergies,
-  p.status, p.last_login AS "lastLogin", p.archived_at AS "archivedAt", p.archived_by AS "archivedBy"
-`;
+function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsCount: number }) {
+  return {
+    id: p.id,
+    email: p.email,
+    name: joinName(p.first_name, p.middle_name, p.last_name),
+    role: "patient",
+    verified: p.verified,
+    phone: p.contact_number,
+    address: p.address,
+    age: p.age,
+    gender: p.sex,
+    bloodType: p.blood_type,
+    allergies: p.allergies,
+    status: p.status,
+    lastLogin: p.last_login,
+    archivedAt: p.archived_at,
+    archivedBy: p.archived_by,
+    ...(counts ? counts : {}),
+  };
+}
 
 function requireStaff(req: VercelRequest, res: VercelResponse) {
   const session = getSessionFromRequest(req);
@@ -35,26 +51,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!requireSession(req, res)) return;
 
     if (id) {
-      const rows = await sql.query(
-        `SELECT ${PATIENT_FIELDS} FROM users u JOIN patient_profiles p ON p.user_id = u.id WHERE u.id = $1`,
-        [id],
-      );
-      const patient = (rows as any[])[0];
+      const rows = await sql`SELECT * FROM patients WHERE id = ${id}`;
+      const patient = rows[0];
       if (!patient) return res.status(404).json({ error: "Patient not found" });
       const [apptCount, recordCount] = await Promise.all([
         sql`SELECT COUNT(*)::int AS c FROM appointments WHERE patient_id = ${id}`,
-        sql`SELECT COUNT(*)::int AS c FROM dental_records WHERE patient_id = ${id}`,
+        sql`SELECT COUNT(*)::int AS c FROM dental_records dr JOIN appointments a ON a.id = dr.appointment_id WHERE a.patient_id = ${id}`,
       ]);
       return res.status(200).json({
-        patient: { ...patient, appointmentsCount: apptCount[0].c, dentalRecordsCount: recordCount[0].c },
+        patient: mapPatient(patient, { appointmentsCount: apptCount[0].c, dentalRecordsCount: recordCount[0].c }),
       });
     }
 
     const archived = req.query.archived === "true";
     const rows = archived
-      ? await sql.query(`SELECT ${PATIENT_FIELDS} FROM users u JOIN patient_profiles p ON p.user_id = u.id WHERE p.archived_at IS NOT NULL ORDER BY u.name`, [])
-      : await sql.query(`SELECT ${PATIENT_FIELDS} FROM users u JOIN patient_profiles p ON p.user_id = u.id WHERE p.archived_at IS NULL ORDER BY u.name`, []);
-    return res.status(200).json({ patients: rows });
+      ? await sql`SELECT * FROM patients WHERE archived_at IS NOT NULL ORDER BY first_name, last_name`
+      : await sql`SELECT * FROM patients WHERE archived_at IS NULL ORDER BY first_name, last_name`;
+    return res.status(200).json({ patients: rows.map((r) => mapPatient(r)) });
   }
 
   if (req.method === "POST") {
@@ -63,23 +76,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!name || !email) return res.status(400).json({ error: "Name and email are required" });
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const existing = await sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail}`;
-    if (existing.length > 0) return res.status(409).json({ error: "A user with this email already exists" });
+    const [existingPatient, existingUser] = await Promise.all([
+      sql`SELECT id FROM patients WHERE lower(email) = ${normalizedEmail}`,
+      sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail}`,
+    ]);
+    if (existingPatient.length > 0 || existingUser.length > 0) {
+      return res.status(409).json({ error: "A user with this email already exists" });
+    }
 
+    const { firstName, lastName } = splitName(name);
     const passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10);
     const inserted = await sql`
-      INSERT INTO users (email, password_hash, name, role, verified)
-      VALUES (${normalizedEmail}, ${passwordHash}, ${name}, 'patient', TRUE)
-      RETURNING id, email, name, role, verified, created_at
+      INSERT INTO patients (email, password_hash, first_name, last_name, contact_number, address, age, sex, blood_type, allergies, verified)
+      VALUES (${normalizedEmail}, ${passwordHash}, ${firstName}, ${lastName}, ${phone ?? null}, ${address ?? null}, ${age ?? null}, ${gender ?? null}, ${bloodType ?? null}, ${allergies ?? null}, TRUE)
+      RETURNING *
     `;
-    const user = inserted[0];
-    await sql`
-      INSERT INTO patient_profiles (user_id, phone, address, age, gender, blood_type, allergies)
-      VALUES (${user.id}, ${phone ?? null}, ${address ?? null}, ${age ?? null}, ${gender ?? null}, ${bloodType ?? null}, ${allergies ?? null})
-    `;
-    return res.status(201).json({
-      patient: { ...user, phone: phone ?? null, address: address ?? null, age: age ?? null, gender: gender ?? null, bloodType: bloodType ?? null, allergies: allergies ?? null, status: "active", lastLogin: null },
-    });
+    return res.status(201).json({ patient: mapPatient(inserted[0]) });
   }
 
   if (!id) return res.status(400).json({ error: "Missing id" });
@@ -90,9 +102,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === "archive" || action === "restore") {
       if (!requireStaff(req, res)) return;
       if (action === "archive") {
-        await sql`UPDATE patient_profiles SET archived_at = now(), archived_by = ${archivedBy ?? "Admin"}, status = 'inactive' WHERE user_id = ${id}`;
+        await sql`UPDATE patients SET archived_at = now(), archived_by = ${archivedBy ?? "Admin"}, status = 'inactive' WHERE id = ${id}`;
       } else {
-        await sql`UPDATE patient_profiles SET archived_at = NULL, archived_by = NULL, status = 'active' WHERE user_id = ${id}`;
+        await sql`UPDATE patients SET archived_at = NULL, archived_by = NULL, status = 'active' WHERE id = ${id}`;
       }
     } else {
       const session = getSessionFromRequest(req);
@@ -101,37 +113,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!session || (!isSelf && !isStaff)) return res.status(401).json({ error: "Unauthorized" });
       if (!isStaff && status) return res.status(403).json({ error: "Forbidden" });
 
-      if (name) await sql`UPDATE users SET name = ${name} WHERE id = ${id}`;
+      const nameParts = name ? splitName(name) : null;
       await sql`
-        UPDATE patient_profiles SET
-          phone = COALESCE(${phone ?? null}, phone),
+        UPDATE patients SET
+          first_name = COALESCE(${nameParts?.firstName ?? null}, first_name),
+          last_name = COALESCE(${nameParts?.lastName ?? null}, last_name),
+          contact_number = COALESCE(${phone ?? null}, contact_number),
           address = COALESCE(${address ?? null}, address),
           age = COALESCE(${age ?? null}, age),
-          gender = COALESCE(${gender ?? null}, gender),
+          sex = COALESCE(${gender ?? null}, sex),
           blood_type = COALESCE(${bloodType ?? null}, blood_type),
           allergies = COALESCE(${allergies ?? null}, allergies),
-          status = COALESCE(${status ?? null}, status)
-        WHERE user_id = ${id}
+          status = COALESCE(${status ?? null}, status),
+          updated_at = now()
+        WHERE id = ${id}
       `;
     }
 
-    const rows = await sql.query(
-      `SELECT ${PATIENT_FIELDS} FROM users u JOIN patient_profiles p ON p.user_id = u.id WHERE u.id = $1`,
-      [id],
-    );
-    return res.status(200).json({ patient: (rows as any[])[0] });
+    const rows = await sql`SELECT * FROM patients WHERE id = ${id}`;
+    if (!rows[0]) return res.status(404).json({ error: "Patient not found" });
+    return res.status(200).json({ patient: mapPatient(rows[0]) });
   }
 
   if (req.method === "DELETE") {
     if (!requireStaff(req, res)) return;
     const [apptCount, recordCount] = await Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM appointments WHERE patient_id = ${id}`,
-      sql`SELECT COUNT(*)::int AS c FROM dental_records WHERE patient_id = ${id}`,
+      sql`SELECT COUNT(*)::int AS c FROM dental_records dr JOIN appointments a ON a.id = dr.appointment_id WHERE a.patient_id = ${id}`,
     ]);
     if (apptCount[0].c > 0 || recordCount[0].c > 0) {
       return res.status(400).json({ error: "This account has existing appointments or dental records and cannot be deleted." });
     }
-    await sql`DELETE FROM users WHERE id = ${id}`;
+    await sql`DELETE FROM patients WHERE id = ${id}`;
     return res.status(200).json({ ok: true });
   }
 

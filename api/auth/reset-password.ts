@@ -26,11 +26,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  const updated = await sql`
-    UPDATE users SET password_hash = ${passwordHash} WHERE lower(email) = ${normalizedEmail}
+  const updatedPatient = await sql`
+    UPDATE patients SET password_hash = ${passwordHash} WHERE lower(email) = ${normalizedEmail}
     RETURNING id
   `;
-  if (updated.length === 0) {
+  const updatedUser = updatedPatient.length === 0
+    ? await sql`UPDATE users SET password_hash = ${passwordHash} WHERE lower(email) = ${normalizedEmail} RETURNING id`
+    : [];
+  if (updatedPatient.length === 0 && updatedUser.length === 0) {
     return res.status(404).json({ error: "No account found for this email" });
   }
 

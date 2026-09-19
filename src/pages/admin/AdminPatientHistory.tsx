@@ -146,8 +146,7 @@ export default function AdminPatientHistory() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Procedure</TableHead>
+                <TableHead>Procedures</TableHead>
                 <TableHead>Diagnosis</TableHead>
                 <TableHead>Dentist</TableHead>
               </TableRow>
@@ -156,14 +155,13 @@ export default function AdminPatientHistory() {
               {records.map(r => (
                 <TableRow key={r.id}>
                   <TableCell>{r.date}</TableCell>
-                  <TableCell>{r.service ?? "—"}</TableCell>
-                  <TableCell>{r.procedure}</TableCell>
+                  <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                   <TableCell>{r.diagnosis}</TableCell>
                   <TableCell>{r.dentistName ?? "—"}</TableCell>
                 </TableRow>
               ))}
               {records.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No dental records yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No dental records yet</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

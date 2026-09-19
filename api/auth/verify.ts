@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "../_lib/db.js";
 import { isOtpFormatValid } from "../_lib/otp.js";
 import { signSession } from "../_lib/auth.js";
+import { splitName, joinName } from "../_lib/name.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -28,24 +29,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Invalid verification code" });
   }
 
-  const inserted = await sql`
-    INSERT INTO users (email, password_hash, name, role, verified)
-    VALUES (${normalizedEmail}, ${ticket.pending_password_hash}, ${ticket.pending_name}, ${ticket.pending_role}, TRUE)
-    RETURNING id, email, name, role, verified
-  `;
-  const user = inserted[0];
+  const { firstName, lastName } = splitName(ticket.pending_name);
+  const role = ticket.pending_role as string;
 
-  if (user.role === "patient") {
-    await sql`INSERT INTO patient_profiles (user_id) VALUES (${user.id})`;
-  } else if (user.role === "admin" || user.role === "dentist") {
-    await sql`INSERT INTO staff_profiles (user_id) VALUES (${user.id})`;
+  let userId: string;
+  if (role === "patient") {
+    const inserted = await sql`
+      INSERT INTO patients (email, password_hash, first_name, last_name, verified)
+      VALUES (${normalizedEmail}, ${ticket.pending_password_hash}, ${firstName}, ${lastName}, TRUE)
+      RETURNING id
+    `;
+    userId = inserted[0].id;
+  } else {
+    const inserted = await sql`
+      INSERT INTO users (email, password_hash, first_name, last_name, role, verified)
+      VALUES (${normalizedEmail}, ${ticket.pending_password_hash}, ${firstName}, ${lastName}, ${role}, TRUE)
+      RETURNING id
+    `;
+    userId = inserted[0].id;
   }
 
   await sql`DELETE FROM otp_codes WHERE email = ${normalizedEmail} AND purpose = 'register'`;
 
-  const token = signSession({ sub: user.id, email: user.email, role: user.role });
+  const token = signSession({ sub: userId, email: normalizedEmail, role: role as any });
   res.status(200).json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, verified: user.verified },
+    user: { id: userId, email: normalizedEmail, name: joinName(firstName, null, lastName), role, verified: true },
   });
 }

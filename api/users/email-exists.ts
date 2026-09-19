@@ -7,6 +7,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email = String(req.query.email ?? "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Missing email" });
 
-  const rows = await sql`SELECT id FROM users WHERE lower(email) = ${email}`;
-  res.status(200).json({ exists: rows.length > 0 });
+  const [patientRows, userRows] = await Promise.all([
+    sql`SELECT id FROM patients WHERE lower(email) = ${email}`,
+    sql`SELECT id FROM users WHERE lower(email) = ${email}`,
+  ]);
+  res.status(200).json({ exists: patientRows.length > 0 || userRows.length > 0 });
 }

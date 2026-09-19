@@ -11,8 +11,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const normalizedEmail = String(email).trim().toLowerCase();
 
-  const existing = await sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail}`;
-  if (existing.length === 0) {
+  const [existingPatient, existingUser] = await Promise.all([
+    sql`SELECT id FROM patients WHERE lower(email) = ${normalizedEmail}`,
+    sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail}`,
+  ]);
+  if (existingPatient.length === 0 && existingUser.length === 0) {
     return res.status(404).json({ error: "No account found with this email address" });
   }
 

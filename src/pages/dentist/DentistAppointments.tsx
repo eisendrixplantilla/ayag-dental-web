@@ -113,16 +113,11 @@ export default function DentistAppointments() {
       await completeAppointment(consult.id);
       await createDentalRecord({
         appointmentId: consult.id,
-        patientId: consult.patientId ?? undefined,
-        patientName: consult.patientName,
-        dentistId: consult.dentistId ?? undefined,
-        dentistName: consult.dentistName ?? undefined,
         date: consult.date,
-        service: consult.service,
-        procedure: recordForm.procedure,
         diagnosis: recordForm.diagnosis,
+        treatments: [{ serviceName: recordForm.procedure }],
         treatmentNotes: recordForm.treatmentNotes || undefined,
-        prescription: recordForm.prescription || undefined,
+        prescriptions: recordForm.prescription.trim() ? [{ medicine: recordForm.prescription.trim() }] : undefined,
         nextVisit: recordForm.nextVisit || undefined,
       });
       toast({ title: "Consultation saved", description: `Dental record added to ${consult.patientName}'s history. Appointment marked as Completed.` });

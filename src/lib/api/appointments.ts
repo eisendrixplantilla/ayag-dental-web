@@ -13,10 +13,13 @@ export interface Appointment {
   service: string;
   date: string; // yyyy-MM-dd
   time: string; // HH:mm
+  endTime: string | null;
   type: "online" | "walk-in";
   status: AptStatus;
   reason: string | null;
   remarks: string | null;
+  rescheduleCount: number;
+  createdBy: string | null;
   createdAt: string;
 }
 
