@@ -1,74 +1,44 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
 import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, History, Bell } from "lucide-react";
+import { CalendarDays, History, Bell, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 
-type AppointmentStatus = "pending" | "confirmed" | "completed" | "cancelled" | "rejected";
-
-interface Appointment {
-  service: string;
-  date: Date;
-  time: string;
-  status: AppointmentStatus;
-}
-
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const addDays = (days: number) => {
-  const d = startOfToday();
-  d.setDate(d.getDate() + days);
-  return d;
-};
-
-// Mock patient appointment data
-const allAppointments: Appointment[] = [
-  { service: "Dental Cleaning", date: addDays(1), time: "10:00 AM", status: "confirmed" },
-  { service: "Check-up", date: addDays(16), time: "2:00 PM", status: "pending" },
-  { service: "Filling", date: addDays(-30), time: "9:00 AM", status: "completed" },
-  { service: "Tooth Extraction", date: addDays(-60), time: "11:00 AM", status: "cancelled" },
-  { service: "Braces Consultation", date: addDays(5), time: "3:00 PM", status: "rejected" },
-];
-
-const formatDate = (d: Date) =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
-const formatShortDate = (d: Date) =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const today = format(new Date(), "yyyy-MM-dd");
 
 export default function PatientDashboard() {
   const { user } = useAuth();
-  const { upcoming, nextConfirmed, totalVisits, reminders } = useMemo(() => {
-    const today = startOfToday();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const upcoming = allAppointments
-      .filter(
-        (a) =>
-          (a.status === "pending" || a.status === "confirmed") && a.date.getTime() >= today.getTime()
-      )
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  useEffect(() => {
+    setLoading(true);
+    getAppointments()
+      .then(setAppointments)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const { upcoming, nextConfirmed, totalVisits, reminders } = useMemo(() => {
+    const upcoming = appointments
+      .filter(a => (a.status === "pending" || a.status === "confirmed") && a.date >= today)
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
     const nextConfirmed = upcoming.find((a) => a.status === "confirmed") ?? null;
-    const totalVisits = allAppointments.filter((a) => a.status === "completed").length;
+    const totalVisits = appointments.filter((a) => a.status === "completed").length;
 
     const reminders: string[] = [];
     if (nextConfirmed) {
       const dayDiff = Math.round(
-        (nextConfirmed.date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        (parseISO(nextConfirmed.date).getTime() - parseISO(today).getTime()) / (1000 * 60 * 60 * 24)
       );
       const whenLabel =
-        dayDiff === 0
-          ? "today"
-          : dayDiff === 1
-          ? "tomorrow"
-          : `on ${formatDate(nextConfirmed.date)}`;
+        dayDiff === 0 ? "today" : dayDiff === 1 ? "tomorrow" : `on ${format(parseISO(nextConfirmed.date), "MMM d, yyyy")}`;
       reminders.push(
-        `Your ${nextConfirmed.service.toLowerCase()} appointment is ${whenLabel} at ${nextConfirmed.time}.`
+        `Your ${nextConfirmed.service.toLowerCase()} appointment is ${whenLabel} at ${toLabel(toMinutes(nextConfirmed.time))}.`
       );
       reminders.push("Please arrive 10 minutes early and bring a valid ID.");
     } else {
@@ -78,7 +48,7 @@ export default function PatientDashboard() {
     }
 
     return { upcoming, nextConfirmed, totalVisits, reminders };
-  }, []);
+  }, [appointments]);
 
   return (
     <div className="space-y-6">
@@ -87,12 +57,16 @@ export default function PatientDashboard() {
         <p className="text-muted-foreground">Welcome back, {user?.name}</p>
       </div>
 
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+      <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Upcoming Appointments" value={upcoming.length} icon={CalendarDays} delay={0} />
         <StatCard title="Total Visits" value={totalVisits} icon={History} delay={0.1} />
         <StatCard
           title="Next Appointment"
-          value={nextConfirmed ? formatShortDate(nextConfirmed.date) : "None"}
+          value={nextConfirmed ? format(parseISO(nextConfirmed.date), "MMM d") : "None"}
           icon={CalendarDays}
           trend={nextConfirmed ? nextConfirmed.service : "No confirmed appointment"}
           delay={0.2}
@@ -109,12 +83,12 @@ export default function PatientDashboard() {
               {upcoming.length === 0 && (
                 <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
               )}
-              {upcoming.map((apt, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+              {upcoming.map((apt) => (
+                <div key={apt.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                   <div>
                     <p className="font-medium text-foreground">{apt.service}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(apt.date)} at {apt.time}
+                      {format(parseISO(apt.date), "MMM d, yyyy")} at {toLabel(toMinutes(apt.time))}
                     </p>
                   </div>
                   <Badge
@@ -151,6 +125,8 @@ export default function PatientDashboard() {
           </CardContent>
         </Card>
       </div>
+      </>
+      )}
     </div>
   );
 }

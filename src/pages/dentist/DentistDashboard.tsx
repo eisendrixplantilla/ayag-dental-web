@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +10,12 @@ import {
   CheckCircle2,
   Users,
   Clock,
+  Loader2,
 } from "lucide-react";
-import { useDentistAppointments } from "@/lib/dentistAppointmentStore";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { toMinutes, toLabel } from "@/lib/dentistSchedules";
 
-const today = new Date().toISOString().split("T")[0];
+const today = format(new Date(), "yyyy-MM-dd");
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -26,10 +28,18 @@ const statusColors: Record<string, string> = {
 
 export default function DentistDashboard() {
   const { user } = useAuth();
-  const allAppointments = useDentistAppointments();
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getAppointments()
+      .then(setAllAppointments)
+      .finally(() => setLoading(false));
+  }, []);
 
   const appointments = useMemo(
-    () => allAppointments.filter(a => !user?.name || a.dentist === user.name),
+    () => allAppointments.filter(a => !user?.name || a.dentistName === user.name),
     [allAppointments, user],
   );
 
@@ -60,6 +70,10 @@ export default function DentistDashboard() {
         <p className="text-muted-foreground">Overview of your day, {user?.name || "Doctor"}</p>
       </div>
 
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+      <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Today's Appointments" value={stats.today} icon={CalendarDays} trend="Scheduled today" delay={0} />
         <StatCard title="Upcoming Appointments" value={stats.upcoming} icon={CalendarClock} trend="Pending + Confirmed" delay={0.05} />
@@ -81,7 +95,7 @@ export default function DentistDashboard() {
               {todaysSchedule.map(apt => (
                 <div key={apt.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <div>
-                    <p className="font-medium text-sm text-foreground">{apt.patient}</p>
+                    <p className="font-medium text-sm text-foreground">{apt.patientName}</p>
                     <p className="text-xs text-muted-foreground">
                       {apt.service} • {toLabel(toMinutes(apt.time))} • {apt.type === "walk-in" ? "Walk-in" : "Online"}
                     </p>
@@ -98,6 +112,8 @@ export default function DentistDashboard() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }
