@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,10 +40,12 @@ export default function DentistRecords() {
   const appointments = useDentistAppointments();
   const records = useDentalRecords();
 
-  const patients = useMemo(
-    () => Array.from(new Set(getPatientAccounts().map(p => p.name))).sort((a, b) => a.localeCompare(b)),
-    [],
-  );
+  const [patients, setPatients] = useState<string[]>([]);
+  useEffect(() => {
+    getPatientAccounts().then(accounts => {
+      setPatients(Array.from(new Set(accounts.map(p => p.name))).sort((a, b) => a.localeCompare(b)));
+    });
+  }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);

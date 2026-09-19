@@ -20,14 +20,18 @@ export default function Register() {
   const { register, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  const handleEmailChange = (value: string) => {
+  const handleEmailChange = async (value: string) => {
     setEmail(value);
-    setEmailError(value.trim() && emailExists(value) ? "An account with this email already exists" : "");
+    if (!value.trim()) {
+      setEmailError("");
+      return;
+    }
+    setEmailError((await emailExists(value)) ? "An account with this email already exists" : "");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailExists(email)) {
+    if (await emailExists(email)) {
       setEmailError("An account with this email already exists");
       return;
     }

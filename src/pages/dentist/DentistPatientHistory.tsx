@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import {
 import {
   useDentistAppointments, useDentalRecords,
 } from "@/lib/dentistAppointmentStore";
-import { getPatientAccounts } from "@/contexts/AuthContext";
+import { getPatientAccounts, type User as AuthUser } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface PatientProfile {
@@ -52,7 +52,10 @@ export default function DentistPatientHistory() {
   const [selected, setSelected] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const registeredPatients = useMemo(() => getPatientAccounts(), []);
+  const [registeredPatients, setRegisteredPatients] = useState<AuthUser[]>([]);
+  useEffect(() => {
+    getPatientAccounts().then(setRegisteredPatients);
+  }, []);
 
   const patientNames = useMemo(
     () => Array.from(new Set(registeredPatients.map(p => p.name))).sort((a, b) => a.localeCompare(b)),
