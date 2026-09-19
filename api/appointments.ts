@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
+import { sendAppointmentEmail } from "./_lib/email.js";
+
+const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
 function mapRow(r: any) {
   return {
@@ -105,7 +108,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE id = ${id}
       RETURNING *
     `;
-    return res.status(200).json({ appointment: mapRow(updated[0]) });
+    const updatedRow = updated[0];
+
+    if (status && status !== existing.status && NOTIFY_STATUSES.has(status) && updatedRow.email) {
+      const message = status === "confirmed"
+        ? "Please arrive 10 minutes early and bring a valid ID."
+        : [updatedRow.reason, updatedRow.remarks].filter(Boolean).join(" — ");
+      sendAppointmentEmail({
+        email: updatedRow.email,
+        status,
+        patientName: updatedRow.patient_name,
+        service: updatedRow.service,
+        dentistName: updatedRow.dentist_name,
+        date: new Date(updatedRow.date).toISOString().slice(0, 10),
+        time: updatedRow.time,
+        message,
+      }).catch((err) => console.error("Appointment email failed:", err));
+    }
+
+    return res.status(200).json({ appointment: mapRow(updatedRow) });
   }
 
   if (req.method === "DELETE") {
