@@ -54,7 +54,7 @@ export default function SuperAdminArchives() {
           type: "Patient",
           email: p.email,
           contact: p.phone ?? "—",
-          archivedAt: p.archivedAt ?? "—",
+          archivedAt: p.archivedAt ? p.archivedAt.slice(0, 10) : "—",
           archivedBy: p.archivedBy ?? "Super Admin",
         })),
       ]);
