@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getPatient, updatePatient } from "@/lib/api/patients";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,6 @@ const profileSchema = z.object({
     .string()
     .trim()
     .regex(/^\+?[\d\s-]{7,15}$/, "Enter a valid contact number"),
-  email: z.string().trim().email("Enter a valid email address"),
   address: z.string().trim().min(1, "Address is required"),
 });
 
@@ -45,24 +45,45 @@ export default function PatientProfile() {
   const { user, changePassword } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [phone, setPhone] = useState("+63 912 345 6789");
-  const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
 
-  const saveProfile = () => {
-    const result = profileSchema.safeParse({ phone, email, address });
+  useEffect(() => {
+    if (!user) return;
+    getPatient(user.id)
+      .then((p) => {
+        setPhone(p.phone ?? "");
+        setAddress(p.address ?? "");
+      })
+      .catch(() => toast.error("Failed to load profile information"))
+      .finally(() => setLoadingProfile(false));
+  }, [user]);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    const result = profileSchema.safeParse({ phone, address });
     if (!result.success) {
       toast.error(result.error.errors[0].message);
       return;
     }
-    toast.success("Profile updated", {
-      description: "Your contact information has been saved.",
-    });
+    setSavingProfile(true);
+    try {
+      await updatePatient(user.id, { phone, address });
+      toast.success("Profile updated", {
+        description: "Your contact information has been saved.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const submitPasswordChange = async () => {
@@ -175,22 +196,28 @@ export default function PatientProfile() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Contact Number</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5" /> Email Address
-              </Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={loadingProfile}
+                placeholder={loadingProfile ? "Loading..." : undefined}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="address" className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" /> Address
               </Label>
-              <Input id="address" placeholder="Your address" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <Input
+                id="address"
+                placeholder={loadingProfile ? "Loading..." : "Your address"}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                disabled={loadingProfile}
+              />
             </div>
-            <Button onClick={saveProfile} className="w-full">
-              <Save className="w-4 h-4 mr-2" /> Save Changes
+            <Button onClick={saveProfile} className="w-full" disabled={loadingProfile || savingProfile}>
+              {savingProfile ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save Changes
             </Button>
           </CardContent>
         </Card>
