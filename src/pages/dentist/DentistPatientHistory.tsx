@@ -14,6 +14,7 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
 import { formatManilaDate } from "@/lib/formatDate";
+import { useAuth } from "@/contexts/AuthContext";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -23,7 +24,9 @@ const statusClass = (s: string) =>
     : "bg-warning/10 text-warning border-warning/20";
 
 export default function DentistPatientHistory() {
+  const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [myPatientIds, setMyPatientIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -31,10 +34,22 @@ export default function DentistPatientHistory() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getPatients().then(setPatients).catch(() => {});
-  }, []);
+    Promise.all([getPatients(), getAppointments()])
+      .then(([allPatients, allAppointments]) => {
+        setPatients(allPatients);
+        setMyPatientIds(new Set(
+          allAppointments
+            .filter(a => !user?.name || a.dentistName === user.name)
+            .map(a => a.patientId)
+            .filter((id): id is string => !!id)
+        ));
+      })
+      .catch(() => {});
+  }, [user?.name]);
 
-  const selected = useMemo(() => patients.find(p => p.id === selectedId) ?? null, [patients, selectedId]);
+  const myPatients = useMemo(() => patients.filter(p => myPatientIds.has(p.id)), [patients, myPatientIds]);
+
+  const selected = useMemo(() => myPatients.find(p => p.id === selectedId) ?? null, [myPatients, selectedId]);
 
   useEffect(() => {
     if (!selectedId) { setAppointments([]); setRecords([]); return; }
@@ -103,7 +118,7 @@ export default function DentistPatientHistory() {
                 <CommandList>
                   <CommandEmpty>No patients found.</CommandEmpty>
                   <CommandGroup>
-                    {patients.map(p => (
+                    {myPatients.map(p => (
                       <CommandItem
                         key={p.id}
                         value={p.name}
