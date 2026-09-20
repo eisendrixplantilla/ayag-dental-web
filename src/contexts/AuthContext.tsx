@@ -33,6 +33,7 @@ interface AuthContextType {
   forgotPassword: (email: string) => Promise<void>;
   verifyResetCode: (code: string) => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -167,8 +168,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [pendingResetEmail]);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setIsLoading(true);
+    try {
+      await api("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, forgotPassword, verifyResetCode, resetPassword }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, forgotPassword, verifyResetCode, resetPassword, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

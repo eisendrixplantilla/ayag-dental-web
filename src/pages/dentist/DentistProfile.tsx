@@ -21,6 +21,7 @@ import {
   Save,
   Eye,
   EyeOff,
+  Loader2,
 } from "lucide-react";
 
 const profileSchema = z.object({
@@ -43,7 +44,7 @@ const passwordSchema = z
   });
 
 export default function DentistProfile() {
-  const { user } = useAuth();
+  const { user, changePassword } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [phone, setPhone] = useState("+63 912 345 6789");
@@ -52,6 +53,7 @@ export default function DentistProfile() {
 
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
 
   const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
   useEffect(() => {
@@ -70,16 +72,24 @@ export default function DentistProfile() {
     });
   };
 
-  const changePassword = () => {
+  const submitPasswordChange = async () => {
     const result = passwordSchema.safeParse(pw);
     if (!result.success) {
       toast.error(result.error.errors[0].message);
       return;
     }
-    setPw({ current: "", next: "", confirm: "" });
-    toast.success("Password updated", {
-      description: "Use your new password on your next sign-in.",
-    });
+    setChangingPw(true);
+    try {
+      await changePassword(pw.current, pw.next);
+      setPw({ current: "", next: "", confirm: "" });
+      toast.success("Password updated", {
+        description: "Use your new password on your next sign-in.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password");
+    } finally {
+      setChangingPw(false);
+    }
   };
 
   const onPhotoPick = (file: File | undefined) => {
@@ -241,8 +251,8 @@ export default function DentistProfile() {
               <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} className="accent-primary" />
               {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />} Show passwords
             </label>
-            <Button onClick={changePassword} variant="secondary" className="w-full">
-              <Lock className="w-4 h-4 mr-2" /> Update Password
+            <Button onClick={submitPasswordChange} variant="secondary" className="w-full" disabled={changingPw}>
+              {changingPw ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />} Update Password
             </Button>
           </CardContent>
         </Card>
