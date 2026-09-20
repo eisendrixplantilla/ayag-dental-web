@@ -1,29 +1,51 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Pill, History } from "lucide-react";
-
-const visitHistory = [
-  { date: "Feb 10, 2024", service: "Filling", dentist: "Dr. Sarah Chen", notes: "Composite filling on tooth #14. No complications.", tooth: "#14" },
-  { date: "Jan 15, 2024", service: "Tooth Extraction", dentist: "Dr. Mike Johnson", notes: "Wisdom tooth extraction (lower right). Post-op care instructions given.", tooth: "#48" },
-  { date: "Dec 5, 2023", service: "Dental Cleaning", dentist: "Dr. Sarah Chen", notes: "Routine cleaning. Minor plaque buildup. Recommended flossing daily.", tooth: "Full" },
-  { date: "Oct 20, 2023", service: "Check-up", dentist: "Dr. Sarah Chen", notes: "General check-up. All clear. Next visit in 3 months.", tooth: "Full" },
-];
-
-const procedures = [
-  { date: "Feb 10, 2024", procedure: "Composite Filling", tooth: "#14", dentist: "Dr. Sarah Chen", status: "completed" },
-  { date: "Jan 15, 2024", procedure: "Wisdom Tooth Extraction", tooth: "#48", dentist: "Dr. Mike Johnson", status: "completed" },
-  { date: "Dec 5, 2023", procedure: "Prophylaxis (Cleaning)", tooth: "Full Mouth", dentist: "Dr. Sarah Chen", status: "completed" },
-  { date: "Sep 15, 2023", procedure: "Dental X-Ray", tooth: "Panoramic", dentist: "Dr. Sarah Chen", status: "completed" },
-];
-
-const prescriptions = [
-  { date: "Jan 15, 2024", medication: "Amoxicillin 500mg", dosage: "3x daily for 7 days", prescribedBy: "Dr. Mike Johnson", reason: "Post-extraction antibiotic" },
-  { date: "Jan 15, 2024", medication: "Mefenamic Acid 500mg", dosage: "3x daily as needed for pain", prescribedBy: "Dr. Mike Johnson", reason: "Pain management" },
-  { date: "Oct 20, 2023", medication: "Sensodyne Toothpaste", dosage: "Use daily", prescribedBy: "Dr. Sarah Chen", reason: "Tooth sensitivity" },
-];
+import { FileText, Pill, History, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 
 export default function PatientRecords() {
+  const [records, setRecords] = useState<DentalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDentalRecords()
+      .then(setRecords)
+      .catch(() => toast.error("Failed to load dental records"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const procedures = useMemo(
+    () =>
+      records.flatMap((r) =>
+        r.treatments.map((t) => ({
+          date: r.date,
+          procedure: t.serviceName ?? "—",
+          tooth: r.toothNumber ?? "Full",
+          dentist: r.dentistName ?? "—",
+          status: "completed",
+        })),
+      ),
+    [records],
+  );
+
+  const prescriptions = useMemo(
+    () =>
+      records.flatMap((r) =>
+        r.prescriptions.map((p) => ({
+          date: r.date,
+          medication: p.medicine,
+          dosage: p.dosage ?? "As directed",
+          prescribedBy: r.dentistName ?? "—",
+          reason: p.instructions ?? r.diagnosis,
+        })),
+      ),
+    [records],
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,6 +55,9 @@ export default function PatientRecords() {
 
       <Card className="shadow-card">
         <CardContent className="p-6">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Tabs defaultValue="visits">
             <TabsList className="mb-4">
               <TabsTrigger value="visits" className="gap-1"><History className="w-4 h-4" /> Visit History</TabsTrigger>
@@ -42,18 +67,27 @@ export default function PatientRecords() {
 
             <TabsContent value="visits">
               <div className="space-y-4">
-                {visitHistory.map((record, i) => (
-                  <div key={i} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
+                {records.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">No dental records yet.</p>
+                )}
+                {records.map((record) => (
+                  <div key={record.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                     <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
                       <FileText className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <p className="font-semibold text-foreground">{record.service}</p>
-                        <Badge variant="outline" className="bg-secondary text-secondary-foreground">Tooth {record.tooth}</Badge>
+                        <p className="font-semibold text-foreground">
+                          {record.treatments.map((t) => t.serviceName).filter(Boolean).join(", ") || record.diagnosis}
+                        </p>
+                        <Badge variant="outline" className="bg-secondary text-secondary-foreground">
+                          Tooth {record.toothNumber ?? "Full"}
+                        </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{record.date} • {record.dentist}</p>
-                      <p className="text-sm text-muted-foreground mt-2">{record.notes}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(parseISO(record.date), "PPP")} • {record.dentistName ?? "—"}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-2">{record.treatmentNotes || record.diagnosis}</p>
                     </div>
                   </div>
                 ))}
@@ -62,11 +96,16 @@ export default function PatientRecords() {
 
             <TabsContent value="procedures">
               <div className="space-y-3">
+                {procedures.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">No procedures on record.</p>
+                )}
                 {procedures.map((proc, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                     <div>
                       <p className="font-medium text-foreground">{proc.procedure}</p>
-                      <p className="text-sm text-muted-foreground">{proc.date} • {proc.dentist} • Tooth {proc.tooth}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(parseISO(proc.date), "PPP")} • {proc.dentist} • Tooth {proc.tooth}
+                      </p>
                     </div>
                     <Badge variant="outline" className="bg-success/10 text-success border-success/20">{proc.status}</Badge>
                   </div>
@@ -76,6 +115,9 @@ export default function PatientRecords() {
 
             <TabsContent value="prescriptions">
               <div className="space-y-4">
+                {prescriptions.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">No prescriptions on record.</p>
+                )}
                 {prescriptions.map((rx, i) => (
                   <div key={i} className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-start justify-between">
@@ -83,7 +125,7 @@ export default function PatientRecords() {
                         <p className="font-semibold text-foreground">{rx.medication}</p>
                         <p className="text-sm text-muted-foreground">{rx.dosage}</p>
                       </div>
-                      <span className="text-xs text-muted-foreground">{rx.date}</span>
+                      <span className="text-xs text-muted-foreground">{format(parseISO(rx.date), "PPP")}</span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">Reason: {rx.reason} • Prescribed by {rx.prescribedBy}</p>
                   </div>
@@ -91,6 +133,7 @@ export default function PatientRecords() {
               </div>
             </TabsContent>
           </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>
