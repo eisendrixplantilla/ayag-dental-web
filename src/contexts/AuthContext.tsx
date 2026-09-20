@@ -10,11 +10,23 @@ export interface User {
   verified: boolean;
 }
 
+export interface RegisterPatientInput {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  birthdate: string;
+  sex: string;
+  address: string;
+  contactNumber: string;
+  email: string;
+  password: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
+  register: (input: RegisterPatientInput) => Promise<void>;
   logout: () => void;
   verify: (code: string) => Promise<User>;
   forgotPassword: (email: string) => Promise<void>;
@@ -76,14 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [setSession]);
 
-  const register = useCallback(async (name: string, email: string, password: string, role: UserRole) => {
+  const register = useCallback(async (input: RegisterPatientInput) => {
     setIsLoading(true);
     try {
       await api("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ ...input, role: "patient" }),
       });
-      setPendingEmail(email);
+      setPendingEmail(input.email);
     } finally {
       setIsLoading(false);
     }

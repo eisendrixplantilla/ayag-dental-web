@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_otp_codes_email_purpose ON otp_codes(email, purpose);
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_first_name TEXT;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_middle_name TEXT;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_last_name TEXT;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_birthdate DATE;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_sex TEXT;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_address TEXT;
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS pending_contact_number TEXT;
 
 -- PATIENTS (fully separate auth table, split out of users by migrate_v2)
 CREATE TABLE IF NOT EXISTS patients (
