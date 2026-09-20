@@ -19,6 +19,7 @@ export interface StaffMember {
   contact: string | null;
   role: "admin" | "dentist" | "superadmin";
   status: string;
+  photoUrl: string | null;
   createdAt: string | null;
 }
 
@@ -37,6 +38,7 @@ export interface StaffUpdate {
   contact?: string;
   password?: string;
   status?: string;
+  photo?: string;
 }
 
 export async function getStaff(): Promise<StaffMember[]> {

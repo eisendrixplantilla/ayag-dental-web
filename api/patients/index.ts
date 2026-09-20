@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { sql } from "../_lib/db.js";
 import { getSessionFromRequest } from "../_lib/auth.js";
 import { splitName, joinName } from "../_lib/name.js";
+import { manilaDateStr } from "../_lib/date.js";
 
 function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsCount: number }) {
   return {
@@ -19,9 +20,10 @@ function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsC
     bloodType: p.blood_type,
     allergies: p.allergies,
     status: p.status,
+    photoUrl: p.photo_url,
     lastLogin: p.last_login,
-    createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : null,
-    archivedAt: p.archived_at,
+    createdAt: manilaDateStr(p.created_at),
+    archivedAt: manilaDateStr(p.archived_at),
     archivedBy: p.archived_by,
     ...(counts ? counts : {}),
   };
@@ -98,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   if (req.method === "PATCH") {
-    const { action, name, phone, address, age, gender, bloodType, allergies, status, archivedBy } = req.body ?? {};
+    const { action, name, phone, address, age, gender, bloodType, allergies, status, archivedBy, photo } = req.body ?? {};
 
     if (action === "archive" || action === "restore") {
       if (!requireStaff(req, res)) return;
@@ -126,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           blood_type = COALESCE(${bloodType ?? null}, blood_type),
           allergies = COALESCE(${allergies ?? null}, allergies),
           status = COALESCE(${status ?? null}, status),
+          photo_url = COALESCE(${photo ?? null}, photo_url),
           updated_at = now()
         WHERE id = ${id}
       `;

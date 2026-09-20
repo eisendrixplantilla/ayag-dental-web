@@ -11,6 +11,7 @@ import { Users, Plus, Search, Eye, Edit, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
@@ -150,7 +151,7 @@ export default function AdminPatients() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Patient Records · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Patient Records · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

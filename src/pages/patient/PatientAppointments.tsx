@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-success/10 text-success border-success/20",
@@ -132,7 +133,7 @@ export default function PatientAppointments() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">My Appointments · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">My Appointments · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

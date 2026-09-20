@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { splitName, joinName } from "./_lib/name.js";
+import { manilaDateStr } from "./_lib/date.js";
 
 function mapStaff(u: any) {
   return {
@@ -13,7 +14,8 @@ function mapStaff(u: any) {
     contact: u.contact_number,
     role: u.role,
     status: u.status,
-    createdAt: u.created_at ? new Date(u.created_at).toISOString().slice(0, 10) : null,
+    photoUrl: u.photo_url,
+    createdAt: manilaDateStr(u.created_at),
   };
 }
 
@@ -181,8 +183,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (isSelf && req.method === "PATCH") {
-    const { contact } = req.body ?? {};
-    await sql`UPDATE users SET contact_number = COALESCE(${contact ?? null}, contact_number), updated_at = now() WHERE id = ${id}`;
+    const { contact, photo } = req.body ?? {};
+    await sql`
+      UPDATE users SET
+        contact_number = COALESCE(${contact ?? null}, contact_number),
+        photo_url = COALESCE(${photo ?? null}, photo_url),
+        updated_at = now()
+      WHERE id = ${id}
+    `;
     const rows = await sql`SELECT * FROM users WHERE id = ${id}`;
     if (!rows[0]) return res.status(404).json({ error: "Staff account not found" });
     return res.status(200).json({ staff: mapStaff(rows[0]) });

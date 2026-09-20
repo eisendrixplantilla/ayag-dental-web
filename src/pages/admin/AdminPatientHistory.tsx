@@ -9,6 +9,7 @@ import { getPatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { toast } from "sonner";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -59,7 +60,7 @@ export default function AdminPatientHistory() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Patient History · {patient.name} · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Patient History · {patient.name} · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

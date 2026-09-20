@@ -8,6 +8,7 @@ import { Settings, Clock, Stethoscope, Printer, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import { getServices, updateServicePrice, type Service } from "@/lib/api/dentalRecords";
+import { formatManilaDate } from "@/lib/formatDate";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -88,7 +89,7 @@ export default function SuperAdminSettings() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Dental Services &amp; Pricing · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Dental Services &amp; Pricing · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -108,7 +109,7 @@ export default function AdminOnlineAppointments() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Appointments · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Appointments · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

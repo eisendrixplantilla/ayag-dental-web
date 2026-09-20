@@ -12,6 +12,7 @@ import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/app
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { printHtmlAsPdf } from "@/lib/printPdf";
+import { formatManilaDateTime } from "@/lib/formatDate";
 
 type ReportType = "appointment" | "walkin" | "patient";
 
@@ -98,7 +99,7 @@ export default function AdminReports() {
       type,
       rows,
       filters: { start, end, dentist, status },
-      generatedAt: new Date().toLocaleString(),
+      generatedAt: formatManilaDateTime(),
     });
     toast.success("Report preview generated");
   };

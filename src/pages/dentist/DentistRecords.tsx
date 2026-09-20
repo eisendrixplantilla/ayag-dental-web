@@ -22,6 +22,7 @@ import {
   type DentalRecord, type TreatmentInput, type PrescriptionInput,
 } from "@/lib/api/dentalRecords";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const emptyForm = {
   appointmentId: "",
@@ -169,7 +170,7 @@ export default function DentistRecords() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Saved Dental Records · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Saved Dental Records · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">

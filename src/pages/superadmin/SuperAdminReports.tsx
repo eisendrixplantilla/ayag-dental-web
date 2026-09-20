@@ -13,6 +13,7 @@ import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { printHtmlAsPdf } from "@/lib/printPdf";
+import { formatManilaDateTime } from "@/lib/formatDate";
 
 type ReportType = "appointment" | "patient";
 
@@ -98,7 +99,7 @@ export default function SuperAdminReports() {
       });
     }
 
-    setReport({ type, rows, generatedAt: new Date().toLocaleString() });
+    setReport({ type, rows, generatedAt: formatManilaDateTime() });
     toast.success("Report preview generated");
   };
 

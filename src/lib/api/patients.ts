@@ -8,6 +8,7 @@ export interface Patient extends User {
   bloodType: string | null;
   allergies: string | null;
   status: "active" | "inactive";
+  photoUrl: string | null;
   lastLogin: string | null;
   createdAt: string | null;
   archivedAt?: string | null;
@@ -25,6 +26,7 @@ export interface PatientInput {
   gender?: string;
   bloodType?: string;
   allergies?: string;
+  photo?: string;
 }
 
 export async function getPatients(): Promise<Patient[]> {

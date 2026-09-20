@@ -7,6 +7,7 @@ import { Users, CalendarDays, UserCog, Stethoscope, TrendingUp, Printer, Loader2
 import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getPatients } from "@/lib/api/patients";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const STATUS_META: Record<AptStatus, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-warning" },
@@ -54,7 +55,7 @@ export default function SuperAdminDashboard() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Super Admin Report · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Super Admin Report · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

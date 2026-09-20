@@ -11,6 +11,7 @@ import { ArchiveRestore, Eye, Search, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
+import { formatManilaDate } from "@/lib/formatDate";
 
 type ArchiveRow = {
   id: string;
@@ -54,7 +55,7 @@ export default function SuperAdminArchives() {
           type: "Patient",
           email: p.email,
           contact: p.phone ?? "—",
-          archivedAt: p.archivedAt ? p.archivedAt.slice(0, 10) : "—",
+          archivedAt: p.archivedAt ?? "—",
           archivedBy: p.archivedBy ?? "Super Admin",
         })),
       ]);
@@ -106,7 +107,7 @@ export default function SuperAdminArchives() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Archive · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Archive · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

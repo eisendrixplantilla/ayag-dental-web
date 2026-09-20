@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
+import { formatManilaDate } from "@/lib/formatDate";
 
 export default function PatientRecords() {
   const [records, setRecords] = useState<DentalRecord[]>([]);
@@ -53,7 +54,7 @@ export default function PatientRecords() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Dental Records · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Dental Records · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

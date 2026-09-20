@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Package, Plus, Search, AlertTriangle, Edit, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const mockInventory = [
   { id: "I001", name: "Dental Composite Resin", category: "Filling", quantity: 45, minStock: 20, unit: "tubes", status: "ok" },
@@ -87,7 +88,7 @@ export default function AdminInventory() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Inventory · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Inventory · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

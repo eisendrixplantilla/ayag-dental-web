@@ -17,6 +17,7 @@ import {
   getDentistSchedule, saveDentistScheduleDays, addDentistUnavailable, removeDentistUnavailable,
   generateAvailableSlots, DAY_NAMES, type ScheduleDay, type UnavailableDate,
 } from "@/lib/api/staff";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
 
@@ -224,7 +225,7 @@ export default function SuperAdminStaff() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Staff Management · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Staff Management · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

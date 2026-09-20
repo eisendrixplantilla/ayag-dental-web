@@ -18,6 +18,7 @@ import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
+import { formatManilaDate } from "@/lib/formatDate";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
@@ -133,7 +134,7 @@ export default function AdminAppointments() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Walk-in Appointments · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Walk-in Appointments · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

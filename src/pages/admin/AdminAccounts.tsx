@@ -10,6 +10,7 @@ import { Search, Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucid
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
+import { formatManilaDate } from "@/lib/formatDate";
 
 export default function AdminAccounts() {
   const { user } = useAuth();
@@ -96,7 +97,7 @@ export default function AdminAccounts() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Patient Accounts · Generated {new Date().toLocaleDateString()}</p>
+          <p className="text-xs">Patient Accounts · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">

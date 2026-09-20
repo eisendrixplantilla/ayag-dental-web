@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getDentistSchedule, getStaffMember, updateStaff, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
+import { resizeImageToDataUrl } from "@/lib/resizeImage";
 import { Link } from "react-router-dom";
 import {
   User as UserIcon,
@@ -48,6 +49,7 @@ export default function DentistProfile() {
 
   const [phone, setPhone] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -64,7 +66,10 @@ export default function DentistProfile() {
   useEffect(() => {
     if (!user) return;
     getStaffMember(user.id)
-      .then((s) => setPhone(s.contact ?? ""))
+      .then((s) => {
+        setPhone(s.contact ?? "");
+        setPhoto(s.photoUrl ?? null);
+      })
       .catch(() => toast.error("Failed to load profile information"))
       .finally(() => setLoadingProfile(false));
   }, [user]);
@@ -109,18 +114,23 @@ export default function DentistProfile() {
     }
   };
 
-  const onPhotoPick = (file: File | undefined) => {
-    if (!file) return;
+  const onPhotoPick = async (file: File | undefined) => {
+    if (!file || !user) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Please choose an image file");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhoto(reader.result as string);
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      const updated = await updateStaff(user.id, { photo: dataUrl });
+      setPhoto(updated.photoUrl ?? dataUrl);
       toast.success("Profile picture updated");
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile picture");
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   return (
@@ -148,8 +158,9 @@ export default function DentistProfile() {
                 className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full shadow"
                 onClick={() => fileRef.current?.click()}
                 aria-label="Change profile picture"
+                disabled={uploadingPhoto}
               >
-                <Camera className="w-4 h-4" />
+                {uploadingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </Button>
               <input
                 ref={fileRef}

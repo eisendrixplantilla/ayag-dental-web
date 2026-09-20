@@ -1,5 +1,7 @@
+import { manilaTimeStr } from "./date.js";
+
 export async function sendOtpEmail(email: string, code: string, validMinutes: number) {
-  const time = new Date(Date.now() + validMinutes * 60_000).toLocaleTimeString();
+  const time = manilaTimeStr(new Date(Date.now() + validMinutes * 60_000));
 
   const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
     method: "POST",
