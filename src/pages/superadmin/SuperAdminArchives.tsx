@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArchiveRestore, Eye, Search } from "lucide-react";
+import { ArchiveRestore, Eye, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useArchivedStaff, restoreStaff } from "@/lib/staffStore";
-import { useArchivedPatientAccounts, restorePatientAccount } from "@/lib/accountStore";
+import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
+import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 
 type ArchiveRow = {
   id: string;
@@ -30,34 +30,47 @@ export default function SuperAdminArchives() {
   const [toDate, setToDate] = useState("");
   const [viewing, setViewing] = useState<ArchiveRow | null>(null);
   const [restoring, setRestoring] = useState<ArchiveRow | null>(null);
+  const [rows, setRows] = useState<ArchiveRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const staff = useArchivedStaff();
-  const patients = useArchivedPatientAccounts();
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [staff, patients] = await Promise.all([getArchivedStaff(), getArchivedPatients()]);
+      setRows([
+        ...staff.map<ArchiveRow>((s) => ({
+          id: s.id,
+          name: s.name,
+          type: "Staff",
+          email: s.email,
+          contact: s.contact ?? "—",
+          role: s.role === "dentist" ? "Dentist" : "Admin",
+          archivedAt: s.createdAt ?? "—",
+          archivedBy: "Super Admin",
+        })),
+        ...patients.map<ArchiveRow>((p) => ({
+          id: p.id,
+          name: p.name,
+          type: "Patient",
+          email: p.email,
+          contact: p.phone ?? "—",
+          archivedAt: p.archivedAt ?? "—",
+          archivedBy: p.archivedBy ?? "Super Admin",
+        })),
+      ]);
+    } catch {
+      toast.error("Failed to load archived accounts");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const rows: ArchiveRow[] = [
-    ...staff.map<ArchiveRow>(s => ({
-      id: s.id,
-      name: s.name,
-      type: "Staff",
-      email: s.email,
-      contact: s.contact,
-      role: s.role === "dentist" ? "Dentist" : "Admin",
-      archivedAt: s.archivedAt ?? "—",
-      archivedBy: s.archivedBy ?? "Super Admin",
-    })),
-    ...patients.map<ArchiveRow>(p => ({
-      id: p.id,
-      name: p.name,
-      type: "Patient",
-      email: p.email,
-      contact: p.phone ?? "—",
-      archivedAt: p.archivedAt ?? "—",
-      archivedBy: p.archivedBy ?? "Super Admin",
-    })),
-  ];
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const q = search.toLowerCase();
-  const filtered = rows.filter(r => {
+  const filtered = rows.filter((r) => {
     const matchesSearch =
       !q ||
       r.id.toLowerCase().includes(q) ||
@@ -69,17 +82,22 @@ export default function SuperAdminArchives() {
     return matchesSearch && matchesType && matchesFrom && matchesTo;
   });
 
-  const confirmRestore = () => {
+  const confirmRestore = async () => {
     if (!restoring) return;
-    if (restoring.type === "Staff") {
-      restoreStaff(restoring.id);
-      toast.success(`${restoring.name} has been restored to Staff Management.`);
-    } else {
-      restorePatientAccount(restoring.id);
-      toast.success(`${restoring.name} has been restored to Patient Accounts.`);
+    try {
+      if (restoring.type === "Staff") {
+        await restoreStaff(restoring.id);
+        toast.success(`${restoring.name} has been restored to Staff Management.`);
+      } else {
+        await restorePatient(restoring.id);
+        toast.success(`${restoring.name} has been restored to Patient Accounts.`);
+      }
+      setRestoring(null);
+      setViewing(null);
+      load();
+    } catch {
+      toast.error("Failed to restore account");
     }
-    setRestoring(null);
-    setViewing(null);
   };
 
   return (
@@ -140,7 +158,13 @@ export default function SuperAdminArchives() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No archived accounts</TableCell>
                 </TableRow>
