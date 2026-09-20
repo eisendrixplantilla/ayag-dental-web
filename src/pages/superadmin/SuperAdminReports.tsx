@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import StatCard from "@/components/StatCard";
-import { BarChart3, CalendarDays, Download, FileText, Printer, Search, Users, UserCog } from "lucide-react";
+import { BarChart3, CalendarDays, Download, FileText, Printer, Search, Users, UserCog, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { usePatientAccounts } from "@/lib/accountStore";
-import { useActiveStaff } from "@/lib/staffStore";
+import { getPatients, type Patient } from "@/lib/api/patients";
+import { getStaff, type StaffMember } from "@/lib/api/staff";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 
 type ReportType = "appointment" | "patient";
 
@@ -24,33 +26,19 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   },
 };
 
-const appointmentData = [
-  { id: "APT-1001", patient: "Maria Santos", dentist: "Dr. Ayag", service: "Dental Cleaning", date: "2026-08-01", status: "Completed" },
-  { id: "APT-1002", patient: "Juan Dela Cruz", dentist: "Dr. Santos", service: "Tooth Extraction", date: "2026-08-03", status: "Confirmed" },
-  { id: "APT-1003", patient: "Ana Reyes", dentist: "Dr. Ayag", service: "Root Canal", date: "2026-08-05", status: "Pending" },
-  { id: "APT-1004", patient: "Carlos Mendoza", dentist: "Dr. Santos", service: "Braces Adjustment", date: "2026-08-06", status: "Cancelled" },
-  { id: "APT-1005", patient: "Liza Bautista", dentist: "Dr. Ayag", service: "Tooth Filling", date: "2026-08-07", status: "Confirmed" },
-  { id: "APT-1006", patient: "Mark Villanueva", dentist: "Dr. Santos", service: "Teeth Whitening", date: "2026-08-08", status: "Completed" },
-  { id: "APT-1007", patient: "Grace Lim", dentist: "Dr. Ayag", service: "Dental Cleaning", date: "2026-08-10", status: "Completed" },
-  { id: "APT-1008", patient: "Peter Uy", dentist: "Dr. Santos", service: "Tooth Filling", date: "2026-08-11", status: "Pending" },
-];
+const statusList = ["pending", "confirmed", "completed", "cancelled"] as const;
 
-const patientData = [
-  { name: "Maria Santos", email: "maria@example.com", phone: "0917-555-0101", total: 8, latest: "2026-08-01" },
-  { name: "Juan Dela Cruz", email: "juan@example.com", phone: "0917-555-0102", total: 4, latest: "2026-08-03" },
-  { name: "Ana Reyes", email: "ana@example.com", phone: "0917-555-0103", total: 2, latest: "2026-08-05" },
-  { name: "Carlos Mendoza", email: "carlos@example.com", phone: "0917-555-0104", total: 6, latest: "2026-08-06" },
-  { name: "Liza Bautista", email: "liza@example.com", phone: "0917-555-0105", total: 3, latest: "2026-08-07" },
-];
-
-const statusList = ["Pending", "Confirmed", "Completed", "Cancelled"] as const;
-
-const statusColor: Record<string, string> = {
-  Pending: "text-warning",
-  Confirmed: "text-primary",
-  Completed: "text-success",
-  Cancelled: "text-destructive",
+const statusMeta: Record<string, { label: string; className: string }> = {
+  pending: { label: "Pending", className: "text-warning" },
+  confirmed: { label: "Confirmed", className: "text-primary" },
+  completed: { label: "Completed", className: "text-success" },
+  cancelled: { label: "Cancelled", className: "text-destructive" },
+  rejected: { label: "Rejected", className: "text-destructive" },
+  rescheduled: { label: "Rescheduled", className: "text-warning" },
 };
+
+const statusClassByLabel = (label: string) =>
+  Object.values(statusMeta).find((m) => m.label === label)?.className ?? "";
 
 interface GeneratedReport {
   type: ReportType;
@@ -59,17 +47,33 @@ interface GeneratedReport {
 }
 
 export default function SuperAdminReports() {
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [records, setRecords] = useState<DentalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([getPatients(), getStaff(), getAppointments(), getDentalRecords()])
+      .then(([p, s, a, r]) => {
+        setPatients(p);
+        setStaff(s);
+        setAppointments(a);
+        setRecords(r);
+      })
+      .catch(() => toast.error("Failed to load report data"))
+      .finally(() => setLoading(false));
+  }, []);
+
   const [type, setType] = useState<ReportType | "">("");
   const [report, setReport] = useState<GeneratedReport | null>(null);
 
-  const patients = usePatientAccounts();
-  const staff = useActiveStaff();
-
-  const statusCounts = statusList.map(s => ({
-    label: s,
-    count: appointmentData.filter(a => a.status === s).length,
+  const totalAppointments = appointments.length;
+  const statusCounts = statusList.map((s) => ({
+    label: statusMeta[s].label,
+    count: appointments.filter((a) => a.status === s).length,
   }));
-  const totalAppointments = appointmentData.length;
 
   const generate = () => {
     if (!type) {
@@ -79,9 +83,18 @@ export default function SuperAdminReports() {
 
     let rows: string[][] = [];
     if (type === "appointment") {
-      rows = appointmentData.map(a => [a.id, a.patient, a.dentist, a.service, a.date, a.status]);
+      rows = [...appointments]
+        .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
+        .map((a) => [a.id, a.patientName, a.dentistName ?? "—", a.service, a.date, statusMeta[a.status]?.label ?? a.status]);
     } else {
-      rows = patientData.map(p => [`${p.name} — ${p.email} · ${p.phone}`, String(p.total), p.latest]);
+      rows = patients.map((p) => {
+        const patientAppointments = appointments.filter((a) => a.patientId === p.id);
+        const patientRecords = records.filter((r) => r.patientId === p.id);
+        const latest = patientRecords.length
+          ? patientRecords.reduce((max, r) => (r.date > max ? r.date : max), patientRecords[0].date)
+          : "No consultations yet";
+        return [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(patientAppointments.length), latest];
+      });
     }
 
     setReport({ type, rows, generatedAt: new Date().toLocaleString() });
@@ -126,112 +139,118 @@ export default function SuperAdminReports() {
         <p className="text-muted-foreground">Appointment and patient reports</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
-        <StatCard title="Total Registered Patients" value={patients.length} icon={Users} delay={0} />
-        <StatCard title="Total Appointments" value={totalAppointments} icon={CalendarDays} delay={0.1} />
-        <StatCard title="Total Staff" value={staff.length} icon={UserCog} delay={0.2} />
-      </div>
-
-      <Card className="shadow-card print:hidden">
-        <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" /> Appointment Status Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {statusCounts.map(item => {
-              const pct = totalAppointments ? Math.round((item.count / totalAppointments) * 100) : 0;
-              return (
-                <div key={item.label} className="p-4 rounded-lg bg-muted/50 text-center">
-                  <p className="text-xs text-muted-foreground">{item.label}</p>
-                  <p className={`font-bold text-xl mt-1 ${statusColor[item.label]}`}>{item.count}</p>
-                  <div className="w-full h-2 bg-secondary rounded-full mt-2">
-                    <div className="h-2 rounded-full gradient-primary" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{pct}% of total</p>
-                </div>
-              );
-            })}
+      {loading ? (
+        <div className="flex justify-center py-16 print:hidden"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
+            <StatCard title="Total Registered Patients" value={patients.length} icon={Users} delay={0} />
+            <StatCard title="Total Appointments" value={totalAppointments} icon={CalendarDays} delay={0.1} />
+            <StatCard title="Total Staff" value={staff.length} icon={UserCog} delay={0.2} />
           </div>
-        </CardContent>
-      </Card>
 
-      <Card className="shadow-card print:hidden">
-        <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" /> Generate Report
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-            <div className="space-y-2">
-              <Label>Report Type</Label>
-              <Select value={type} onValueChange={v => { setType(v as ReportType); setReport(null); }}>
-                <SelectTrigger><SelectValue placeholder="Select report" /></SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="appointment">Appointment Summary Report</SelectItem>
-                  <SelectItem value="patient">Patient Summary Report</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <Button onClick={generate}>
-              <Search className="w-4 h-4 mr-2" /> Generate Report
-            </Button>
-            {report && <Button variant="outline" onClick={() => setReport(null)}>Clear Preview</Button>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {report && (
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg">{reportMeta[report.type].title}</CardTitle>
-            <p className="text-xs text-muted-foreground">Ayag Dental Clinic · Generated: {report.generatedAt}</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {reportMeta[report.type].columns.map(c => <TableHead key={c}>{c}</TableHead>)}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={reportMeta[report.type].columns.length} className="text-center text-muted-foreground py-8">
-                        No records found.
-                      </TableCell>
-                    </TableRow>
-                  ) : report.rows.map((row, i) => (
-                    <TableRow key={i}>
-                      {row.map((cell, j) => (
-                        <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusColor[cell] ?? ""}` : ""}>
-                          {cell}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 print:hidden">
-              <Badge variant="secondary">{report.rows.length} record(s)</Badge>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handlePrint}>
-                  <Printer className="w-4 h-4 mr-2" /> Print Report
-                </Button>
-                <Button onClick={handleDownloadPdf}>
-                  <Download className="w-4 h-4 mr-2" /> Download PDF
-                </Button>
+          <Card className="shadow-card print:hidden">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary" /> Appointment Status Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {statusCounts.map(item => {
+                  const pct = totalAppointments ? Math.round((item.count / totalAppointments) * 100) : 0;
+                  return (
+                    <div key={item.label} className="p-4 rounded-lg bg-muted/50 text-center">
+                      <p className="text-xs text-muted-foreground">{item.label}</p>
+                      <p className={`font-bold text-xl mt-1 ${statusClassByLabel(item.label)}`}>{item.count}</p>
+                      <div className="w-full h-2 bg-secondary rounded-full mt-2">
+                        <div className="h-2 rounded-full gradient-primary" style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{pct}% of total</p>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-card print:hidden">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" /> Generate Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                <div className="space-y-2">
+                  <Label>Report Type</Label>
+                  <Select value={type} onValueChange={v => { setType(v as ReportType); setReport(null); }}>
+                    <SelectTrigger><SelectValue placeholder="Select report" /></SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="appointment">Appointment Summary Report</SelectItem>
+                      <SelectItem value="patient">Patient Summary Report</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <Button onClick={generate}>
+                  <Search className="w-4 h-4 mr-2" /> Generate Report
+                </Button>
+                {report && <Button variant="outline" onClick={() => setReport(null)}>Clear Preview</Button>}
+              </div>
+            </CardContent>
+          </Card>
+
+          {report && (
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg">{reportMeta[report.type].title}</CardTitle>
+                <p className="text-xs text-muted-foreground">Ayag Dental Clinic · Generated: {report.generatedAt}</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {reportMeta[report.type].columns.map(c => <TableHead key={c}>{c}</TableHead>)}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {report.rows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={reportMeta[report.type].columns.length} className="text-center text-muted-foreground py-8">
+                            No records found.
+                          </TableCell>
+                        </TableRow>
+                      ) : report.rows.map((row, i) => (
+                        <TableRow key={i}>
+                          {row.map((cell, j) => (
+                            <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusClassByLabel(cell)}` : ""}>
+                              {cell}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 print:hidden">
+                  <Badge variant="secondary">{report.rows.length} record(s)</Badge>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={handlePrint}>
+                      <Printer className="w-4 h-4 mr-2" /> Print Report
+                    </Button>
+                    <Button onClick={handleDownloadPdf}>
+                      <Download className="w-4 h-4 mr-2" /> Download PDF
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
