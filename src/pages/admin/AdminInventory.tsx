@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Package, Plus, Search, AlertTriangle, Edit } from "lucide-react";
+import { Package, Plus, Search, AlertTriangle, Edit, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -83,11 +83,22 @@ export default function AdminInventory() {
 
   return (
     <div className="space-y-6">
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Inventory · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Inventory</h1>
           <p className="text-muted-foreground">Track dental supplies and equipment</p>
         </div>
+        <div className="flex items-center gap-2 print:hidden">
+          <Button onClick={() => window.print()} variant="outline">
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add Item</Button>
@@ -106,6 +117,7 @@ export default function AdminInventory() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {lowStock > 0 && (
@@ -118,7 +130,7 @@ export default function AdminInventory() {
       )}
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="print:hidden">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search inventory..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
@@ -134,7 +146,7 @@ export default function AdminInventory() {
                 <TableHead>Quantity</TableHead>
                 <TableHead>Min Stock</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -150,7 +162,7 @@ export default function AdminInventory() {
                       {item.status === "low" ? "Low Stock" : "In Stock"}
                     </Badge>
                   </TableCell>
-                  <TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}><Edit className="w-4 h-4" /></Button></TableCell>
+                  <TableCell className="print:hidden"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}><Edit className="w-4 h-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>

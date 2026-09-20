@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Pill, History, Loader2 } from "lucide-react";
+import { FileText, Pill, History, Loader2, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
@@ -48,9 +49,21 @@ export default function PatientRecords() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">Dental Records</h1>
-        <p className="text-muted-foreground">Your complete dental history and records</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Dental Records · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">Dental Records</h1>
+          <p className="text-muted-foreground">Your complete dental history and records</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
       <Card className="shadow-card">
@@ -59,7 +72,7 @@ export default function PatientRecords() {
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
           <Tabs defaultValue="visits">
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 print:hidden">
               <TabsTrigger value="visits" className="gap-1"><History className="w-4 h-4" /> Visit History</TabsTrigger>
               <TabsTrigger value="procedures" className="gap-1"><FileText className="w-4 h-4" /> Procedures</TabsTrigger>
               <TabsTrigger value="prescriptions" className="gap-1"><Pill className="w-4 h-4" /> Prescriptions</TabsTrigger>

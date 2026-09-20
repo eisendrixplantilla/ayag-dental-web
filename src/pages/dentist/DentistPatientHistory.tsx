@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown, Loader2,
+  User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown, Loader2, Printer,
 } from "lucide-react";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
@@ -57,6 +57,13 @@ export default function DentistPatientHistory() {
 
   return (
     <div className="space-y-6">
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Patient History{selected ? ` · ${selected.name}` : ""} · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient History</h1>
@@ -67,6 +74,12 @@ export default function DentistPatientHistory() {
             </Badge>
           </p>
         </div>
+        <div className="flex items-center gap-2 print:hidden">
+          {selected && (
+            <Button onClick={() => window.print()} variant="outline">
+              <Printer className="w-4 h-4 mr-2" /> Print
+            </Button>
+          )}
         <div className="w-full sm:w-72">
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
             <PopoverTrigger asChild>
@@ -107,6 +120,7 @@ export default function DentistPatientHistory() {
               </Command>
             </PopoverContent>
           </Popover>
+        </div>
         </div>
       </div>
 

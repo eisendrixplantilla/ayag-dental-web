@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Eye, CalendarIcon, Edit, X, Info, Loader2 } from "lucide-react";
+import { Eye, CalendarIcon, Edit, X, Info, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -128,9 +128,21 @@ export default function PatientAppointments() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
-        <p className="text-muted-foreground">View, reschedule, or cancel appointments</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">My Appointments · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
+          <p className="text-muted-foreground">View, reschedule, or cancel appointments</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
       <Card className="shadow-card">
         <CardContent className="p-6">
@@ -138,7 +150,7 @@ export default function PatientAppointments() {
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
           <Tabs defaultValue="upcoming">
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 print:hidden">
               <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
               <TabsTrigger value="past">Past ({history.length})</TabsTrigger>
             </TabsList>
@@ -159,19 +171,21 @@ export default function PatientAppointments() {
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {canReschedule && (
-                            <Button variant="outline" size="sm" onClick={() => openReschedule(apt)}>
-                              <Edit className="w-4 h-4 mr-1" /> Reschedule
+                          <div className="flex items-center gap-2 flex-wrap print:hidden">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
+                              <Eye className="w-4 h-4" />
                             </Button>
-                          )}
-                          {allowed && (
-                            <Button variant="outline" size="sm" className="text-destructive" onClick={() => setCancelApt(apt)}>
-                              <X className="w-4 h-4 mr-1" /> Cancel Appointment
-                            </Button>
-                          )}
+                            {canReschedule && (
+                              <Button variant="outline" size="sm" onClick={() => openReschedule(apt)}>
+                                <Edit className="w-4 h-4 mr-1" /> Reschedule
+                              </Button>
+                            )}
+                            {allowed && (
+                              <Button variant="outline" size="sm" className="text-destructive" onClick={() => setCancelApt(apt)}>
+                                <X className="w-4 h-4 mr-1" /> Cancel Appointment
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       {!allowed && (
@@ -200,7 +214,7 @@ export default function PatientAppointments() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 print:hidden" title="View Details" onClick={() => setDetailsApt(apt)}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>

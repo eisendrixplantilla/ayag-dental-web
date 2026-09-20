@@ -16,7 +16,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { FilePlus2, FileEdit, Eye, Loader2, Plus, X } from "lucide-react";
+import { FilePlus2, FileEdit, Eye, Loader2, Plus, X, Printer } from "lucide-react";
 import {
   getDentalRecords, getDentalRecord, createDentalRecord, updateDentalRecord,
   type DentalRecord, type TreatmentInput, type PrescriptionInput,
@@ -165,14 +165,26 @@ export default function DentistRecords() {
 
   return (
     <div className="space-y-6">
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Saved Dental Records · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Dental Records</h1>
           <p className="text-muted-foreground">Create and review dental records from your consultations</p>
         </div>
-        <Button onClick={openCreate}>
-          <FilePlus2 className="w-4 h-4 mr-1" /> New Dental Record
-        </Button>
+        <div className="flex items-center gap-2 print:hidden">
+          <Button onClick={() => window.print()} variant="outline">
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
+          <Button onClick={openCreate}>
+            <FilePlus2 className="w-4 h-4 mr-1" /> New Dental Record
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-card">
@@ -192,7 +204,7 @@ export default function DentistRecords() {
                 <TableHead>Tooth No.</TableHead>
                 <TableHead>Diagnosis</TableHead>
                 <TableHead>Prescriptions</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -211,7 +223,7 @@ export default function DentistRecords() {
                     <TableCell>{r.toothNumber || "—"}</TableCell>
                     <TableCell>{r.diagnosis}</TableCell>
                     <TableCell>{r.prescriptions.map(p => p.medicine).join(", ") || "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="print:hidden">
                       <div className="flex flex-wrap gap-2 justify-end">
                         <Button size="sm" variant="outline" onClick={() => openView(r)}>
                           <Eye className="w-4 h-4 mr-1" /> View

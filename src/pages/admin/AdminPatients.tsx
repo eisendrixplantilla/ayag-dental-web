@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Users, Plus, Search, Eye, Edit, Loader2 } from "lucide-react";
+import { Users, Plus, Search, Eye, Edit, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
@@ -146,11 +146,22 @@ export default function AdminPatients() {
 
   return (
     <div className="space-y-6">
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Patient Records · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient Records</h1>
           <p className="text-muted-foreground">Manage patient information and history</p>
         </div>
+        <div className="flex items-center gap-2 print:hidden">
+          <Button onClick={() => window.print()} variant="outline">
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add Patient</Button>
@@ -192,10 +203,11 @@ export default function AdminPatients() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="print:hidden">
           <div className="relative min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
@@ -213,20 +225,20 @@ export default function AdminPatients() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map(p => (
                 <TableRow key={p.id}>
                   <TableCell>
-                    <button className="font-medium text-primary hover:underline" onClick={() => navigate(`/admin/patients/${p.id}`)}>{p.name}</button>
+                    <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{p.name}</button>
                   </TableCell>
                   <TableCell>{p.age ?? "—"}</TableCell>
                   <TableCell>{p.phone ?? "—"}</TableCell>
                   <TableCell>{p.email}</TableCell>
                   <TableCell><Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>

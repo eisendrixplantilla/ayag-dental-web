@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -129,12 +129,24 @@ export default function AdminAppointments() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">Walk-in Appointments</h1>
-        <p className="text-muted-foreground">Register and manage walk-in patients</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Walk-in Appointments · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">Walk-in Appointments</h1>
+          <p className="text-muted-foreground">Register and manage walk-in patients</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
-      <Card className="shadow-card">
+      <Card className="shadow-card print:hidden">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2">
             <Plus className="w-5 h-5 text-primary" /> New Walk-in Appointment
@@ -261,7 +273,7 @@ export default function AdminAppointments() {
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -273,7 +285,7 @@ export default function AdminAppointments() {
                   <TableCell>{w.date}</TableCell>
                   <TableCell>{toLabel(toMinutes(w.time))}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(w.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2 } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
 
@@ -104,12 +104,24 @@ export default function AdminOnlineAppointments() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">Appointments</h1>
-        <p className="text-muted-foreground">Review, approve, and manage patient appointments</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Appointments · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">Appointments</h1>
+          <p className="text-muted-foreground">Review, approve, and manage patient appointments</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
-      <Card className="shadow-card">
+      <Card className="shadow-card print:hidden">
         <CardContent className="pt-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="relative sm:col-span-2 lg:col-span-2">
@@ -161,7 +173,7 @@ export default function AdminOnlineAppointments() {
                 <TableHead>Time</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -175,7 +187,7 @@ export default function AdminOnlineAppointments() {
                   <TableCell>{apt.time}</TableCell>
                   <TableCell><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="flex gap-2 justify-end">
                       <Button size="sm" variant="outline" onClick={() => openDetails(apt)}>
                         <Eye className="w-4 h-4 mr-1" /> View

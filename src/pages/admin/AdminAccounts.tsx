@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, Eye, CheckCircle2, Ban, Archive, Loader2 } from "lucide-react";
+import { Search, Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
@@ -92,13 +92,25 @@ export default function AdminAccounts() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">Patient Accounts</h1>
-        <p className="text-muted-foreground">Manage patient login accounts</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Patient Accounts · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">Patient Accounts</h1>
+          <p className="text-muted-foreground">Manage patient login accounts</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="print:hidden">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -130,7 +142,7 @@ export default function AdminAccounts() {
                 <TableHead>Email Address</TableHead>
                 <TableHead>Account Status</TableHead>
                 <TableHead>Date Registered</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -147,7 +159,7 @@ export default function AdminAccounts() {
                     </Badge>
                   </TableCell>
                   <TableCell>{a.createdAt ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="flex flex-wrap gap-1">
                       <Button variant="ghost" size="sm" onClick={() => openDetail(a)}>
                         <Eye className="w-4 h-4 mr-1" /> View

@@ -20,7 +20,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2 } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
@@ -174,9 +174,21 @@ export default function DentistAppointments() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
-        <p className="text-muted-foreground">Appointments assigned to you</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Assigned Appointments · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
+          <p className="text-muted-foreground">Appointments assigned to you</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
       <Card className="shadow-card">
@@ -195,7 +207,7 @@ export default function DentistAppointments() {
                 <TableHead>Appointment Date</TableHead>
                 <TableHead>Appointment Time</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -215,7 +227,7 @@ export default function DentistAppointments() {
                   <TableCell>
                     <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     {/* Full button row on larger screens */}
                     <div className="hidden lg:flex flex-wrap gap-2 justify-end">
                       <Button size="sm" variant="outline" onClick={() => setDetails(apt)}>

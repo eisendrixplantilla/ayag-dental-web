@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Settings, Clock, Stethoscope, DollarSign } from "lucide-react";
+import { Settings, Clock, Stethoscope, DollarSign, Printer } from "lucide-react";
 import { toast } from "sonner";
 
 const clinicHours = [
@@ -34,12 +34,24 @@ const services = [
 export default function SuperAdminSettings() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">System Settings</h1>
-        <p className="text-muted-foreground">Configure clinic hours, services, and pricing</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Dental Services &amp; Pricing · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">System Settings</h1>
+          <p className="text-muted-foreground">Configure clinic hours, services, and pricing</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
-      <Card className="shadow-card">
+      <Card className="shadow-card print:hidden">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2"><Clock className="w-5 h-5 text-primary" /> Clinic Hours</CardTitle>
         </CardHeader>
@@ -75,7 +87,7 @@ export default function SuperAdminSettings() {
                 <TableHead>Service</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Price (₱)</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -86,7 +98,7 @@ export default function SuperAdminSettings() {
                   <TableCell>
                     <Input type="number" defaultValue={s.price} className="w-28" />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <Button variant="ghost" size="sm" onClick={() => toast.success("Price updated")}>Save</Button>
                   </TableCell>
                 </TableRow>
@@ -96,7 +108,7 @@ export default function SuperAdminSettings() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-card">
+      <Card className="shadow-card print:hidden">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2"><Settings className="w-5 h-5 text-primary" /> Clinic Information</CardTitle>
         </CardHeader>

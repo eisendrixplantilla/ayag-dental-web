@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArchiveRestore, Eye, Search, Loader2 } from "lucide-react";
+import { ArchiveRestore, Eye, Search, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
@@ -102,13 +102,25 @@ export default function SuperAdminArchives() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">Archive</h1>
-        <p className="text-muted-foreground">Archived staff and patient accounts — nothing is permanently deleted</p>
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Archive · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">Archive</h1>
+          <p className="text-muted-foreground">Archived staff and patient accounts — nothing is permanently deleted</p>
+        </div>
+        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print
+        </Button>
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="print:hidden">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="relative min-w-[200px] max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -154,7 +166,7 @@ export default function SuperAdminArchives() {
                 <TableHead>Account Type</TableHead>
                 <TableHead>Date Archived</TableHead>
                 <TableHead>Archived By</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -177,7 +189,7 @@ export default function SuperAdminArchives() {
                   </TableCell>
                   <TableCell>{r.archivedAt}</TableCell>
                   <TableCell>{r.archivedBy}</TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="flex flex-wrap gap-1">
                       <Button variant="ghost" size="sm" onClick={() => setViewing(r)}>
                         <Eye className="w-4 h-4 mr-1" /> View

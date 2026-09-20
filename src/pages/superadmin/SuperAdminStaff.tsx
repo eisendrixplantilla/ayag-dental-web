@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Archive, Edit, Search, Eye, Loader2, CalendarClock, Trash2 } from "lucide-react";
+import { Plus, Archive, Edit, Search, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import {
   getStaff, updateStaff, archiveStaff, type StaffMember,
@@ -220,18 +220,30 @@ export default function SuperAdminStaff() {
 
   return (
     <div className="space-y-6">
+      <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
+        <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
+        <div>
+          <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
+          <p className="text-xs">Staff Management · Generated {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Staff Management</h1>
           <p className="text-muted-foreground">Manage Admin and Dentist accounts</p>
         </div>
-        <Button className="gradient-primary text-primary-foreground" onClick={() => navigate("/superadmin/staff/new")}>
-          <Plus className="w-4 h-4 mr-2" />Add Staff
-        </Button>
+        <div className="flex items-center gap-2 print:hidden">
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
+          <Button className="gradient-primary text-primary-foreground" onClick={() => navigate("/superadmin/staff/new")}>
+            <Plus className="w-4 h-4 mr-2" />Add Staff
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="print:hidden">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="relative min-w-[200px] max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -268,7 +280,7 @@ export default function SuperAdminStaff() {
                 <TableHead>Contact Number</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Account Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -288,7 +300,7 @@ export default function SuperAdminStaff() {
                       {s.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="View" onClick={() => setViewing(s)}>
                         <Eye className="w-4 h-4" />
