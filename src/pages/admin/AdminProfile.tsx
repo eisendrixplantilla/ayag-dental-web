@@ -133,7 +133,7 @@ export default function AdminProfile() {
                   <IdCard className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Employee ID</p>
-                    <p className="font-medium text-foreground">EMP-{user?.id?.padStart(4, "0")}</p>
+                    <p className="font-medium text-foreground">{user?.employeeId ?? "Not assigned"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">

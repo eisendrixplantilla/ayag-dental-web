@@ -42,6 +42,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = signSession({ sub: user.id, email: user.email, role: user.role });
   res.status(200).json({
     token,
-    user: { id: user.id, email: user.email, name: joinName(user.first_name, user.middle_name, user.last_name), role: user.role, verified: user.verified },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: joinName(user.first_name, user.middle_name, user.last_name),
+      role: user.role,
+      verified: user.verified,
+      employeeId: user.employee_id,
+    },
   });
 }

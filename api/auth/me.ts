@@ -18,11 +18,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const rows = await sql`SELECT id, email, first_name, middle_name, last_name, role, verified FROM users WHERE id = ${session.sub}`;
+  const rows = await sql`SELECT id, email, first_name, middle_name, last_name, role, verified, employee_id FROM users WHERE id = ${session.sub}`;
   const user = rows[0];
   if (!user) return res.status(404).json({ error: "User not found" });
 
   res.status(200).json({
-    user: { id: user.id, email: user.email, name: joinName(user.first_name, user.middle_name, user.last_name), role: user.role, verified: user.verified },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: joinName(user.first_name, user.middle_name, user.last_name),
+      role: user.role,
+      verified: user.verified,
+      employeeId: user.employee_id,
+    },
   });
 }

@@ -8,6 +8,7 @@ export interface User {
   name: string;
   role: UserRole;
   verified: boolean;
+  employeeId?: string | null;
 }
 
 export interface RegisterPatientInput {
