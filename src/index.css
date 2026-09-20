@@ -162,7 +162,7 @@ input[type="time"]:focus::-webkit-calendar-picker-indicator {
   [data-sidebar],
   [data-sidebar="trigger"],
   [data-sidebar="rail"],
-  [class*="h-svh"],
+  .h-svh,
   header,
   .print\:hidden {
     display: none !important;
