@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +13,9 @@ import {
 } from "lucide-react";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { toMinutes, toLabel } from "@/lib/dentistSchedules";
+import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
 
-const today = format(new Date(), "yyyy-MM-dd");
+const today = manilaTodayDateStr();
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -56,7 +56,7 @@ export default function DentistDashboard() {
   }, [appointments]);
 
   const todaysSchedule = useMemo(() => {
-    const now = new Date().getHours() * 60 + new Date().getMinutes();
+    const now = manilaNowMinutes();
     return appointments
       .filter(a => a.date === today)
       .sort((a, b) => toMinutes(a.time) - toMinutes(b.time))

@@ -19,6 +19,7 @@ import {
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getPatients } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -29,7 +30,7 @@ const statusColors: Record<string, string> = {
   rescheduled: "bg-warning/10 text-warning border-warning/20",
 };
 
-const today = format(new Date(), "yyyy-MM-dd");
+const today = manilaTodayDateStr();
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -59,7 +60,7 @@ export default function AdminDashboard() {
   }, [appointments]);
 
   const upcomingToday = useMemo(() => {
-    const now = new Date().getHours() * 60 + new Date().getMinutes();
+    const now = manilaNowMinutes();
     return appointments
       .filter(a => a.date === today && (a.status === "pending" || a.status === "confirmed"))
       .sort((a, b) => toMinutes(a.time) - toMinutes(b.time))

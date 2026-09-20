@@ -22,11 +22,11 @@ import {
   type DentalRecord, type TreatmentInput, type PrescriptionInput,
 } from "@/lib/api/dentalRecords";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 
 const emptyForm = {
   appointmentId: "",
-  date: new Date().toISOString().split("T")[0],
+  date: manilaTodayDateStr(),
   diagnosis: "",
   toothNumber: "",
   treatmentNotes: "",
@@ -270,7 +270,7 @@ export default function DentistRecords() {
               </div>
               <div className="space-y-2">
                 <Label>Consultation Date *</Label>
-                <Input type="date" value={form.date} max={new Date().toISOString().split("T")[0]} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <Input type="date" value={form.date} max={manilaTodayDateStr()} onChange={e => setForm({ ...form, date: e.target.value })} />
               </div>
             </div>
             <div className="space-y-2">
@@ -289,7 +289,7 @@ export default function DentistRecords() {
             </div>
             <div className="space-y-2">
               <Label>Next Appointment Recommendation (optional)</Label>
-              <Input type="date" value={form.nextVisit} min={new Date().toISOString().split("T")[0]} onChange={e => setForm({ ...form, nextVisit: e.target.value })} />
+              <Input type="date" value={form.nextVisit} min={manilaTodayDateStr()} onChange={e => setForm({ ...form, nextVisit: e.target.value })} />
             </div>
           </div>
           <DialogFooter>

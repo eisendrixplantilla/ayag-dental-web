@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-success/10 text-success border-success/20",
@@ -28,12 +28,9 @@ const statusColors: Record<string, string> = {
 
 const NOTICE_24H = "Rescheduling is only allowed at least 24 hours before your scheduled appointment.";
 
-const toDateTime = (apt: Appointment) => {
-  const [h, m] = apt.time.split(":").map(Number);
-  const d = parseISO(apt.date);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
+// Appointment date/time are Manila wall-clock values (the clinic's only location), so the
+// absolute instant must be computed against Manila's offset, not the viewing device's own.
+const toDateTime = (apt: Appointment) => new Date(`${apt.date}T${apt.time}:00+08:00`);
 
 export default function PatientAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -281,9 +278,7 @@ export default function PatientAppointments() {
                     initialFocus
                     className="p-3 pointer-events-auto"
                     disabled={(d) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      if (d < today) return true;
+                      if (d < manilaTodayAsLocalDate()) return true;
                       if (!schedule) return true;
                       return !isDentistAvailableOn(schedule, d);
                     }}

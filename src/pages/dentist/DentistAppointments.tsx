@@ -25,7 +25,7 @@ import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -364,7 +364,7 @@ export default function DentistAppointments() {
               <Input
                 type="date"
                 value={rsDate}
-                min={new Date().toISOString().split("T")[0]}
+                min={manilaTodayDateStr()}
                 onChange={e => { setRsDate(e.target.value); setRsSlot(""); }}
               />
             </div>

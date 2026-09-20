@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { manilaTodayDateStr } from "@/lib/formatDate";
 
 const PHONE_REGEX = /^\+?[\d\s-]{7,15}$/;
 
@@ -50,7 +51,7 @@ export default function Register() {
       toast.error("Enter your date of birth");
       return;
     }
-    if (new Date(birthdate) > new Date()) {
+    if (birthdate > manilaTodayDateStr()) {
       toast.error("Date of birth cannot be in the future");
       return;
     }
@@ -135,7 +136,7 @@ export default function Register() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="birthdate">Date of Birth</Label>
-                  <Input id="birthdate" type="date" value={birthdate} onChange={e => setBirthdate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
+                  <Input id="birthdate" type="date" value={birthdate} onChange={e => setBirthdate(e.target.value)} max={manilaTodayDateStr()} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="sex">Sex</Label>

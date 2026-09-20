@@ -1,5 +1,6 @@
 import { api } from "@/contexts/AuthContext";
 import { toKey, toMinutes, toLabel, toValue } from "@/lib/dentistSchedules";
+import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
 
 export interface DentistDirectoryEntry {
   id: string;
@@ -157,9 +158,10 @@ export function generateAvailableSlots(
   const endMin = toMinutes(day.end);
   const lunchStart = day.lunchStart ? toMinutes(day.lunchStart) : null;
   const lunchEnd = day.lunchEnd ? toMinutes(day.lunchEnd) : null;
-  const now = new Date();
-  const isToday = toKey(now) === key;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  // The clinic operates in Manila time, so "is this slot already past" must be judged against
+  // the clinic's actual current time, not the browsing device's own clock/timezone.
+  const isToday = manilaTodayDateStr() === key;
+  const nowMinutes = manilaNowMinutes();
 
   for (let t = toMinutes(day.start); t + day.duration <= endMin; t += day.duration) {
     const slotEnd = t + day.duration;

@@ -10,7 +10,7 @@ import { Search, Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucid
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
 
 export default function AdminAccounts() {
   const { user } = useAuth();
@@ -205,7 +205,7 @@ export default function AdminAccounts() {
               <Row label="Contact Number" value={detail.phone ?? "—"} />
               <Row label="Account Status" value={detail.status === "active" ? "Active" : "Deactivated"} />
               <Row label="Date Registered" value={detail.createdAt ?? "—"} />
-              <Row label="Last Login" value={detail.lastLogin ?? "—"} />
+              <Row label="Last Login" value={detail.lastLogin ? formatManilaDateTime(detail.lastLogin) : "—"} />
               <Row label="Appointments" value={String(detail.appointmentsCount ?? 0)} />
               <Row label="Dental Records" value={String(detail.dentalRecordsCount ?? 0)} />
               {!canArchive(detail) && (

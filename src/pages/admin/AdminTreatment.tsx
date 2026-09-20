@@ -14,6 +14,7 @@ import {
   type DentalRecord, type TreatmentInput, type PrescriptionInput,
 } from "@/lib/api/dentalRecords";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { manilaTodayDateStr } from "@/lib/formatDate";
 
 export default function AdminTreatment() {
   const [records, setRecords] = useState<DentalRecord[]>([]);
@@ -152,7 +153,7 @@ export default function AdminTreatment() {
               <div><Label>Patient</Label><Input value={selectedAppointment?.patientName ?? ""} disabled placeholder="Select an appointment above" /></div>
               <div className="max-w-xs">
                 <Label>Next Visit Date</Label>
-                <Input type="date" value={nextVisit} min={new Date().toISOString().split("T")[0]} onChange={e => setNextVisit(e.target.value)} />
+                <Input type="date" value={nextVisit} min={manilaTodayDateStr()} onChange={e => setNextVisit(e.target.value)} />
               </div>
               <p className="text-xs text-muted-foreground">This is saved on the treatment record as the recommended next visit. It does not automatically book an appointment — use Appointments to schedule it.</p>
               <Button className="gradient-primary text-primary-foreground" onClick={save} disabled={saving}>

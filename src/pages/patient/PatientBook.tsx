@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
 import { getAppointments } from "@/lib/api/appointments";
@@ -216,9 +217,7 @@ export default function PatientBook() {
                     initialFocus
                     className="p-3 pointer-events-auto"
                     disabled={(d) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      if (d < today) return true;
+                      if (d < manilaTodayAsLocalDate()) return true;
                       if (!schedule) return true;
                       return !isDentistAvailableOn(schedule, d);
                     }}

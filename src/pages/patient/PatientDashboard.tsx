@@ -7,8 +7,9 @@ import { CalendarDays, History, Bell, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { manilaTodayDateStr } from "@/lib/formatDate";
 
-const today = format(new Date(), "yyyy-MM-dd");
+const today = manilaTodayDateStr();
 
 export default function PatientDashboard() {
   const { user } = useAuth();

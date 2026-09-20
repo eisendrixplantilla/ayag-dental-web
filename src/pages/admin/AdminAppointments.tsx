@@ -18,7 +18,7 @@ import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
@@ -212,9 +212,7 @@ export default function AdminAppointments() {
                     initialFocus
                     className="p-3 pointer-events-auto"
                     disabled={(d) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      if (d < today) return true;
+                      if (d < manilaTodayAsLocalDate()) return true;
                       if (!schedule) return true;
                       return !isDentistAvailableOn(schedule, d);
                     }}
