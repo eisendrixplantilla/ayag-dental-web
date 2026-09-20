@@ -35,6 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) return res.status(401).json({ error: "Invalid email or password" });
+  if (user.status === "inactive" || user.status === "archived") {
+    return res.status(403).json({ error: "Your account has been deactivated. Please contact the system administrator." });
+  }
 
   const token = signSession({ sub: user.id, email: user.email, role: user.role });
   res.status(200).json({

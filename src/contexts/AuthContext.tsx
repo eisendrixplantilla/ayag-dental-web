@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       if (!pendingEmail) throw new Error("No pending account to verify");
-      const { token, user: u } = await api<{ token: string; user: User }>("/auth/verify", {
+      const { token, user: u } = await api<{ token: string; user: User }>("/auth/register", {
         method: "POST",
         body: JSON.stringify({ email: pendingEmail, code }),
       });
