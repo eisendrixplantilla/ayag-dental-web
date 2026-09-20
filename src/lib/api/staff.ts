@@ -17,7 +17,7 @@ export interface StaffMember {
   name: string;
   email: string;
   contact: string | null;
-  role: "admin" | "dentist";
+  role: "admin" | "dentist" | "superadmin";
   status: string;
   createdAt: string | null;
 }

@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getStaffMember, updateStaff } from "@/lib/api/staff";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,6 @@ const profileSchema = z.object({
     .string()
     .trim()
     .regex(/^\+?[\d\s-]{7,15}$/, "Enter a valid contact number"),
-  email: z.string().trim().email("Enter a valid email address"),
 });
 
 const passwordSchema = z
@@ -44,23 +44,41 @@ export default function AdminProfile() {
   const { user, changePassword } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [phone, setPhone] = useState("+63 912 345 6789");
-  const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
 
-  const saveProfile = () => {
-    const result = profileSchema.safeParse({ phone, email });
+  useEffect(() => {
+    if (!user) return;
+    getStaffMember(user.id)
+      .then((s) => setPhone(s.contact ?? ""))
+      .catch(() => toast.error("Failed to load profile information"))
+      .finally(() => setLoadingProfile(false));
+  }, [user]);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    const result = profileSchema.safeParse({ phone });
     if (!result.success) {
       toast.error(result.error.errors[0].message);
       return;
     }
-    toast.success("Profile updated", {
-      description: "Your contact number and email address have been saved.",
-    });
+    setSavingProfile(true);
+    try {
+      await updateStaff(user.id, { contact: phone });
+      toast.success("Profile updated", {
+        description: "Your contact number has been saved.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const submitPasswordChange = async () => {
@@ -173,16 +191,22 @@ export default function AdminProfile() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Contact Number</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={loadingProfile}
+                placeholder={loadingProfile ? "Loading..." : undefined}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5" /> Email Address
               </Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input id="email" type="email" value={user?.email ?? ""} disabled />
             </div>
-            <Button onClick={saveProfile} className="w-full">
-              <Save className="w-4 h-4 mr-2" /> Save Changes
+            <Button onClick={saveProfile} className="w-full" disabled={loadingProfile || savingProfile}>
+              {savingProfile ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save Changes
             </Button>
           </CardContent>
         </Card>

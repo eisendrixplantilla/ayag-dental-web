@@ -107,9 +107,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (!requireSuperAdmin(req, res)) return;
-
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
+
+  const session = getSessionFromRequest(req);
+  const isSelf =
+    !!session &&
+    !!id &&
+    session.sub === id &&
+    (session.role === "admin" || session.role === "dentist" || session.role === "superadmin");
+
+  if (isSelf && req.method === "GET") {
+    const rows = await sql`SELECT * FROM users WHERE id = ${id}`;
+    const staff = rows[0];
+    if (!staff) return res.status(404).json({ error: "Staff account not found" });
+    return res.status(200).json({ staff: mapStaff(staff) });
+  }
+
+  if (isSelf && req.method === "PATCH") {
+    const { contact } = req.body ?? {};
+    await sql`UPDATE users SET contact_number = COALESCE(${contact ?? null}, contact_number), updated_at = now() WHERE id = ${id}`;
+    const rows = await sql`SELECT * FROM users WHERE id = ${id}`;
+    if (!rows[0]) return res.status(404).json({ error: "Staff account not found" });
+    return res.status(200).json({ staff: mapStaff(rows[0]) });
+  }
+
+  if (!requireSuperAdmin(req, res)) return;
 
   if (req.method === "GET") {
     if (id) {
