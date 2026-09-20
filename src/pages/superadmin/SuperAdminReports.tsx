@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { usePatientAccounts } from "@/lib/accountStore";
 import { useActiveStaff } from "@/lib/staffStore";
 
-type ReportType = "appointment" | "patient" | "dentist";
+type ReportType = "appointment" | "patient";
 
 const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   appointment: {
@@ -21,10 +21,6 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   patient: {
     title: "Patient Summary Report",
     columns: ["Patient Information", "Total Appointments", "Latest Consultation"],
-  },
-  dentist: {
-    title: "Dentist Performance Report",
-    columns: ["Dentist", "Total Appointments", "Completed", "Cancelled", "Patients Handled"],
   },
 };
 
@@ -84,20 +80,8 @@ export default function SuperAdminReports() {
     let rows: string[][] = [];
     if (type === "appointment") {
       rows = appointmentData.map(a => [a.id, a.patient, a.dentist, a.service, a.date, a.status]);
-    } else if (type === "patient") {
-      rows = patientData.map(p => [`${p.name} — ${p.email} · ${p.phone}`, String(p.total), p.latest]);
     } else {
-      const dentists = Array.from(new Set(appointmentData.map(a => a.dentist)));
-      rows = dentists.map(d => {
-        const own = appointmentData.filter(a => a.dentist === d);
-        return [
-          d,
-          String(own.length),
-          String(own.filter(a => a.status === "Completed").length),
-          String(own.filter(a => a.status === "Cancelled").length),
-          String(new Set(own.map(a => a.patient)).size),
-        ];
-      });
+      rows = patientData.map(p => [`${p.name} — ${p.email} · ${p.phone}`, String(p.total), p.latest]);
     }
 
     setReport({ type, rows, generatedAt: new Date().toLocaleString() });
@@ -139,7 +123,7 @@ export default function SuperAdminReports() {
     <div className="space-y-6">
       <div className="print:hidden">
         <h1 className="text-2xl font-bold font-heading text-foreground">Reports & Analytics</h1>
-        <p className="text-muted-foreground">Appointment, patient, and dentist reports</p>
+        <p className="text-muted-foreground">Appointment and patient reports</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
@@ -188,7 +172,6 @@ export default function SuperAdminReports() {
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="appointment">Appointment Summary Report</SelectItem>
                   <SelectItem value="patient">Patient Summary Report</SelectItem>
-                  <SelectItem value="dentist">Dentist Performance Report</SelectItem>
                 </SelectContent>
               </Select>
             </div>
