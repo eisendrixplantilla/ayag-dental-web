@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,52 +6,88 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, Eye, CheckCircle2, Ban, Archive } from "lucide-react";
+import { Search, Eye, CheckCircle2, Ban, Archive, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  usePatientAccounts,
-  setAccountStatus,
-  archivePatientAccount,
-  canDeleteAccount,
-  type PatientAccount,
-} from "@/lib/accountStore";
+import { useAuth } from "@/contexts/AuthContext";
+import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
 
 export default function AdminAccounts() {
-  const accounts = usePatientAccounts();
+  const { user } = useAuth();
+  const [accounts, setAccounts] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [selected, setSelected] = useState<PatientAccount | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Patient | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    getPatients()
+      .then(setAccounts)
+      .catch(() => toast.error("Failed to load patient accounts"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
 
   const filtered = accounts.filter(a => {
     const matchesSearch =
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.email.toLowerCase().includes(search.toLowerCase());
-    const matchesFrom = !fromDate || a.created >= fromDate;
-    const matchesTo = !toDate || a.created <= toDate;
+    const matchesFrom = !fromDate || (a.createdAt ?? "") >= fromDate;
+    const matchesTo = !toDate || (a.createdAt ?? "") <= toDate;
     return matchesSearch && matchesFrom && matchesTo;
   });
 
-  const selectedLive = selected ? accounts.find(a => a.id === selected.id) ?? selected : null;
+  const canArchive = (p: Patient) => (p.appointmentsCount ?? 0) === 0 && (p.dentalRecordsCount ?? 0) === 0;
 
-  const activate = (a: PatientAccount) => {
-    setAccountStatus(a.id, "active");
-    toast.success(`${a.name}'s account has been activated.`);
+  const openDetail = (a: Patient) => {
+    setSelectedId(a.id);
+    setDetail(null);
+    setDetailLoading(true);
+    getPatient(a.id)
+      .then(setDetail)
+      .catch(() => toast.error("Failed to load account details"))
+      .finally(() => setDetailLoading(false));
   };
 
-  const deactivate = (a: PatientAccount) => {
-    setAccountStatus(a.id, "inactive");
-    toast.success(`${a.name}'s account has been deactivated and can no longer log in.`);
+  const activate = async (a: Patient) => {
+    try {
+      await updatePatient(a.id, { status: "active" });
+      toast.success(`${a.name}'s account has been activated.`);
+      load();
+      if (selectedId === a.id) openDetail(a);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to activate account");
+    }
   };
 
-  const remove = (a: PatientAccount) => {
-    if (!canDeleteAccount(a)) {
+  const deactivate = async (a: Patient) => {
+    try {
+      await updatePatient(a.id, { status: "inactive" });
+      toast.success(`${a.name}'s account has been deactivated and can no longer log in.`);
+      load();
+      if (selectedId === a.id) openDetail(a);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to deactivate account");
+    }
+  };
+
+  const remove = async (a: Patient) => {
+    if (!canArchive(a)) {
       toast.error("This account has existing appointments or dental records and cannot be archived.");
       return;
     }
-    archivePatientAccount(a.id);
-    toast.success(`${a.name}'s account has been moved to the Archive.`);
-    setSelected(null);
+    try {
+      await archivePatient(a.id, user?.name);
+      toast.success(`${a.name}'s account has been moved to the Archive.`);
+      setSelectedId(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to archive account");
+    }
   };
 
   return (
@@ -84,6 +120,9 @@ export default function AdminAccounts() {
           </div>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -107,10 +146,10 @@ export default function AdminAccounts() {
                       {a.status === "active" ? "Active" : "Deactivated"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{a.created}</TableCell>
+                  <TableCell>{a.createdAt ?? "—"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => setSelected(a)}>
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(a)}>
                         <Eye className="w-4 h-4 mr-1" /> View
                       </Button>
                       {a.status === "inactive" ? (
@@ -135,25 +174,28 @@ export default function AdminAccounts() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedLive} onOpenChange={o => !o && setSelected(null)}>
+      <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
         <DialogContent className="w-auto max-w-[min(90vw,32rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Account Details</DialogTitle>
           </DialogHeader>
-          {selectedLive && (
+          {detailLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : detail && (
             <div className="space-y-3 text-sm">
-              <Row label="Patient Name" value={selectedLive.name} />
-              <Row label="Email Address" value={selectedLive.email} />
-              <Row label="Contact Number" value={selectedLive.phone ?? "—"} />
-              <Row label="Account Status" value={selectedLive.status === "active" ? "Active" : "Deactivated"} />
-              <Row label="Date Registered" value={selectedLive.created} />
-              <Row label="Last Login" value={selectedLive.lastLogin ?? "—"} />
-              <Row label="Appointments" value={String(selectedLive.appointments)} />
-              <Row label="Dental Records" value={String(selectedLive.dentalRecords)} />
-              {!canDeleteAccount(selectedLive) && (
+              <Row label="Patient Name" value={detail.name} />
+              <Row label="Email Address" value={detail.email} />
+              <Row label="Contact Number" value={detail.phone ?? "—"} />
+              <Row label="Account Status" value={detail.status === "active" ? "Active" : "Deactivated"} />
+              <Row label="Date Registered" value={detail.createdAt ?? "—"} />
+              <Row label="Last Login" value={detail.lastLogin ?? "—"} />
+              <Row label="Appointments" value={String(detail.appointmentsCount ?? 0)} />
+              <Row label="Dental Records" value={String(detail.dentalRecordsCount ?? 0)} />
+              {!canArchive(detail) && (
                 <p className="text-xs text-muted-foreground border rounded-md p-2">
                   This account has existing appointments or dental records, so it cannot be archived. Deactivate it instead.
                 </p>
@@ -161,17 +203,17 @@ export default function AdminAccounts() {
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
-            {selectedLive && (selectedLive.status === "active" ? (
-              <Button variant="secondary" onClick={() => deactivate(selectedLive)}>Deactivate</Button>
+            <Button variant="outline" onClick={() => setSelectedId(null)}>Close</Button>
+            {detail && (detail.status === "active" ? (
+              <Button variant="secondary" onClick={() => deactivate(detail)}>Deactivate</Button>
             ) : (
-              <Button onClick={() => activate(selectedLive)}>Activate</Button>
+              <Button onClick={() => activate(detail)}>Activate</Button>
             ))}
-            {selectedLive && (
+            {detail && (
               <Button
                 variant="outline"
-                disabled={!canDeleteAccount(selectedLive)}
-                onClick={() => remove(selectedLive)}
+                disabled={!canArchive(detail)}
+                onClick={() => remove(detail)}
               >
                 <Archive className="w-4 h-4 mr-1" /> Archive
               </Button>

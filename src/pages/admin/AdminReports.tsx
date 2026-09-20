@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Printer, Search } from "lucide-react";
+import { FileText, Download, Printer, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { dentistSchedules } from "@/lib/dentistSchedules";
+import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { getPatients, type Patient } from "@/lib/api/patients";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 
 type ReportType = "appointment" | "walkin" | "patient";
 
@@ -21,24 +23,8 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   patient: { title: "Patient Report", columns: ["Patient Information", "Total Appointments", "Latest Consultation"] },
 };
 
-const appointmentData = [
-  { id: "APT-1001", patient: "Maria Santos", dentist: "Dr. Ayag", service: "Dental Cleaning", date: "2026-08-01", time: "09:00 AM", status: "Completed", type: "Online" },
-  { id: "APT-1002", patient: "Juan Dela Cruz", dentist: "Dr. Santos", service: "Tooth Extraction", date: "2026-08-03", time: "10:30 AM", status: "Confirmed", type: "Walk-in" },
-  { id: "APT-1003", patient: "Ana Reyes", dentist: "Dr. Ayag", service: "Root Canal", date: "2026-08-05", time: "01:00 PM", status: "Pending", type: "Online" },
-  { id: "APT-1004", patient: "Carlos Mendoza", dentist: "Dr. Santos", service: "Braces Adjustment", date: "2026-08-06", time: "02:30 PM", status: "Cancelled", type: "Online" },
-  { id: "APT-1005", patient: "Liza Bautista", dentist: "Dr. Ayag", service: "Tooth Filling", date: "2026-08-07", time: "11:00 AM", status: "Confirmed", type: "Walk-in" },
-  { id: "APT-1006", patient: "Mark Villanueva", dentist: "Dr. Santos", service: "Teeth Whitening", date: "2026-08-08", time: "03:00 PM", status: "Completed", type: "Walk-in" },
-];
-
-const patientData = [
-  { name: "Maria Santos", email: "maria@example.com", phone: "0917-555-0101", total: 8, latest: "2026-08-01" },
-  { name: "Juan Dela Cruz", email: "juan@example.com", phone: "0917-555-0102", total: 4, latest: "2026-08-03" },
-  { name: "Ana Reyes", email: "ana@example.com", phone: "0917-555-0103", total: 2, latest: "2026-08-05" },
-  { name: "Carlos Mendoza", email: "carlos@example.com", phone: "0917-555-0104", total: 6, latest: "2026-08-06" },
-  { name: "Liza Bautista", email: "liza@example.com", phone: "0917-555-0105", total: 3, latest: "2026-08-07" },
-];
-
-const statuses = ["Pending", "Confirmed", "Completed", "Cancelled", "Rejected"];
+const statuses: AptStatus[] = ["pending", "confirmed", "completed", "cancelled", "rejected", "rescheduled"];
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const statusVariant = (s: string) =>
   s === "Completed" ? "text-success" : s === "Confirmed" ? "text-primary" : s === "Pending" ? "text-warning" : "text-destructive";
@@ -51,6 +37,22 @@ interface GeneratedReport {
 }
 
 export default function AdminReports() {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getAppointments(), getPatients()])
+      .then(([a, p]) => { setAppointments(a); setPatients(p); })
+      .catch(() => toast.error("Failed to load report data"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const dentists = useMemo(
+    () => Array.from(new Set(appointments.map(a => a.dentistName).filter((n): n is string => !!n))).sort(),
+    [appointments],
+  );
+
   const [type, setType] = useState<ReportType | "">("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -73,17 +75,22 @@ export default function AdminReports() {
     let rows: string[][] = [];
 
     if (type === "appointment") {
-      rows = appointmentData
-        .filter((a) => inRange(a.date) && (dentist === "all" || a.dentist === dentist) && (status === "all" || a.status === status))
-        .map((a) => [a.id, a.patient, a.dentist, a.service, a.date, a.status]);
+      rows = appointments
+        .filter((a) => inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
+        .map((a) => [a.id, a.patientName, a.dentistName ?? "—", a.service, a.date, capitalize(a.status)]);
     } else if (type === "walkin") {
-      rows = appointmentData
-        .filter((a) => a.type === "Walk-in" && inRange(a.date) && (dentist === "all" || a.dentist === dentist) && (status === "all" || a.status === status))
-        .map((a) => [a.patient, a.dentist, a.date, a.time]);
+      rows = appointments
+        .filter((a) => a.type === "walk-in" && inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
+        .map((a) => [a.patientName, a.dentistName ?? "—", a.date, toLabel(toMinutes(a.time))]);
     } else {
-      rows = patientData
-        .filter((p) => inRange(p.latest))
-        .map((p) => [`${p.name} — ${p.email} · ${p.phone}`, String(p.total), p.latest]);
+      rows = patients
+        .map((p) => {
+          const own = appointments.filter((a) => a.patientId === p.id);
+          const latest = own.map((a) => a.date).sort().at(-1) ?? "";
+          return { p, total: own.length, latest };
+        })
+        .filter(({ latest }) => !start && !end ? true : latest && inRange(latest))
+        .map(({ p, total, latest }) => [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(total), latest || "—"]);
     }
 
     setReport({
@@ -120,7 +127,7 @@ export default function AdminReports() {
       <h1>Ayag Dental Clinic — ${meta.title}</h1>
       <p class="meta">Date Range: ${report.filters.start || "All"} to ${report.filters.end || "All"} |
         Dentist: ${report.filters.dentist === "all" ? "All" : report.filters.dentist} |
-        Status: ${report.filters.status === "all" ? "All" : report.filters.status} |
+        Status: ${report.filters.status === "all" ? "All" : capitalize(report.filters.status)} |
         Generated: ${report.generatedAt}</p>
       <table><thead><tr>${meta.columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
       <tbody>${rowsHtml || `<tr><td colspan="${meta.columns.length}">No records found</td></tr>`}</tbody></table>
@@ -145,6 +152,10 @@ export default function AdminReports() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Report Type</Label>
@@ -171,8 +182,8 @@ export default function AdminReports() {
                 <SelectTrigger><SelectValue placeholder="All dentists" /></SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">All Dentists</SelectItem>
-                  {dentistSchedules.map((d) => (
-                    <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
+                  {dentists.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -184,7 +195,7 @@ export default function AdminReports() {
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">All Statuses</SelectItem>
                   {statuses.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>{capitalize(s)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -198,6 +209,8 @@ export default function AdminReports() {
               <Button variant="outline" onClick={() => setReport(null)}>Clear Preview</Button>
             )}
           </div>
+          </>
+          )}
         </CardContent>
       </Card>
 
@@ -210,7 +223,7 @@ export default function AdminReports() {
             <p className="text-xs text-muted-foreground">
               Date Range: {report.filters.start || "All"} to {report.filters.end || "All"} ·
               Dentist: {report.filters.dentist === "all" ? "All" : report.filters.dentist} ·
-              Status: {report.filters.status === "all" ? "All" : report.filters.status} ·
+              Status: {report.filters.status === "all" ? "All" : capitalize(report.filters.status)} ·
               Generated: {report.generatedAt}
             </p>
           </CardHeader>

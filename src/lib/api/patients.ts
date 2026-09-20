@@ -9,6 +9,7 @@ export interface Patient extends User {
   allergies: string | null;
   status: "active" | "inactive";
   lastLogin: string | null;
+  createdAt: string | null;
   archivedAt?: string | null;
   archivedBy?: string | null;
   appointmentsCount?: number;

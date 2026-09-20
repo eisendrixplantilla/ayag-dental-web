@@ -20,6 +20,7 @@ function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsC
     allergies: p.allergies,
     status: p.status,
     lastLogin: p.last_login,
+    createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : null,
     archivedAt: p.archived_at,
     archivedBy: p.archived_by,
     ...(counts ? counts : {}),
