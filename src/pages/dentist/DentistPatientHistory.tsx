@@ -36,13 +36,14 @@ export default function DentistPatientHistory() {
   useEffect(() => {
     Promise.all([getPatients(), getAppointments()])
       .then(([allPatients, allAppointments]) => {
+        const mine = allAppointments.filter(a => !user?.name || a.dentistName === user.name);
         setPatients(allPatients);
-        setMyPatientIds(new Set(
-          allAppointments
-            .filter(a => !user?.name || a.dentistName === user.name)
-            .map(a => a.patientId)
-            .filter((id): id is string => !!id)
-        ));
+        setMyPatientIds(new Set(mine.map(a => a.patientId).filter((id): id is string => !!id)));
+
+        const mostRecent = [...mine].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0];
+        if (mostRecent?.patientId) {
+          setSelectedId(prev => prev || mostRecent.patientId!);
+        }
       })
       .catch(() => {});
   }, [user?.name]);
@@ -143,7 +144,9 @@ export default function DentistPatientHistory() {
       {!selected ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            Select a patient to view their full history.
+            {myPatients.length === 0
+              ? "You have no patients yet. Patients appear here automatically once you have an appointment with them."
+              : "Select a patient to view their full history."}
           </CardContent>
         </Card>
       ) : loading ? (
