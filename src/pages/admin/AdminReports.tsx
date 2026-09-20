@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { printHtmlAsPdf } from "@/lib/printPdf";
 
 type ReportType = "appointment" | "walkin" | "patient";
 
@@ -107,35 +108,22 @@ export default function AdminReports() {
   const handleDownloadPdf = () => {
     if (!report) return;
     const meta = reportMeta[report.type];
-    const win = window.open("", "_blank", "width=900,height=700");
-    if (!win) {
-      toast.error("Please allow pop-ups to download the PDF.");
-      return;
-    }
     const rowsHtml = report.rows
       .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`)
       .join("");
-    win.document.write(`<!doctype html><html><head><title>${meta.title}</title>
-      <style>
-        body{font-family:Arial,Helvetica,sans-serif;padding:32px;color:#1f2937}
-        h1{font-size:20px;margin:0 0 4px}
-        p.meta{font-size:12px;color:#6b7280;margin:0 0 16px}
-        table{width:100%;border-collapse:collapse;font-size:12px}
-        th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
-        th{background:#f3f4f6}
-      </style></head><body>
+    const body = `
       <h1>Ayag Dental Clinic — ${meta.title}</h1>
       <p class="meta">Date Range: ${report.filters.start || "All"} to ${report.filters.end || "All"} |
         Dentist: ${report.filters.dentist === "all" ? "All" : report.filters.dentist} |
         Status: ${report.filters.status === "all" ? "All" : capitalize(report.filters.status)} |
         Generated: ${report.generatedAt}</p>
       <table><thead><tr>${meta.columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
-      <tbody>${rowsHtml || `<tr><td colspan="${meta.columns.length}">No records found</td></tr>`}</tbody></table>
-      </body></html>`);
-    win.document.close();
-    win.focus();
-    win.print();
-    toast.success("PDF export ready");
+      <tbody>${rowsHtml || `<tr><td colspan="${meta.columns.length}">No records found</td></tr>`}</tbody></table>`;
+    if (printHtmlAsPdf(meta.title, body)) {
+      toast.success("PDF export ready");
+    } else {
+      toast.error("Failed to prepare PDF");
+    }
   };
 
   return (
