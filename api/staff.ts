@@ -26,11 +26,85 @@ function requireSuperAdmin(req: VercelRequest, res: VercelResponse) {
   return session;
 }
 
+function mapUnavailable(u: any) {
+  return {
+    id: u.id,
+    date: new Date(u.unavailable_date).toISOString().slice(0, 10),
+    reason: u.reason,
+    remarks: u.remarks,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET" && req.query.directory === "true") {
     if (!getSessionFromRequest(req)) return res.status(401).json({ error: "Unauthorized" });
     const rows = await sql`SELECT id, first_name, middle_name, last_name FROM users WHERE role = 'dentist' AND status = 'active' ORDER BY last_name`;
     return res.status(200).json({ dentists: rows.map((r) => ({ id: r.id, name: joinName(r.first_name, r.middle_name, r.last_name) })) });
+  }
+
+  if (req.query.schedule === "true") {
+    const dentistId = typeof req.query.dentistId === "string" ? req.query.dentistId : undefined;
+
+    if (req.method === "GET") {
+      if (!getSessionFromRequest(req)) return res.status(401).json({ error: "Unauthorized" });
+      if (!dentistId) return res.status(400).json({ error: "Missing dentistId" });
+      const [days, unavailable] = await Promise.all([
+        sql`SELECT day_of_week, start_time, end_time, lunch_start, lunch_end, duration_minutes, max_patient FROM dentist_schedules WHERE dentist_id = ${dentistId} ORDER BY day_of_week`,
+        sql`SELECT id, unavailable_date, reason, remarks FROM dentist_unavailable WHERE dentist_id = ${dentistId} ORDER BY unavailable_date`,
+      ]);
+      return res.status(200).json({
+        days: days.map((d) => ({
+          dayOfWeek: d.day_of_week,
+          start: d.start_time,
+          end: d.end_time,
+          lunchStart: d.lunch_start,
+          lunchEnd: d.lunch_end,
+          duration: d.duration_minutes,
+          maxPatients: d.max_patient,
+        })),
+        unavailable: unavailable.map(mapUnavailable),
+      });
+    }
+
+    if (req.method === "PUT") {
+      if (!requireSuperAdmin(req, res)) return;
+      const { dentistId: bodyDentistId, days } = req.body ?? {};
+      if (!bodyDentistId || !Array.isArray(days)) return res.status(400).json({ error: "Missing dentistId or days" });
+      await sql`DELETE FROM dentist_schedules WHERE dentist_id = ${bodyDentistId}`;
+      for (const d of days) {
+        await sql`
+          INSERT INTO dentist_schedules (dentist_id, day_of_week, start_time, end_time, lunch_start, lunch_end, duration_minutes, max_patient)
+          VALUES (${bodyDentistId}, ${d.dayOfWeek}, ${d.start}, ${d.end}, ${d.lunchStart ?? null}, ${d.lunchEnd ?? null}, ${d.duration ?? 30}, ${d.maxPatients ?? 20})
+        `;
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (req.query.unavailable === "true") {
+    if (!requireSuperAdmin(req, res)) return;
+
+    if (req.method === "POST") {
+      const { dentistId, date, reason, remarks } = req.body ?? {};
+      if (!dentistId || !date) return res.status(400).json({ error: "Missing dentistId or date" });
+      const inserted = await sql`
+        INSERT INTO dentist_unavailable (dentist_id, unavailable_date, reason, remarks)
+        VALUES (${dentistId}, ${date}, ${reason ?? null}, ${remarks ?? null})
+        RETURNING id, unavailable_date, reason, remarks
+      `;
+      return res.status(201).json({ unavailable: mapUnavailable(inserted[0]) });
+    }
+
+    if (req.method === "DELETE") {
+      const unavailId = typeof req.query.id === "string" ? req.query.id : undefined;
+      if (!unavailId) return res.status(400).json({ error: "Missing id" });
+      await sql`DELETE FROM dentist_unavailable WHERE id = ${unavailId}`;
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   if (!requireSuperAdmin(req, res)) return;

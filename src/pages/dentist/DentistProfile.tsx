@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
-import { dentistSchedules, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { getDentistSchedule, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { Link } from "react-router-dom";
 import {
   User as UserIcon,
@@ -22,8 +22,6 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const profileSchema = z.object({
   phone: z
@@ -55,9 +53,10 @@ export default function DentistProfile() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
 
-  const schedule = useMemo(() => {
-    if (!user) return undefined;
-    return dentistSchedules.find((s) => s.id === user.id) ?? dentistSchedules.find((s) => s.name === user.name);
+  const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    getDentistSchedule(user.id).then(setSchedule).catch(() => {});
   }, [user]);
 
   const saveProfile = () => {
@@ -157,10 +156,9 @@ export default function DentistProfile() {
                   <CalendarDays className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Assigned Schedule</p>
-                    {schedule ? (
+                    {schedule && schedule.days.length > 0 ? (
                       <p className="font-medium text-foreground">
-                        {schedule.workingDays.map((d) => DAYS[d].slice(0, 3)).join(", ")} ·{" "}
-                        {toLabel(toMinutes(schedule.start))} - {toLabel(toMinutes(schedule.end))}
+                        {[...schedule.days].sort((a, b) => a.dayOfWeek - b.dayOfWeek).map((d) => DAY_NAMES[d.dayOfWeek].slice(0, 3)).join(", ")}
                       </p>
                     ) : (
                       <p className="font-medium text-muted-foreground">Not assigned</p>

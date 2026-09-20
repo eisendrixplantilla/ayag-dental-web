@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,9 @@ import { Eye, CalendarIcon, Edit, X, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import { dentistSchedules, generateSlots, toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
+import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-success/10 text-success border-success/20",
@@ -53,8 +54,28 @@ export default function PatientAppointments() {
 
   useEffect(load, []);
 
-  const schedule = dentistSchedules.find((d) => d.name === rescheduleApt?.dentistName);
-  const slots = useMemo(() => generateSlots(schedule, newDate), [schedule, newDate]);
+  const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
+  const [slots, setSlots] = useState<{ value: string; label: string }[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  useEffect(() => {
+    if (!rescheduleApt?.dentistId) { setSchedule(null); return; }
+    getDentistSchedule(rescheduleApt.dentistId).then(setSchedule).catch(() => setSchedule(null));
+  }, [rescheduleApt]);
+
+  useEffect(() => {
+    if (!rescheduleApt?.dentistId || !newDate || !schedule) { setSlots([]); return; }
+    setLoadingSlots(true);
+    getAppointments({ dentistId: rescheduleApt.dentistId, date: toKey(newDate) })
+      .then((appts) => {
+        const booked = appts
+          .filter((a) => a.id !== rescheduleApt.id && ["confirmed", "pending", "rescheduled"].includes(a.status))
+          .map((a) => a.time);
+        setSlots(generateAvailableSlots(schedule, newDate, booked));
+      })
+      .catch(() => setSlots([]))
+      .finally(() => setLoadingSlots(false));
+  }, [rescheduleApt, newDate, schedule]);
 
   const upcoming = appointments
     .filter((a) => a.status === "pending" || a.status === "confirmed" || a.status === "rescheduled")
@@ -249,8 +270,7 @@ export default function PatientAppointments() {
                       today.setHours(0, 0, 0, 0);
                       if (d < today) return true;
                       if (!schedule) return true;
-                      if (schedule.leave.includes(toKey(d))) return true;
-                      return !schedule.workingDays.includes(d.getDay());
+                      return !isDentistAvailableOn(schedule, d);
                     }}
                   />
                 </PopoverContent>
@@ -258,15 +278,15 @@ export default function PatientAppointments() {
             </div>
             <div>
               <Label className="font-semibold">Available Time Slot</Label>
-              <Select value={newTime} onValueChange={setNewTime} disabled={!newDate || slots.length === 0}>
+              <Select value={newTime} onValueChange={setNewTime} disabled={!newDate || loadingSlots || slots.length === 0}>
                 <SelectTrigger>
-                  <SelectValue placeholder={!newDate ? "Select a date first" : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
+                  <SelectValue placeholder={!newDate ? "Select a date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
                 </SelectTrigger>
                 <SelectContent>
                   {slots.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {newDate && slots.length === 0 && (
+              {newDate && !loadingSlots && slots.length === 0 && (
                 <p className="text-sm text-destructive mt-2">
                   No available appointment slots for the selected date. Please choose another date.
                 </p>

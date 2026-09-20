@@ -11,10 +11,14 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { dentistSchedules, generateSlots, toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
-import { getDentistDirectory, type DentistDirectoryEntry } from "@/lib/api/staff";
+import { getAppointments } from "@/lib/api/appointments";
+import {
+  getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
+  DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
+} from "@/lib/api/staff";
 
 const services = [
   "Orthodontics (Braces)",
@@ -31,16 +35,24 @@ const services = [
   "Fixed Bridge",
 ];
 
+const ACTIVE_STATUSES = new Set(["confirmed", "pending", "rescheduled"]);
+
 export default function PatientBook() {
   const { user } = useAuth();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [service, setService] = useState("");
-  const [dentist, setDentist] = useState("");
+  const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
   const [dentists, setDentists] = useState<DentistDirectoryEntry[]>([]);
   const [loadingDentists, setLoadingDentists] = useState(true);
+  const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [slots, setSlots] = useState<{ value: string; label: string }[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
 
   useEffect(() => {
     getDentistDirectory()
@@ -49,17 +61,45 @@ export default function PatientBook() {
       .finally(() => setLoadingDentists(false));
   }, []);
 
-  const schedule = dentistSchedules.find((d) => d.name === dentist);
-  const slots = useMemo(() => generateSlots(schedule, date), [schedule, date]);
+  useEffect(() => {
+    if (!dentistId) { setSchedule(null); return; }
+    setLoadingSchedule(true);
+    getDentistSchedule(dentistId)
+      .then(setSchedule)
+      .catch(() => toast.error("Failed to load dentist's schedule"))
+      .finally(() => setLoadingSchedule(false));
+  }, [dentistId]);
+
+  useEffect(() => {
+    if (!dentistId || !date || !schedule) { setSlots([]); return; }
+    setLoadingSlots(true);
+    getAppointments({ dentistId, date: toKey(date) })
+      .then((appts) => {
+        const booked = appts.filter((a) => ACTIVE_STATUSES.has(a.status)).map((a) => a.time);
+        setSlots(generateAvailableSlots(schedule, date, booked));
+      })
+      .catch(() => toast.error("Failed to load available time slots"))
+      .finally(() => setLoadingSlots(false));
+  }, [dentistId, date, schedule]);
+
+  const scheduleSummary = useMemo(() => {
+    if (!schedule || schedule.days.length === 0) return "";
+    return [...schedule.days]
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map((d) => `${DAY_NAMES[d.dayOfWeek].slice(0, 3)} ${toLabel(toMinutes(d.start))}–${toLabel(toMinutes(d.end))}`)
+      .join(", ");
+  }, [schedule]);
+
   const selectedLabel = slots.find((s) => s.value === time)?.label ?? "";
 
   const handleSubmit = async () => {
-    if (!service || !dentist || !date || !time || !user) return;
+    if (!service || !dentistId || !date || !time || !user) return;
     setSubmitting(true);
     try {
       await createAppointment({
         patientName: user.name,
         email: user.email,
+        dentistId,
         dentistName: dentist,
         service,
         date: toKey(date),
@@ -95,7 +135,7 @@ export default function PatientBook() {
             onClick={() => {
               setSubmitted(false);
               setService("");
-              setDentist("");
+              setDentistId("");
               setDate(undefined);
               setTime("");
             }}
@@ -121,7 +161,7 @@ export default function PatientBook() {
             <Label>Select Service</Label>
             <Select
               value={service}
-              onValueChange={(v) => { setService(v); setDentist(""); setDate(undefined); setTime(""); }}
+              onValueChange={(v) => { setService(v); setDentistId(""); setDate(undefined); setTime(""); }}
             >
               <SelectTrigger><SelectValue placeholder="Choose a service" /></SelectTrigger>
               <SelectContent>{services.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
@@ -132,27 +172,27 @@ export default function PatientBook() {
           <div>
             <Label className="font-semibold">Select Dentist</Label>
             <Select
-              value={dentist}
+              value={dentistId}
               disabled={!service || loadingDentists}
-              onValueChange={(val) => { setDentist(val); setDate(undefined); setTime(""); }}
+              onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
             >
               <SelectTrigger>
                 <SelectValue placeholder={!service ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
               </SelectTrigger>
               <SelectContent>
-                {dentists.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                {dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
             {!loadingDentists && dentists.length === 0 && (
               <p className="text-xs text-destructive mt-1">No dentists are available for booking right now.</p>
             )}
-            {schedule && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Working days: {schedule.workingDays.map(d => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]).join(", ")} •{" "}
-                {toLabel(toMinutes(schedule.start))}–{toLabel(toMinutes(schedule.end))} • {schedule.duration} min per visit
-              </p>
+            {loadingSchedule && (
+              <p className="text-xs text-muted-foreground mt-1">Loading schedule...</p>
             )}
-            {dentist && !schedule && (
+            {!loadingSchedule && schedule && schedule.days.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">Working hours: {scheduleSummary}</p>
+            )}
+            {!loadingSchedule && dentistId && schedule && schedule.days.length === 0 && (
               <p className="text-xs text-destructive mt-1">This dentist has no working schedule configured yet.</p>
             )}
           </div>
@@ -162,10 +202,10 @@ export default function PatientBook() {
             <div>
               <Label>Appointment Date</Label>
               <Popover>
-                <PopoverTrigger asChild disabled={!dentist}>
-                  <Button variant="outline" disabled={!dentist} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <PopoverTrigger asChild disabled={!dentistId}>
+                  <Button variant="outline" disabled={!dentistId} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>{dentist ? "Pick a date" : "Select a dentist first"}</span>}
+                    {date ? format(date, "PPP") : <span>{dentistId ? "Pick a date" : "Select a dentist first"}</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -180,8 +220,7 @@ export default function PatientBook() {
                       today.setHours(0, 0, 0, 0);
                       if (d < today) return true;
                       if (!schedule) return true;
-                      if (schedule.leave.includes(toKey(d))) return true;
-                      return !schedule.workingDays.includes(d.getDay());
+                      return !isDentistAvailableOn(schedule, d);
                     }}
                   />
                 </PopoverContent>
@@ -191,20 +230,20 @@ export default function PatientBook() {
             {/* Step 4: Time slot */}
             <div>
               <Label className="font-semibold">Available Time Slot</Label>
-              <Select value={time} onValueChange={setTime} disabled={!dentist || !date || slots.length === 0}>
+              <Select value={time} onValueChange={setTime} disabled={!dentistId || !date || loadingSlots || slots.length === 0}>
                 <SelectTrigger>
-                  <SelectValue placeholder={!dentist || !date ? "Select dentist and date first" : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
+                  <SelectValue placeholder={!dentistId || !date ? "Select dentist and date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
                 </SelectTrigger>
                 <SelectContent>
                   {slots.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {dentist && date && slots.length === 0 && (
+              {dentistId && date && !loadingSlots && slots.length === 0 && (
                 <p className="text-sm text-destructive mt-2">
                   No available appointment slots for the selected date. Please choose another date.
                 </p>
               )}
-              {dentist && date && slots.length > 0 && (
+              {dentistId && date && !loadingSlots && slots.length > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   {slots.length} slot{slots.length > 1 ? "s" : ""} available for {dentist}
                 </p>
@@ -218,7 +257,7 @@ export default function PatientBook() {
 
           <Button
             className="w-full gradient-primary text-primary-foreground"
-            disabled={!service || !dentist || !date || !time || submitting}
+            disabled={!service || !dentistId || !date || !time || submitting}
             onClick={handleSubmit}
           >
             {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarPlus className="w-4 h-4 mr-2" />}

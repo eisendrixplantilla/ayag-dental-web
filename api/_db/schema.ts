@@ -134,9 +134,36 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   instructions TEXT
 );
 
+-- DENTIST_SCHEDULES / DENTIST_UNAVAILABLE: one row per working day-of-week per dentist,
+-- plus a separate list of specific dates the dentist is unavailable. Already created live via
+-- the one-shot migrate_v2 in this exact shape; declared here (IF NOT EXISTS) so a fresh
+-- database bootstraps the same tables via action=migrate.
+CREATE TABLE IF NOT EXISTS dentist_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day_of_week INTEGER NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  lunch_start TEXT,
+  lunch_end TEXT,
+  duration_minutes INTEGER NOT NULL DEFAULT 30,
+  max_patient INTEGER NOT NULL DEFAULT 20,
+  UNIQUE (dentist_id, day_of_week)
+);
+
+CREATE TABLE IF NOT EXISTS dentist_unavailable (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  unavailable_date DATE NOT NULL,
+  reason TEXT,
+  remarks TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_dentist ON appointments(dentist_id);
 CREATE INDEX IF NOT EXISTS idx_dental_records_appointment ON dental_records(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_treatments_record ON treatments(record_id);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_record ON prescriptions(record_id);
+CREATE INDEX IF NOT EXISTS idx_dentist_schedules_dentist ON dentist_schedules(dentist_id);
+CREATE INDEX IF NOT EXISTS idx_dentist_unavailable_dentist ON dentist_unavailable(dentist_id);
 `;

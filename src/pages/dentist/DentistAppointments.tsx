@@ -22,8 +22,9 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2 } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
-import { dentistSchedules, generateSlots, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
+import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -54,10 +55,11 @@ export default function DentistAppointments() {
 
   useEffect(load, []);
 
-  const schedule = useMemo(
-    () => dentistSchedules.find(s => s.id === user?.id) ?? dentistSchedules.find(s => s.name === user?.name),
-    [user],
-  );
+  const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    getDentistSchedule(user.id).then(setSchedule).catch(() => {});
+  }, [user]);
 
   const mine = useMemo(
     () => appointments
@@ -84,11 +86,7 @@ export default function DentistAppointments() {
     const bookedForDate = mine
       .filter(a => a.date === rsDate && (a.status === "confirmed" || a.status === "pending" || a.status === "rescheduled"))
       .map(a => a.time);
-    const merged = {
-      ...schedule,
-      booked: { ...schedule.booked, [rsDate]: [...(schedule.booked[rsDate] ?? []), ...bookedForDate] },
-    };
-    return generateSlots(merged, parseISO(rsDate));
+    return generateAvailableSlots(schedule, parseISO(rsDate), bookedForDate);
   }, [rsDate, schedule, mine]);
 
   const openResched = (apt: Appointment) => {

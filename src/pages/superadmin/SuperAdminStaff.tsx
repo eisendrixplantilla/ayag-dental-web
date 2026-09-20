@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,14 +6,33 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Archive, Edit, Search, Eye, Loader2 } from "lucide-react";
+import { Plus, Archive, Edit, Search, Eye, Loader2, CalendarClock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { getStaff, updateStaff, archiveStaff, type StaffMember } from "@/lib/api/staff";
+import {
+  getStaff, updateStaff, archiveStaff, type StaffMember,
+  getDentistSchedule, saveDentistScheduleDays, addDentistUnavailable, removeDentistUnavailable,
+  generateAvailableSlots, DAY_NAMES, type ScheduleDay, type UnavailableDate,
+} from "@/lib/api/staff";
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
+
+interface DayConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
+  lunchStart: string;
+  lunchEnd: string;
+  duration: number;
+  maxPatients: number;
+}
+
+const emptyDayConfig = (): DayConfig => ({
+  enabled: false, start: "09:00", end: "17:00", lunchStart: "12:00", lunchEnd: "13:00", duration: 30, maxPatients: 20,
+});
 
 export default function SuperAdminStaff() {
   const navigate = useNavigate();
@@ -28,6 +47,14 @@ export default function SuperAdminStaff() {
   const [editForm, setEditForm] = useState({ name: "", email: "", contact: "", password: "", status: "active" });
   const [archiving, setArchiving] = useState<StaffMember | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [scheduleFor, setScheduleFor] = useState<StaffMember | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [dayConfigs, setDayConfigs] = useState<DayConfig[]>(Array.from({ length: 7 }, emptyDayConfig));
+  const [unavailableList, setUnavailableList] = useState<UnavailableDate[]>([]);
+  const [leaveDate, setLeaveDate] = useState("");
+  const [leaveReason, setLeaveReason] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -89,6 +116,105 @@ export default function SuperAdminStaff() {
       toast.error(err instanceof Error ? err.message : "Failed to archive staff account");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openSchedule = (s: StaffMember) => {
+    setScheduleFor(s);
+    setScheduleLoading(true);
+    setLeaveDate("");
+    setLeaveReason("");
+    getDentistSchedule(s.id)
+      .then((data) => {
+        const configs = Array.from({ length: 7 }, emptyDayConfig);
+        for (const d of data.days) {
+          configs[d.dayOfWeek] = {
+            enabled: true,
+            start: d.start,
+            end: d.end,
+            lunchStart: d.lunchStart ?? "",
+            lunchEnd: d.lunchEnd ?? "",
+            duration: d.duration,
+            maxPatients: d.maxPatients,
+          };
+        }
+        setDayConfigs(configs);
+        setUnavailableList(data.unavailable);
+      })
+      .catch(() => toast.error("Failed to load schedule"))
+      .finally(() => setScheduleLoading(false));
+  };
+
+  const updateDay = (i: number, patch: Partial<DayConfig>) => {
+    setDayConfigs((cfgs) => cfgs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  };
+
+  const previewDay = useMemo(() => dayConfigs.findIndex((c) => c.enabled), [dayConfigs]);
+  const previewSlots = useMemo(() => {
+    if (previewDay === -1) return [];
+    const cfg = dayConfigs[previewDay];
+    const days: ScheduleDay[] = [{
+      dayOfWeek: previewDay, start: cfg.start, end: cfg.end,
+      lunchStart: cfg.lunchStart || null, lunchEnd: cfg.lunchEnd || null,
+      duration: cfg.duration, maxPatients: cfg.maxPatients,
+    }];
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      if (d.getDay() === previewDay) {
+        return generateAvailableSlots({ days, unavailable: [] }, d, []);
+      }
+    }
+    return [];
+  }, [dayConfigs, previewDay]);
+
+  const saveSchedule = async () => {
+    if (!scheduleFor) return;
+    const enabledDays = dayConfigs
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => c.enabled);
+    if (enabledDays.length === 0) return toast.error("Select at least one working day");
+    for (const { c } of enabledDays) {
+      if (c.duration < 10) return toast.error("Appointment duration must be at least 10 minutes");
+      if (c.maxPatients < 1) return toast.error("Maximum patients per day must be at least 1");
+    }
+    const days: ScheduleDay[] = enabledDays.map(({ c, i }) => ({
+      dayOfWeek: i, start: c.start, end: c.end,
+      lunchStart: c.lunchStart || null, lunchEnd: c.lunchEnd || null,
+      duration: c.duration, maxPatients: c.maxPatients,
+    }));
+    setSavingSchedule(true);
+    try {
+      await saveDentistScheduleDays(scheduleFor.id, days);
+      toast.success("Schedule saved — appointment slots regenerated system-wide");
+      setScheduleFor(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save schedule");
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const addLeave = async () => {
+    if (!scheduleFor) return;
+    if (!leaveDate) return toast.error("Select a date first");
+    try {
+      const entry = await addDentistUnavailable(scheduleFor.id, { date: leaveDate, reason: leaveReason || undefined });
+      setUnavailableList((list) => [...list, entry].sort((a, b) => a.date.localeCompare(b.date)));
+      setLeaveDate("");
+      toast.success("Unavailable date added — dentist is now excluded from booking that day");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add unavailable date");
+    }
+  };
+
+  const removeLeave = async (id: string) => {
+    try {
+      await removeDentistUnavailable(id);
+      setUnavailableList((list) => list.filter((u) => u.id !== id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove unavailable date");
     }
   };
 
@@ -170,6 +296,11 @@ export default function SuperAdminStaff() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(s)}>
                         <Edit className="w-4 h-4" />
                       </Button>
+                      {s.role === "dentist" && (
+                        <Button variant="ghost" size="sm" className="h-8 text-primary" title="Schedule" onClick={() => openSchedule(s)}>
+                          <CalendarClock className="w-4 h-4 mr-1" />Schedule
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-warning" title="Archive" onClick={() => setArchiving(s)}>
                         <Archive className="w-4 h-4" />
                       </Button>
@@ -253,6 +384,97 @@ export default function SuperAdminStaff() {
               disabled={saving}
             >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dentist schedule configuration */}
+      <Dialog open={!!scheduleFor} onOpenChange={o => !o && setScheduleFor(null)}>
+        <DialogContent className="max-w-3xl bg-background max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Dentist Schedule Configuration</DialogTitle>
+            <DialogDescription>{scheduleFor?.name} — appointment slots are generated automatically from this setup.</DialogDescription>
+          </DialogHeader>
+
+          {scheduleLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : (
+          <div className="space-y-5">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Day</TableHead>
+                    <TableHead>Start</TableHead>
+                    <TableHead>End</TableHead>
+                    <TableHead>Lunch Start</TableHead>
+                    <TableHead>Lunch End</TableHead>
+                    <TableHead>Duration (min)</TableHead>
+                    <TableHead>Max/Day</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dayConfigs.map((c, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <Checkbox checked={c.enabled} onCheckedChange={(checked) => updateDay(i, { enabled: !!checked })} />
+                          {DAY_NAMES[i].slice(0, 3)}
+                        </label>
+                      </TableCell>
+                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.start} onChange={e => updateDay(i, { start: e.target.value })} /></TableCell>
+                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.end} onChange={e => updateDay(i, { end: e.target.value })} /></TableCell>
+                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.lunchStart} onChange={e => updateDay(i, { lunchStart: e.target.value })} /></TableCell>
+                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.lunchEnd} onChange={e => updateDay(i, { lunchEnd: e.target.value })} /></TableCell>
+                      <TableCell><Input type="number" min={10} step={5} className="w-20" disabled={!c.enabled} value={c.duration} onChange={e => updateDay(i, { duration: Number(e.target.value) })} /></TableCell>
+                      <TableCell><Input type="number" min={1} className="w-20" disabled={!c.enabled} value={c.maxPatients} onChange={e => updateDay(i, { maxPatients: Number(e.target.value) })} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="rounded-lg border p-3 bg-muted/30">
+              <p className="text-sm font-medium mb-2">Automatically generated slots (preview of {previewDay >= 0 ? DAY_NAMES[previewDay] : "—"})</p>
+              {previewSlots.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {previewSlots.map(s => (
+                    <Badge key={s.value} variant="outline" className="bg-background">{s.label}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No slots can be generated with the current setup.</p>
+              )}
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Unavailable Dates</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} className="sm:w-48" />
+                <Input value={leaveReason} onChange={e => setLeaveReason(e.target.value)} placeholder="Reason (optional)" className="sm:w-52" />
+                <Button variant="outline" onClick={addLeave}>Add Date</Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {unavailableList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No unavailable dates.</p>
+                ) : unavailableList.map(u => (
+                  <div key={u.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                    <span>{u.date}{u.reason ? <Badge variant="outline" className="ml-2 bg-secondary text-secondary-foreground">{u.reason}</Badge> : null}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeLeave(u.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleFor(null)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={saveSchedule} disabled={savingSchedule || scheduleLoading}>
+              {savingSchedule && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Schedule
             </Button>
           </DialogFooter>
         </DialogContent>
