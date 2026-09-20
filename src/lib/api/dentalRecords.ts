@@ -34,6 +34,8 @@ export interface Service {
   id: string;
   name: string;
   description: string | null;
+  duration: number | null;
+  price: number | null;
 }
 
 export interface TreatmentInput {
@@ -82,6 +84,14 @@ export async function getDentalRecord(id: string): Promise<DentalRecord> {
 export async function getServices(): Promise<Service[]> {
   const data = await api<{ services: Service[] }>("/dental-records?services=true");
   return data.services;
+}
+
+export async function updateServicePrice(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
+  const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return data.service;
 }
 
 export async function createDentalRecord(input: DentalRecordInput): Promise<DentalRecord> {

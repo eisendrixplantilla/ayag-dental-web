@@ -75,12 +75,25 @@ CREATE TABLE IF NOT EXISTS services (
 );
 ALTER TABLE services ADD COLUMN IF NOT EXISTS service_name TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS duration INTEGER;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);
 
 CREATE TABLE IF NOT EXISTS clinic_hours (
   day TEXT PRIMARY KEY,
   open_time TEXT NOT NULL,
   close_time TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- CLINIC_INFO: singleton row (id always 1) for clinic name/contact/address shown in Settings.
+CREATE TABLE IF NOT EXISTS clinic_info (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  name TEXT NOT NULL DEFAULT 'Ayag Dental Clinic',
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (id = 1)
 );
 
 CREATE TABLE IF NOT EXISTS appointments (

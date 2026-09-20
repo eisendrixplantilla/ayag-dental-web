@@ -47,6 +47,84 @@ async function seed() {
   return created;
 }
 
+const DEFAULT_CLINIC_HOURS = [
+  { day: "Monday", open: "08:00", close: "17:00", enabled: true },
+  { day: "Tuesday", open: "08:00", close: "17:00", enabled: true },
+  { day: "Wednesday", open: "08:00", close: "17:00", enabled: true },
+  { day: "Thursday", open: "08:00", close: "17:00", enabled: true },
+  { day: "Friday", open: "08:00", close: "17:00", enabled: true },
+  { day: "Saturday", open: "09:00", close: "14:00", enabled: true },
+  { day: "Sunday", open: "00:00", close: "00:00", enabled: false },
+];
+
+const DEFAULT_SERVICES = [
+  { name: "Orthodontics (Braces)", duration: 60, price: 25000 },
+  { name: "EXO (Bunot)", duration: 45, price: 3000 },
+  { name: "Restoration", duration: 30, price: 2500 },
+  { name: "Oral", duration: 30, price: 1500 },
+  { name: "Venners", duration: 60, price: 15000 },
+  { name: "Denture (Pustiso)", duration: 60, price: 12000 },
+  { name: "Implant", duration: 90, price: 35000 },
+  { name: "Surgery", duration: 90, price: 20000 },
+  { name: "TMJ", duration: 45, price: 5000 },
+  { name: "Root Canal", duration: 90, price: 8000 },
+  { name: "Teeth Whitening", duration: 60, price: 5000 },
+  { name: "Fixed Bridge", duration: 60, price: 18000 },
+];
+
+async function seedSettings() {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const client = await pool.connect();
+  const steps: string[] = [];
+  try {
+    await client.query("BEGIN");
+
+    await client.query(SCHEMA_SQL);
+    steps.push("additive schema ensured (clinic_hours, clinic_info, services.duration/price)");
+
+    for (const h of DEFAULT_CLINIC_HOURS) {
+      await client.query(
+        `INSERT INTO clinic_hours (day, open_time, close_time, enabled) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (day) DO NOTHING`,
+        [h.day, h.open, h.close, h.enabled],
+      );
+    }
+    steps.push("seeded default clinic hours");
+
+    await client.query(
+      `INSERT INTO clinic_info (id, name, phone, email, address) VALUES (1,$1,$2,$3,$4)
+       ON CONFLICT (id) DO NOTHING`,
+      ["Ayag Dental Clinic", "(02) 8123-4567", "info@ayagdental.com", "123 Health St, Manila"],
+    );
+    steps.push("seeded default clinic info");
+
+    let seededServices = 0;
+    for (const s of DEFAULT_SERVICES) {
+      const existing = await client.query(`SELECT id, price, duration FROM services WHERE service_name = $1`, [s.name]);
+      if (existing.rows.length === 0) {
+        await client.query(`INSERT INTO services (service_name, duration, price) VALUES ($1,$2,$3)`, [s.name, s.duration, s.price]);
+        seededServices++;
+      } else if (existing.rows[0].price == null || existing.rows[0].duration == null) {
+        await client.query(
+          `UPDATE services SET duration = COALESCE(duration, $2), price = COALESCE(price, $3) WHERE id = $1`,
+          [existing.rows[0].id, s.duration, s.price],
+        );
+        seededServices++;
+      }
+    }
+    steps.push(`ensured pricing for ${seededServices} of ${DEFAULT_SERVICES.length} canonical service(s)`);
+
+    await client.query("COMMIT");
+    return steps;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
 async function migrateV2() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const client = await pool.connect();
@@ -262,7 +340,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const steps = await migrateV2();
       return res.status(200).json({ ok: true, steps });
     }
-    return res.status(400).json({ error: "Missing or invalid action (expected 'migrate', 'migrate_v2' or 'seed')" });
+    if (action === "seed_settings") {
+      const steps = await seedSettings();
+      return res.status(200).json({ ok: true, steps });
+    }
+    return res.status(400).json({ error: "Missing or invalid action (expected 'migrate', 'migrate_v2', 'seed_settings' or 'seed')" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

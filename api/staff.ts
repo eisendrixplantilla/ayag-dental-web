@@ -83,6 +83,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (req.query.clinicHours === "true") {
+    if (!requireSuperAdmin(req, res)) return;
+
+    if (req.method === "GET") {
+      const rows = await sql`
+        SELECT day, open_time, close_time, enabled FROM clinic_hours
+        ORDER BY CASE day
+          WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4
+          WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 END
+      `;
+      return res.status(200).json({
+        hours: rows.map((r) => ({ day: r.day, open: r.open_time, close: r.close_time, enabled: r.enabled })),
+      });
+    }
+
+    if (req.method === "PUT") {
+      const { hours } = req.body ?? {};
+      if (!Array.isArray(hours)) return res.status(400).json({ error: "Missing hours" });
+      for (const h of hours) {
+        await sql`
+          INSERT INTO clinic_hours (day, open_time, close_time, enabled)
+          VALUES (${h.day}, ${h.open ?? "00:00"}, ${h.close ?? "00:00"}, ${h.enabled ?? false})
+          ON CONFLICT (day) DO UPDATE SET open_time = EXCLUDED.open_time, close_time = EXCLUDED.close_time, enabled = EXCLUDED.enabled
+        `;
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (req.query.clinicInfo === "true") {
+    if (!requireSuperAdmin(req, res)) return;
+
+    if (req.method === "GET") {
+      const rows = await sql`SELECT name, phone, email, address FROM clinic_info WHERE id = 1`;
+      return res.status(200).json({ info: rows[0] ?? null });
+    }
+
+    if (req.method === "PUT") {
+      const { name, phone, email, address } = req.body ?? {};
+      await sql`
+        UPDATE clinic_info SET
+          name = COALESCE(${name ?? null}, name),
+          phone = COALESCE(${phone ?? null}, phone),
+          email = COALESCE(${email ?? null}, email),
+          address = COALESCE(${address ?? null}, address),
+          updated_at = now()
+        WHERE id = 1
+      `;
+      const rows = await sql`SELECT name, phone, email, address FROM clinic_info WHERE id = 1`;
+      return res.status(200).json({ info: rows[0] });
+    }
+
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   if (req.query.unavailable === "true") {
     if (!requireSuperAdmin(req, res)) return;
 

@@ -86,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     if (req.query.services === "true") {
-      const rows = await sql`SELECT id, service_name AS name, description FROM services ORDER BY service_name`;
+      const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services ORDER BY service_name`;
       return res.status(200).json({ services: rows });
     }
 
@@ -119,6 +119,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const recordRows = rows as any[];
     const { treatments, prescriptions } = await loadTreatmentsAndPrescriptions(recordRows.map((r) => r.id));
     return res.status(200).json({ records: recordRows.map((r) => mapRecord(r, treatments, prescriptions)) });
+  }
+
+  if (req.method === "PATCH" && req.query.services === "true") {
+    if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+    if (!id) return res.status(400).json({ error: "Missing id" });
+    const { price, duration } = req.body ?? {};
+    await sql`UPDATE services SET price = COALESCE(${price ?? null}, price), duration = COALESCE(${duration ?? null}, duration) WHERE id = ${id}`;
+    const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services WHERE id = ${id}`;
+    if (!rows[0]) return res.status(404).json({ error: "Service not found" });
+    return res.status(200).json({ service: rows[0] });
   }
 
   if (session.role === "patient") return res.status(403).json({ error: "Forbidden" });
