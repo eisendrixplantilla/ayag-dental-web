@@ -1,5 +1,15 @@
 import { api } from "@/contexts/AuthContext";
 
+export interface DentistDirectoryEntry {
+  id: string;
+  name: string;
+}
+
+export async function getDentistDirectory(): Promise<DentistDirectoryEntry[]> {
+  const data = await api<{ dentists: DentistDirectoryEntry[] }>("/staff?directory=true");
+  return data.dentists;
+}
+
 export interface StaffMember {
   id: string;
   employeeId: string | null;

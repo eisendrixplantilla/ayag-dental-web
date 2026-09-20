@@ -27,6 +27,12 @@ function requireSuperAdmin(req: VercelRequest, res: VercelResponse) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === "GET" && req.query.directory === "true") {
+    if (!getSessionFromRequest(req)) return res.status(401).json({ error: "Unauthorized" });
+    const rows = await sql`SELECT id, first_name, middle_name, last_name FROM users WHERE role = 'dentist' AND status = 'active' ORDER BY last_name`;
+    return res.status(200).json({ dentists: rows.map((r) => ({ id: r.id, name: joinName(r.first_name, r.middle_name, r.last_name) })) });
+  }
+
   if (!requireSuperAdmin(req, res)) return;
 
   const id = typeof req.query.id === "string" ? req.query.id : undefined;

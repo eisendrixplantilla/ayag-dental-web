@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { dentistSchedules, generateSlots, toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
+import { getDentistDirectory, type DentistDirectoryEntry } from "@/lib/api/staff";
 
 const services = [
   "Orthodontics (Braces)",
@@ -38,6 +39,15 @@ export default function PatientBook() {
   const [dentist, setDentist] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
+  const [dentists, setDentists] = useState<DentistDirectoryEntry[]>([]);
+  const [loadingDentists, setLoadingDentists] = useState(true);
+
+  useEffect(() => {
+    getDentistDirectory()
+      .then(setDentists)
+      .catch(() => toast.error("Failed to load dentists"))
+      .finally(() => setLoadingDentists(false));
+  }, []);
 
   const schedule = dentistSchedules.find((d) => d.name === dentist);
   const slots = useMemo(() => generateSlots(schedule, date), [schedule, date]);
@@ -123,21 +133,27 @@ export default function PatientBook() {
             <Label className="font-semibold">Select Dentist</Label>
             <Select
               value={dentist}
-              disabled={!service}
+              disabled={!service || loadingDentists}
               onValueChange={(val) => { setDentist(val); setDate(undefined); setTime(""); }}
             >
               <SelectTrigger>
-                <SelectValue placeholder={service ? "Choose a dentist" : "Select a service first"} />
+                <SelectValue placeholder={!service ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
               </SelectTrigger>
               <SelectContent>
-                {dentistSchedules.map(d => <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>)}
+                {dentists.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {!loadingDentists && dentists.length === 0 && (
+              <p className="text-xs text-destructive mt-1">No dentists are available for booking right now.</p>
+            )}
             {schedule && (
               <p className="text-xs text-muted-foreground mt-1">
                 Working days: {schedule.workingDays.map(d => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]).join(", ")} •{" "}
                 {toLabel(toMinutes(schedule.start))}–{toLabel(toMinutes(schedule.end))} • {schedule.duration} min per visit
               </p>
+            )}
+            {dentist && !schedule && (
+              <p className="text-xs text-destructive mt-1">This dentist has no working schedule configured yet.</p>
             )}
           </div>
 
