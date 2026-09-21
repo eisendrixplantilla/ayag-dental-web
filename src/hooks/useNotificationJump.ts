@@ -2,6 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const FLASH_MS = 3000;
+/** How long to wait before double-checking the target actually ended up on screen. */
+const SETTLE_MS = 450;
+
+function isOnScreen(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  return r.bottom > 0 && r.top < window.innerHeight;
+}
 
 /**
  * Consumes the `highlightId` the notifications bell passes through router state:
@@ -19,7 +26,10 @@ export function useNotificationJump(
   const location = useLocation();
   const navigate = useNavigate();
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  // A fresh object per jump, not just the key: jumping to the row that's already lit
+  // must restart the flash, and setting an identical string would be a no-op.
+  const [flash, setFlash] = useState<{ key: string } | null>(null);
+  const highlightedKey = flash?.key ?? null;
   const rows = useRef(new Map<string, HTMLElement>());
 
   // Kept in a ref so callers don't have to memoise it to avoid re-firing the effect.
@@ -53,16 +63,25 @@ export function useNotificationJump(
     if (!key) return;
     const el = rows.current.get(key);
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
     setPendingId(null);
-    setHighlightedKey(key);
+    setFlash({ key });
   });
 
+  // Scroll and flash-timeout both hang off `flash`, so every jump gets its own run.
   useEffect(() => {
-    if (!highlightedKey) return;
-    const timer = setTimeout(() => setHighlightedKey(null), FLASH_MS);
-    return () => clearTimeout(timer);
-  }, [highlightedKey]);
+    if (!flash) return;
+    const el = rows.current.get(flash.key);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Something can still move the page right after we scroll — a menu closing and
+    // refocusing its button, or content above the row finishing loading. Look again
+    // once that's settled and correct it rather than leave the row off screen.
+    const settle = setTimeout(() => {
+      const now = rows.current.get(flash.key);
+      if (now && !isOnScreen(now)) now.scrollIntoView({ block: "center" });
+    }, SETTLE_MS);
+    const clear = setTimeout(() => setFlash(null), FLASH_MS);
+    return () => { clearTimeout(settle); clearTimeout(clear); };
+  }, [flash]);
 
   // `pendingId` is exposed so a page can get the target on screen before it can be
   // scrolled to — switching to the tab that holds it, for instance.

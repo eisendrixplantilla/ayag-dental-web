@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, cleanup, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/lib/api/appointments";
@@ -167,6 +167,83 @@ describe("admin notifications", () => {
       expect(row.className).toContain("ring-primary/50");
     });
     await waitFor(() => expect(sidebarCount("/admin/online-appointments")).toBe("1"));
+  });
+
+  const walkInRow = () => screen.getAllByText("Juan Dela Cruz").map(el => el.closest("tr")).find(Boolean)!;
+  const clickNotification = async (text: RegExp) => {
+    openBell();
+    fireEvent.click(await screen.findByText(text));
+  };
+
+  it("re-clicking a notification while already on that page jumps and highlights again", async () => {
+    renderAdminApp();
+    await waitFor(() => expect(bell()).toHaveAccessibleName("Notifications (3 unread)"));
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+
+    await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+    await waitFor(() => expect(walkInRow().className).toContain("ring-primary/50"));
+    const afterFirst = scroll.mock.calls.length;
+
+    // Same notification again, now that it's read and we're already on the page.
+    await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+    await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(afterFirst));
+    expect(walkInRow().className).toContain("ring-primary/50");
+    expect(screen.getByRole("heading", { level: 1, name: "Walk-in Appointments" })).toBeInTheDocument();
+  });
+
+  it("re-clicking the lit row restarts its highlight instead of letting it expire early", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderAdminApp();
+      await waitFor(() => expect(bell()).toHaveAccessibleName("Notifications (3 unread)"));
+      await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+      await waitFor(() => expect(walkInRow().className).toContain("ring-primary/50"));
+
+      // 2.5s into the 3s flash, click it again...
+      await act(() => vi.advanceTimersByTimeAsync(2500));
+      await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+      // ...and 1s later it must still be lit: a fresh 3s, not the old flash's last 0.5s.
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(walkInRow().className).toContain("ring-primary/50");
+
+      // It does still time out eventually.
+      await act(() => vi.advanceTimersByTimeAsync(2500));
+      expect(walkInRow().className).not.toContain("ring-primary/50");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("jumping between two notifications on different pages lands on each in turn", async () => {
+    renderAdminApp();
+    await waitFor(() => expect(bell()).toHaveAccessibleName("Notifications (3 unread)"));
+
+    await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+    await waitFor(() => expect(walkInRow().className).toContain("ring-primary/50"));
+
+    await clickNotification(/New booking request from Maria Online/);
+    expect(await screen.findByRole("heading", { level: 1, name: "Appointments" })).toBeInTheDocument();
+    await waitFor(() => {
+      const row = screen.getAllByText("Maria Online").map(el => el.closest("tr")).find(Boolean)!;
+      expect(row.className).toContain("ring-primary/50");
+    });
+
+    await clickNotification(/Walk-in appointment added for Juan Dela Cruz/);
+    expect(await screen.findByRole("heading", { level: 1, name: "Walk-in Appointments" })).toBeInTheDocument();
+    await waitFor(() => expect(walkInRow().className).toContain("ring-primary/50"));
+  });
+
+  it("a notification that's already marked as read still jumps to its row", async () => {
+    renderAdminApp();
+    await waitFor(() => expect(bell()).toHaveAccessibleName("Notifications (3 unread)"));
+    openBell();
+    fireEvent.click(await screen.findByRole("button", { name: /Mark all as read/ }));
+    await waitFor(() => expect(bell()).toHaveAccessibleName("Notifications"));
+
+    fireEvent.click(await screen.findByText(/Walk-in appointment added for Juan Dela Cruz/));
+    expect(await screen.findByRole("heading", { level: 1, name: "Walk-in Appointments" })).toBeInTheDocument();
+    await waitFor(() => expect(walkInRow().className).toContain("ring-primary/50"));
+    expect(bell()).toHaveAccessibleName("Notifications"); // stays read, doesn't flip back
   });
 
   it("clears the sidebar counts and the bell badge on Mark all as read", async () => {

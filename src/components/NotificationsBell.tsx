@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,15 +13,20 @@ export function NotificationsBell() {
   const navigate = useNavigate();
   const { items, unreadCount, isRead, markRead, markAllRead, refresh } = useNotifications();
   const [open, setOpen] = useState(false);
+  // Set while closing the menu because a notification was picked, see onCloseAutoFocus.
+  const jumpingRef = useRef(false);
 
   const goToSource = (n: NotificationItem) => {
     markRead(n);
+    jumpingRef.current = true;
     setOpen(false);
     navigate(n.route, { state: { highlightId: n.id } });
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (next) refresh(); }}>
+    // Non-modal: a modal menu locks page scrolling until its close animation ends,
+    // which can swallow the scroll to the row being jumped to.
+    <DropdownMenu modal={false} open={open} onOpenChange={(next) => { setOpen(next); if (next) refresh(); }}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"}>
           <Bell className="w-5 h-5" />
@@ -32,7 +37,19 @@ export function NotificationsBell() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96 max-h-[28rem] overflow-y-auto bg-popover">
+      <DropdownMenuContent
+        align="end"
+        className="w-96 max-h-[28rem] overflow-y-auto bg-popover"
+        onCloseAutoFocus={(e) => {
+          // On close the menu hands focus back to the bell, and focusing an element
+          // scrolls it into view — dragging the page back to the top and undoing the
+          // jump to the highlighted row. Skip that only when we're navigating away.
+          if (jumpingRef.current) {
+            e.preventDefault();
+            jumpingRef.current = false;
+          }
+        }}
+      >
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <span className="text-sm font-semibold">Notifications</span>
           <Button
