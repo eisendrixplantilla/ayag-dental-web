@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,9 +43,12 @@ const emptyRecord = {
 
 export default function DentistAppointments() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -70,6 +74,20 @@ export default function DentistAppointments() {
   );
 
   const [details, setDetails] = useState<Appointment | null>(null);
+
+  // Arrived here from a notification bell click — open that appointment's details once loaded.
+  useEffect(() => {
+    const state = location.state as { highlightId?: string } | null;
+    if (state?.highlightId) setHighlightId(state.highlightId);
+  }, [location.state]);
+
+  useEffect(() => {
+    if (!highlightId || appointments.length === 0) return;
+    const apt = appointments.find(a => a.id === highlightId);
+    if (apt) setDetails(apt);
+    setHighlightId(null);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [highlightId, appointments]);
   const [consult, setConsult] = useState<Appointment | null>(null);
   const [resched, setResched] = useState<Appointment | null>(null);
   const [cancelApt, setCancelApt] = useState<Appointment | null>(null);

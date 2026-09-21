@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,9 @@ function describe(apt: Appointment): { title: string; icon: LucideIcon; colorCla
 
 export function NotificationsBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [open, setOpen] = useState(false);
 
   const refresh = () => {
     if (user?.role !== "dentist") return;
@@ -75,8 +78,13 @@ export function NotificationsBell() {
 
   if (user?.role !== "dentist") return null;
 
+  const goToAppointment = (id: string) => {
+    setOpen(false);
+    navigate("/dentist/appointments", { state: { highlightId: id } });
+  };
+
   return (
-    <DropdownMenu onOpenChange={(open) => open && refresh()}>
+    <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (next) refresh(); }}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
           <Bell className="w-5 h-5" />
@@ -94,13 +102,18 @@ export function NotificationsBell() {
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>
         ) : (
           items.map(n => (
-            <div key={n.id} className="flex items-start gap-2 px-2 py-2 text-sm">
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => goToAppointment(n.id)}
+              className="w-full flex items-start gap-2 px-2 py-2 text-sm text-left rounded-sm hover:bg-accent"
+            >
               <n.icon className={`w-4 h-4 mt-0.5 shrink-0 ${n.colorClass}`} />
               <div className="min-w-0">
                 <p className="text-foreground leading-snug">{n.title}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{formatManilaDateTime(n.time)}</p>
               </div>
-            </div>
+            </button>
           ))
         )}
       </DropdownMenuContent>
