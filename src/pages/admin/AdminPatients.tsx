@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Plus, Search, Eye, Edit, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 // A walk-in booked for someone with no account has no patients row behind it, so it
 // can only be shown read-only: there's nothing to open, edit or archive.
@@ -23,7 +25,20 @@ interface PatientRow {
   phone: string;
   email: string;
   patient: Patient | null;
+  /** Has at least one walk-in visit — true for every guest, and for account holders booked at the desk. */
+  hasWalkIn: boolean;
 }
+
+type RecordFilter = "all" | "account" | "no-account" | "walk-in";
+
+// The categories overlap on purpose: an account holder booked at the desk is both
+// "Has account" and "Walk-in", while every guest is both "No account" and "Walk-in".
+const FILTERS: { value: RecordFilter; label: string; test: (r: PatientRow) => boolean }[] = [
+  { value: "all", label: "All patients", test: () => true },
+  { value: "account", label: "Has account", test: r => r.patient !== null },
+  { value: "no-account", label: "No account", test: r => r.patient === null },
+  { value: "walk-in", label: "Walk-in", test: r => r.hasWalkIn },
+];
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
@@ -39,6 +54,7 @@ const emptyForm: FormState = { name: "", age: "", phone: "", email: "", address:
 export default function AdminPatients() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [recordFilter, setRecordFilter] = useState<RecordFilter>("all");
   const [showAdd, setShowAdd] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -50,15 +66,18 @@ export default function AdminPatients() {
   const [editForm, setEditForm] = useState<FormState>(emptyForm);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
-  const load = () => {
-    setLoading(true);
+  // `silent` is for background refreshes: no spinner, no error toast.
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     Promise.all([getPatients(), getAppointments()])
       .then(([p, a]) => { setPatients(p); setAppointments(a); })
-      .catch(() => toast.error("Failed to load patients"))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!silent) toast.error("Failed to load patients"); })
+      .finally(() => { if (!silent) setLoading(false); });
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
+  // New walk-ins and sign-ups from elsewhere appear without a manual refresh.
+  useAutoRefresh(() => load(true));
 
   const rows: PatientRow[] = useMemo(() => {
     const accountRows: PatientRow[] = patients.map(p => ({
@@ -68,6 +87,7 @@ export default function AdminPatients() {
       phone: p.phone || "—",
       email: p.email,
       patient: p,
+      hasWalkIn: appointments.some(a => a.patientId === p.id && a.type === "walk-in"),
     }));
 
     // Guest walk-ins, grouped by the name taken at the desk. Fields the clinic never
@@ -85,13 +105,16 @@ export default function AdminPatients() {
       phone: own.find(a => a.contact)?.contact ?? "",
       email: own.find(a => a.email)?.email ?? "",
       patient: null,
+      hasWalkIn: true,
     }));
 
     return [...accountRows, ...guestRows];
   }, [patients, appointments]);
 
+  const activeFilter = FILTERS.find(f => f.value === recordFilter) ?? FILTERS[0];
   const filtered = rows.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase())
+    activeFilter.test(r) &&
+    (r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleFormChange = (field: string, value: string) => {
@@ -252,9 +275,23 @@ export default function AdminPatients() {
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="relative min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative min-w-[200px] max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+            </div>
+            <Select value={recordFilter} onValueChange={v => setRecordFilter(v as RecordFilter)}>
+              <SelectTrigger className="sm:w-52" aria-label="Filter patients">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FILTERS.map(f => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label} ({rows.filter(f.test).length})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
