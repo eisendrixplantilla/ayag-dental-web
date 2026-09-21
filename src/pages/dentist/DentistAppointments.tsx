@@ -149,7 +149,12 @@ export default function DentistAppointments() {
     setSaving(true);
     try {
       await rescheduleAppointment(resched.id, { date: rsDate, time: rsSlot, reason: rsReason, remarks: rsRemarks });
-      toast({ title: "Appointment rescheduled", description: `Email notification sent to ${resched.email} with the new schedule.` });
+      toast({
+        title: "Appointment rescheduled",
+        description: resched.email
+          ? `Email notification sent to ${resched.email} with the new schedule.`
+          : "No email on file for this walk-in, so no notification was sent.",
+      });
       setResched(null);
       load();
     } catch (err) {
@@ -168,7 +173,12 @@ export default function DentistAppointments() {
     setSaving(true);
     try {
       await cancelAppointment(cancelApt.id, cxReason, cxRemarks);
-      toast({ title: "Appointment cancelled", description: `Email notification sent to ${cancelApt.email}.` });
+      toast({
+        title: "Appointment cancelled",
+        description: cancelApt.email
+          ? `Email notification sent to ${cancelApt.email}.`
+          : "No email on file for this walk-in, so no notification was sent.",
+      });
       setCancelApt(null);
       load();
     } catch (err) {

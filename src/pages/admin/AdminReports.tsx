@@ -85,14 +85,30 @@ export default function AdminReports() {
         .filter((a) => a.type === "walk-in" && inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
         .map((a) => [a.patientName, a.dentistName ?? "—", a.date, toLabel(toMinutes(a.time))]);
     } else {
-      rows = patients
+      const accountRows = patients
         .map((p) => {
           const own = appointments.filter((a) => a.patientId === p.id);
           const latest = own.map((a) => a.date).sort().at(-1) ?? "";
-          return { p, total: own.length, latest };
-        })
+          return { label: `${p.name} — ${p.email} · ${p.phone ?? "—"}`, total: own.length, latest };
+        });
+
+      // Walk-ins booked for someone with no account have no patients row to hang off,
+      // so they'd be invisible here. Group those by the name taken at the desk.
+      const guests = new Map<string, Appointment[]>();
+      for (const a of appointments.filter((a) => !a.patientId)) {
+        const list = guests.get(a.patientName) ?? [];
+        list.push(a);
+        guests.set(a.patientName, list);
+      }
+      const guestRows = [...guests.entries()].map(([name, own]) => ({
+        label: `${name} — No account (walk-in)`,
+        total: own.length,
+        latest: own.map((a) => a.date).sort().at(-1) ?? "",
+      }));
+
+      rows = [...accountRows, ...guestRows]
         .filter(({ latest }) => !start && !end ? true : latest && inRange(latest))
-        .map(({ p, total, latest }) => [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(total), latest || "—"]);
+        .map(({ label, total, latest }) => [label, String(total), latest || "—"]);
     }
 
     setReport({

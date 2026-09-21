@@ -192,7 +192,22 @@ export default function AdminAppointments() {
                       onValueChange={(v) => { setPatientName(v); setPatientId(""); }}
                     />
                     <CommandList>
-                      <CommandEmpty>No existing patient found — this will be a guest walk-in.</CommandEmpty>
+                      <CommandEmpty>Type a name to book a walk-in.</CommandEmpty>
+                      {/* Walk-ins are often for people with no account at all, so the typed
+                          name has to be confirmable on its own. forceMount keeps this option
+                          visible even when the search matches no existing patient. */}
+                      {patientName.trim() && !patients.some(p => p.name.trim().toLowerCase() === patientName.trim().toLowerCase()) && (
+                        <CommandGroup heading="No account">
+                          <CommandItem
+                            forceMount
+                            value={`guest-${patientName}`}
+                            onSelect={() => { setPatientId(""); setPatientPickerOpen(false); }}
+                          >
+                            <UserPlus className="mr-2 w-4 h-4 shrink-0" />
+                            <span className="truncate">Use "{patientName.trim()}" as a guest walk-in</span>
+                          </CommandItem>
+                        </CommandGroup>
+                      )}
                       <CommandGroup heading="Existing patients">
                         {patients.map(p => (
                           <CommandItem
@@ -213,9 +228,11 @@ export default function AdminAppointments() {
                   </Command>
                 </PopoverContent>
               </Popover>
-              {patientId && (
+              {patientId ? (
                 <p className="text-xs text-muted-foreground mt-1">Linked to existing patient account — will appear in their full history.</p>
-              )}
+              ) : patientName.trim() ? (
+                <p className="text-xs text-muted-foreground mt-1">Guest walk-in — no patient account linked.</p>
+              ) : null}
             </div>
             <div>
               <Label>Service</Label>

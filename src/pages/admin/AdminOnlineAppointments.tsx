@@ -74,7 +74,11 @@ export default function AdminOnlineAppointments() {
     setSaving(true);
     try {
       await confirmAppointment(apt.id);
-      toast.success(`Appointment confirmed`, { description: `Confirmation email sent to ${apt.email}` });
+      toast.success(`Appointment confirmed`, {
+        description: apt.email
+          ? `Confirmation email sent to ${apt.email}`
+          : "No email on file, so no confirmation was sent.",
+      });
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to confirm appointment");
@@ -94,7 +98,11 @@ export default function AdminOnlineAppointments() {
     setSaving(true);
     try {
       await rejectAppointment(selected.id, reason.trim());
-      toast.success(`Appointment rejected`, { description: `Rejection email sent to ${selected.email} with the reason provided.` });
+      toast.success(`Appointment rejected`, {
+        description: selected.email
+          ? `Rejection email sent to ${selected.email} with the reason provided.`
+          : "No email on file, so no notification was sent.",
+      });
       setRejectOpen(false);
       setSelected(null);
       setReason("");

@@ -89,14 +89,31 @@ export default function SuperAdminReports() {
         .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
         .map((a) => [a.id, a.patientName, a.dentistName ?? "—", a.service, a.date, statusMeta[a.status]?.label ?? a.status]);
     } else {
-      rows = patients.map((p) => {
+      const latestOf = (rs: typeof records) => rs.length
+        ? rs.reduce((max, r) => (r.date > max ? r.date : max), rs[0].date)
+        : "No consultations yet";
+
+      const accountRows = patients.map((p) => {
         const patientAppointments = appointments.filter((a) => a.patientId === p.id);
         const patientRecords = records.filter((r) => r.patientId === p.id);
-        const latest = patientRecords.length
-          ? patientRecords.reduce((max, r) => (r.date > max ? r.date : max), patientRecords[0].date)
-          : "No consultations yet";
-        return [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(patientAppointments.length), latest];
+        return [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(patientAppointments.length), latestOf(patientRecords)];
       });
+
+      // Walk-ins booked for someone with no account have no patients row to hang off,
+      // so they'd be invisible here. Group those by the name taken at the desk, and
+      // reach their records through the appointment rather than a patient id.
+      const guests = new Map<string, Appointment[]>();
+      for (const a of appointments.filter((a) => !a.patientId)) {
+        const list = guests.get(a.patientName) ?? [];
+        list.push(a);
+        guests.set(a.patientName, list);
+      }
+      const guestRows = [...guests.entries()].map(([name, own]) => {
+        const ids = new Set(own.map((a) => a.id));
+        return [`${name} — No account (walk-in)`, String(own.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
+      });
+
+      rows = [...accountRows, ...guestRows];
     }
 
     setReport({ type, rows, generatedAt: formatManilaDateTime() });
