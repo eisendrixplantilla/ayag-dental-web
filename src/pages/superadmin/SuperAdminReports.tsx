@@ -96,7 +96,7 @@ export default function SuperAdminReports() {
       const accountRows = patients.map((p) => {
         const patientAppointments = appointments.filter((a) => a.patientId === p.id);
         const patientRecords = records.filter((r) => r.patientId === p.id);
-        return [`${p.name} — ${p.email} · ${p.phone ?? "—"}`, String(patientAppointments.length), latestOf(patientRecords)];
+        return [`${p.name} — ${p.email} · ${p.phone || "—"}`, String(patientAppointments.length), latestOf(patientRecords)];
       });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,

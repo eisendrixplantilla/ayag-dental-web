@@ -236,7 +236,7 @@ export default function AdminPatients() {
                     <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{p.name}</button>
                   </TableCell>
                   <TableCell>{p.age ?? "—"}</TableCell>
-                  <TableCell>{p.phone ?? "—"}</TableCell>
+                  <TableCell>{p.phone || "—"}</TableCell>
                   <TableCell>{p.email}</TableCell>
                   <TableCell><Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge></TableCell>
                   <TableCell className="print:hidden">

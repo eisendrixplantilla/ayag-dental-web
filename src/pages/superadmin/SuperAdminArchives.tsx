@@ -54,7 +54,7 @@ export default function SuperAdminArchives() {
           name: p.name,
           type: "Patient",
           email: p.email,
-          contact: p.phone ?? "—",
+          contact: p.phone || "—",
           archivedAt: p.archivedAt ?? "—",
           archivedBy: p.archivedBy ?? "Super Admin",
         })),

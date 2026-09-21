@@ -89,7 +89,7 @@ export default function AdminReports() {
         .map((p) => {
           const own = appointments.filter((a) => a.patientId === p.id);
           const latest = own.map((a) => a.date).sort().at(-1) ?? "";
-          return { label: `${p.name} — ${p.email} · ${p.phone ?? "—"}`, total: own.length, latest };
+          return { label: `${p.name} — ${p.email} · ${p.phone || "—"}`, total: own.length, latest };
         });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,

@@ -192,22 +192,7 @@ export default function AdminAppointments() {
                       onValueChange={(v) => { setPatientName(v); setPatientId(""); }}
                     />
                     <CommandList>
-                      <CommandEmpty>Type a name to book a walk-in.</CommandEmpty>
-                      {/* Walk-ins are often for people with no account at all, so the typed
-                          name has to be confirmable on its own. forceMount keeps this option
-                          visible even when the search matches no existing patient. */}
-                      {patientName.trim() && !patients.some(p => p.name.trim().toLowerCase() === patientName.trim().toLowerCase()) && (
-                        <CommandGroup heading="No account">
-                          <CommandItem
-                            forceMount
-                            value={`guest-${patientName}`}
-                            onSelect={() => { setPatientId(""); setPatientPickerOpen(false); }}
-                          >
-                            <UserPlus className="mr-2 w-4 h-4 shrink-0" />
-                            <span className="truncate">Use "{patientName.trim()}" as a guest walk-in</span>
-                          </CommandItem>
-                        </CommandGroup>
-                      )}
+                      <CommandEmpty>No matching patient account.</CommandEmpty>
                       <CommandGroup heading="Existing patients">
                         {patients.map(p => (
                           <CommandItem
@@ -225,6 +210,21 @@ export default function AdminAppointments() {
                         ))}
                       </CommandGroup>
                     </CommandList>
+                    {/* Walk-ins are often for people with no account at all, so the typed
+                        name has to be confirmable on its own. This sits outside CommandList
+                        so cmdk's filtering can never hide it. */}
+                    {patientName.trim() && !patients.some(p => p.name.trim().toLowerCase() === patientName.trim().toLowerCase()) && (
+                      <div className="border-t border-border p-1">
+                        <button
+                          type="button"
+                          onClick={() => { setPatientId(""); setPatientPickerOpen(false); }}
+                          className="w-full flex items-center rounded-sm px-2 py-2 text-sm text-left hover:bg-accent"
+                        >
+                          <UserPlus className="mr-2 w-4 h-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">Use "{patientName.trim()}" — no account</span>
+                        </button>
+                      </div>
+                    )}
                   </Command>
                 </PopoverContent>
               </Popover>
