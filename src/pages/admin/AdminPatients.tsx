@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,19 @@ import { Users, Plus, Search, Eye, Edit, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
+
+// A walk-in booked for someone with no account has no patients row behind it, so it
+// can only be shown read-only: there's nothing to open, edit or archive.
+interface PatientRow {
+  key: string;
+  name: string;
+  age: string;
+  phone: string;
+  email: string;
+  patient: Patient | null;
+}
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
@@ -29,6 +41,7 @@ export default function AdminPatients() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -39,16 +52,46 @@ export default function AdminPatients() {
 
   const load = () => {
     setLoading(true);
-    getPatients()
-      .then(setPatients)
+    Promise.all([getPatients(), getAppointments()])
+      .then(([p, a]) => { setPatients(p); setAppointments(a); })
       .catch(() => toast.error("Failed to load patients"))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
-  const filtered = patients.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase())
+  const rows: PatientRow[] = useMemo(() => {
+    const accountRows: PatientRow[] = patients.map(p => ({
+      key: p.id,
+      name: p.name,
+      age: p.age != null ? String(p.age) : "—",
+      phone: p.phone || "—",
+      email: p.email,
+      patient: p,
+    }));
+
+    // Guest walk-ins, grouped by the name taken at the desk. Fields the clinic never
+    // collected are left blank rather than dashed, so it's obvious they're empty.
+    const guests = new Map<string, Appointment[]>();
+    for (const a of appointments.filter(a => !a.patientId)) {
+      const list = guests.get(a.patientName) ?? [];
+      list.push(a);
+      guests.set(a.patientName, list);
+    }
+    const guestRows: PatientRow[] = [...guests.entries()].map(([name, own]) => ({
+      key: `guest-${name}`,
+      name,
+      age: "",
+      phone: own.find(a => a.contact)?.contact ?? "",
+      email: own.find(a => a.email)?.email ?? "",
+      patient: null,
+    }));
+
+    return [...accountRows, ...guestRows];
+  }, [patients, appointments]);
+
+  const filtered = rows.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleFormChange = (field: string, value: string) => {
@@ -230,23 +273,38 @@ export default function AdminPatients() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(p => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{p.name}</button>
-                  </TableCell>
-                  <TableCell>{p.age ?? "—"}</TableCell>
-                  <TableCell>{p.phone || "—"}</TableCell>
-                  <TableCell>{p.email}</TableCell>
-                  <TableCell><Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge></TableCell>
-                  <TableCell className="print:hidden">
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filtered.map(r => {
+                const p = r.patient;
+                return (
+                  <TableRow key={r.key}>
+                    <TableCell>
+                      {p ? (
+                        <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{r.name}</button>
+                      ) : (
+                        <span className="font-medium">{r.name}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.age}</TableCell>
+                    <TableCell>{r.phone}</TableCell>
+                    <TableCell>{r.email}</TableCell>
+                    <TableCell>
+                      {p ? (
+                        <Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">no account</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="print:hidden">
+                      {p && (
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {filtered.length === 0 && (
                 <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
               )}
