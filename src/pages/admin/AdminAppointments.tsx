@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
+import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
@@ -49,6 +50,11 @@ export default function AdminAppointments() {
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
+
+  // Arrived here from a notification bell click — scroll to that walk-in's row.
+  const { highlightedKey, registerRow } = useNotificationJump(
+    useCallback((id: string) => walkIns.find(w => w.id === id)?.id, [walkIns]),
+  );
 
   useEffect(() => {
     getDentistDirectory()
@@ -329,7 +335,11 @@ export default function AdminAppointments() {
             </TableHeader>
             <TableBody>
               {walkIns.map(w => (
-                <TableRow key={w.id}>
+                <TableRow
+                  key={w.id}
+                  ref={registerRow(w.id)}
+                  className={highlightedKey === w.id ? HIGHLIGHT_ROW_CLASS : undefined}
+                >
                   <TableCell className="font-medium">{w.patientName}</TableCell>
                   <TableCell>{w.service}</TableCell>
                   <TableCell>{w.dentistName}</TableCell>

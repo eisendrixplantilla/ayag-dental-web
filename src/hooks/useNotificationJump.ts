@@ -12,12 +12,19 @@ const FLASH_MS = 3000;
  * this page actually renders rows by — Dental Records, for instance, keys rows by
  * record id, so it looks the record up by its appointmentId.
  */
-export function useNotificationJump(resolveRowKey: (highlightId: string) => string | undefined) {
+export function useNotificationJump(
+  resolveRowKey: (highlightId: string) => string | undefined,
+  onArrive?: () => void,
+) {
   const location = useLocation();
   const navigate = useNavigate();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
+
+  // Kept in a ref so callers don't have to memoise it to avoid re-firing the effect.
+  const onArriveRef = useRef(onArrive);
+  onArriveRef.current = onArrive;
 
   const registerRow = useCallback(
     (key: string) => (el: HTMLElement | null) => {
@@ -33,6 +40,8 @@ export function useNotificationJump(resolveRowKey: (highlightId: string) => stri
     const state = location.state as { highlightId?: string } | null;
     if (!state?.highlightId) return;
     setPendingId(state.highlightId);
+    // Lets the page clear any filter that would keep the target row off screen.
+    onArriveRef.current?.();
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.state]);
 
@@ -55,7 +64,9 @@ export function useNotificationJump(resolveRowKey: (highlightId: string) => stri
     return () => clearTimeout(timer);
   }, [highlightedKey]);
 
-  return { highlightedKey, registerRow };
+  // `pendingId` is exposed so a page can get the target on screen before it can be
+  // scrolled to — switching to the tab that holds it, for instance.
+  return { highlightedKey, registerRow, pendingId };
 }
 
 /** Shared flash styling so every jump target looks the same. */

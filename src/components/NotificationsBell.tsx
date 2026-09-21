@@ -41,34 +41,64 @@ function loadReadKeys(userId: string): Set<string> {
   }
 }
 
-// A finished consultation lives in Dental Records; everything else is still an
-// appointment, so it belongs in My Appointments.
-function routeFor(apt: Appointment): string {
-  return apt.status === "completed" ? "/dentist/records" : "/dentist/appointments";
+/** Each role jumps to the module it can actually act on the appointment in. */
+function routeFor(apt: Appointment, role: string): string {
+  switch (role) {
+    case "dentist":
+      // A finished consultation lives in Dental Records; anything else is still an appointment.
+      return apt.status === "completed" ? "/dentist/records" : "/dentist/appointments";
+    case "admin":
+      return apt.type === "walk-in" ? "/admin/appointments" : "/admin/online-appointments";
+    case "patient":
+      return "/patient/appointments";
+    default:
+      // Superadmin has no per-appointment module — Reports is the closest thing.
+      return "/superadmin/reports";
+  }
 }
 
-function describe(apt: Appointment): { title: string; icon: LucideIcon; colorClass: string } {
+function describe(apt: Appointment, isPatient: boolean): { title: string; icon: LucideIcon; colorClass: string } {
   const when = `${format(parseISO(apt.date), "MMM d, yyyy")} at ${toLabel(toMinutes(apt.time))}`;
+  // Patients read about themselves, staff read about the patient.
+  const subject = isPatient ? "Your" : `${apt.patientName}'s`;
+
   switch (apt.status) {
     case "pending":
-      return { title: `New booking request from ${apt.patientName} — ${apt.service}, ${when}`, icon: CalendarPlus, colorClass: "text-warning" };
+      return {
+        title: isPatient
+          ? `Your booking request for ${apt.service} on ${when} is awaiting confirmation`
+          : `New booking request from ${apt.patientName} — ${apt.service}, ${when}`,
+        icon: CalendarPlus, colorClass: "text-warning",
+      };
     case "confirmed":
       return {
         title: apt.type === "walk-in"
-          ? `Walk-in appointment added for ${apt.patientName} — ${apt.service}, ${when}`
-          : `${apt.patientName}'s appointment was confirmed — ${apt.service}, ${when}`,
+          ? (isPatient
+            ? `A walk-in appointment was added for you — ${apt.service}, ${when}`
+            : `Walk-in appointment added for ${apt.patientName} — ${apt.service}, ${when}`)
+          : `${subject} appointment was confirmed — ${apt.service}, ${when}`,
         icon: CalendarCheck, colorClass: "text-success",
       };
     case "rescheduled":
-      return { title: `${apt.patientName}'s appointment was rescheduled to ${when}`, icon: CalendarClock, colorClass: "text-warning" };
+      return { title: `${subject} appointment was rescheduled to ${when}`, icon: CalendarClock, colorClass: "text-warning" };
     case "cancelled":
-      return { title: `${apt.patientName} cancelled their appointment (${apt.service})`, icon: XCircle, colorClass: "text-destructive" };
+      return {
+        title: isPatient
+          ? `Your appointment was cancelled (${apt.service})`
+          : `${apt.patientName} cancelled their appointment (${apt.service})`,
+        icon: XCircle, colorClass: "text-destructive",
+      };
     case "rejected":
-      return { title: `${apt.patientName}'s appointment request was rejected`, icon: XCircle, colorClass: "text-destructive" };
+      return { title: `${subject} appointment request was rejected`, icon: XCircle, colorClass: "text-destructive" };
     case "completed":
-      return { title: `Consultation with ${apt.patientName} was completed`, icon: CheckCircle2, colorClass: "text-success" };
+      return {
+        title: isPatient
+          ? `Your consultation was completed — ${apt.service}`
+          : `Consultation with ${apt.patientName} was completed`,
+        icon: CheckCircle2, colorClass: "text-success",
+      };
     default:
-      return { title: `${apt.patientName}'s appointment was updated`, icon: CalendarClock, colorClass: "text-muted-foreground" };
+      return { title: `${subject} appointment was updated`, icon: CalendarClock, colorClass: "text-muted-foreground" };
   }
 }
 
@@ -80,7 +110,7 @@ export function NotificationsBell() {
   const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
 
   const refresh = () => {
-    if (user?.role !== "dentist") return;
+    if (!user) return;
     getAppointments().then(setAppointments).catch(() => {});
   };
 
@@ -88,10 +118,10 @@ export function NotificationsBell() {
   // dropdown sits closed and other tabs/pages change appointment statuses.
   useEffect(() => {
     refresh();
-    if (user?.role !== "dentist") return;
+    if (!user) return;
     const interval = setInterval(refresh, 60_000);
     return () => clearInterval(interval);
-  }, [user?.role]);
+  }, [user?.id]);
 
   // Read state is per account, and the user isn't known on the very first render.
   useEffect(() => {
@@ -99,10 +129,16 @@ export function NotificationsBell() {
   }, [user?.id]);
 
   const items: NotificationItem[] = useMemo(() => {
-    if (user?.role !== "dentist") return [];
-    return appointments
-      .filter(a => a.dentistName === user.name)
-      .map(a => ({ id: a.id, time: a.updatedAt, route: routeFor(a), ...describe(a) }))
+    if (!user) return [];
+    const isPatient = user.role === "patient";
+    // Dentists only care about their own column of the schedule. Patients are already
+    // scoped server-side to their own rows; admin and superadmin see everything.
+    const relevant = user.role === "dentist"
+      ? appointments.filter(a => a.dentistName === user.name)
+      : appointments;
+
+    return relevant
+      .map(a => ({ id: a.id, time: a.updatedAt, route: routeFor(a, user.role), ...describe(a, isPatient) }))
       .sort((a, b) => b.time.localeCompare(a.time))
       .slice(0, 20);
   }, [appointments, user]);
@@ -131,7 +167,7 @@ export function NotificationsBell() {
     setReadKeys(prev => new Set([...prev, ...items.map(keyOf)]));
   }, [items]);
 
-  if (user?.role !== "dentist") return null;
+  if (!user) return null;
 
   const goToSource = (n: NotificationItem) => {
     setReadKeys(prev => new Set(prev).add(keyOf(n)));

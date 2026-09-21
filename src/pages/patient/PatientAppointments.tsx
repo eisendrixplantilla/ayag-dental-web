@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
+import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 
@@ -41,6 +42,7 @@ export default function PatientAppointments() {
   const [newDate, setNewDate] = useState<Date>();
   const [newTime, setNewTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState("upcoming");
 
   const load = () => {
     setLoading(true);
@@ -81,6 +83,19 @@ export default function PatientAppointments() {
   const history = appointments
     .filter((a) => !["pending", "confirmed", "rescheduled"].includes(a.status))
     .sort((a, b) => toDateTime(b).getTime() - toDateTime(a).getTime());
+
+  // Arrived here from a notification bell click.
+  const { highlightedKey, registerRow, pendingId } = useNotificationJump(
+    useCallback((id: string) => appointments.find(a => a.id === id)?.id, [appointments]),
+  );
+
+  // The target may sit in the Past tab, which isn't mounted by default — switch to
+  // it once the data has loaded so there's actually a row to scroll to.
+  useEffect(() => {
+    if (!pendingId) return;
+    if (history.some(a => a.id === pendingId)) setTab("past");
+    else if (upcoming.some(a => a.id === pendingId)) setTab("upcoming");
+  }, [pendingId, appointments]);
 
   const hours24 = (apt: Appointment) => toDateTime(apt).getTime() - Date.now() >= 24 * 60 * 60 * 1000;
 
@@ -147,7 +162,7 @@ export default function PatientAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Tabs defaultValue="upcoming">
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="mb-4 print:hidden">
               <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
               <TabsTrigger value="past">Past ({history.length})</TabsTrigger>
@@ -159,7 +174,11 @@ export default function PatientAppointments() {
                   const allowed = hours24(apt);
                   const canReschedule = allowed && apt.status !== "rescheduled";
                   return (
-                    <div key={apt.id} className="p-4 rounded-lg bg-muted/50 space-y-2">
+                    <div
+                      key={apt.id}
+                      ref={registerRow(apt.id)}
+                      className={`p-4 rounded-lg bg-muted/50 space-y-2 ${highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : ""}`}
+                    >
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
                           <p className="font-medium text-foreground">{apt.service}</p>
@@ -203,7 +222,11 @@ export default function PatientAppointments() {
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">This is your appointment history. Completed appointments are view-only.</p>
                 {history.map((apt) => (
-                  <div key={apt.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                  <div
+                    key={apt.id}
+                    ref={registerRow(apt.id)}
+                    className={`flex items-center justify-between p-4 rounded-lg bg-muted/50 ${highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : ""}`}
+                  >
                     <div>
                       <p className="font-medium text-foreground">{apt.service}</p>
                       <p className="text-sm text-muted-foreground">

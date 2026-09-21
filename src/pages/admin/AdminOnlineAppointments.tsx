@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer
 import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
+import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -61,6 +62,13 @@ export default function AdminOnlineAppointments() {
   const clearFilters = () => {
     setSearch(""); setDateFilter(""); setStatusFilter("all"); setDentistFilter("all");
   };
+
+  // Arrived here from a notification — drop any active filter first, otherwise the
+  // row being jumped to might not be on screen at all.
+  const { highlightedKey, registerRow } = useNotificationJump(
+    useCallback((id: string) => appointments.find(a => a.id === id)?.id, [appointments]),
+    clearFilters,
+  );
 
   const handleApprove = async (apt: Appointment) => {
     setSaving(true);
@@ -179,7 +187,11 @@ export default function AdminOnlineAppointments() {
             </TableHeader>
             <TableBody>
               {filtered.map(apt => (
-                <TableRow key={apt.id}>
+                <TableRow
+                  key={apt.id}
+                  ref={registerRow(apt.id)}
+                  className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
+                >
                   <TableCell className="font-mono text-xs">{apt.id.slice(0, 8)}</TableCell>
                   <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell>{apt.service}</TableCell>
