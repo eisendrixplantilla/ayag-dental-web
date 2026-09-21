@@ -7,6 +7,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import {
   Users, CalendarDays, ListOrdered, Package, DollarSign, FileText, LogOut,
   CalendarPlus, History, LayoutDashboard, ClipboardList, FolderOpen, CalendarCheck,
@@ -126,6 +127,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <header className="h-14 flex items-center border-b border-border px-4 bg-card">
             <SidebarTrigger className="mr-4" />
             <div className="flex-1" />
+            <NotificationsBell />
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             {children}

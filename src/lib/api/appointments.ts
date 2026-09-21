@@ -21,6 +21,7 @@ export interface Appointment {
   rescheduleCount: number;
   createdBy: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppointmentInput {

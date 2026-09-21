@@ -25,6 +25,7 @@ function mapRow(r: any) {
     rescheduleCount: r.reschedule_count,
     createdBy: r.created_by,
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 
@@ -104,7 +105,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         remarks = COALESCE(${remarks ?? null}, remarks),
         dentist_id = COALESCE(${dentistId ?? null}, dentist_id),
         dentist_name = COALESCE(${dentistName ?? null}, dentist_name),
-        reschedule_count = reschedule_count + ${rescheduleIncrement}
+        reschedule_count = reschedule_count + ${rescheduleIncrement},
+        updated_at = now()
       WHERE id = ${id}
       RETURNING *
     `;
