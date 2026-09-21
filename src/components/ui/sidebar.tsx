@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
+const SIDEBAR_MOBILE_STORAGE_KEY = "sidebar:openMobile";
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
@@ -49,7 +50,27 @@ const SidebarProvider = React.forwardRef<
   }
 >(({ defaultOpen = true, open: openProp, onOpenChange: setOpenProp, className, style, children, ...props }, ref) => {
   const isMobile = useIsMobile();
-  const [openMobile, setOpenMobile] = React.useState(false);
+  // Persisted per browser tab/session (not across brand-new visits) so a hard navigation —
+  // typing a URL, a bookmark, browser back/forward, a reload — doesn't silently close a drawer
+  // the user just opened on mobile, the way it would with plain useState(false).
+  const [openMobile, _setOpenMobile] = React.useState(() => {
+    try {
+      return sessionStorage.getItem(SIDEBAR_MOBILE_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const setOpenMobile = React.useCallback((value: boolean | ((value: boolean) => boolean)) => {
+    _setOpenMobile((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      try {
+        sessionStorage.setItem(SIDEBAR_MOBILE_STORAGE_KEY, String(next));
+      } catch {
+        // ignore (private browsing / storage disabled)
+      }
+      return next;
+    });
+  }, []);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
