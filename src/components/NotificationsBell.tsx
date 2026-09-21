@@ -50,9 +50,18 @@ export function NotificationsBell() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
 
-  useEffect(() => {
+  const refresh = () => {
     if (user?.role !== "dentist") return;
     getAppointments().then(setAppointments).catch(() => {});
+  };
+
+  // Initial load, plus periodic refresh so the count/list don't go stale while the
+  // dropdown sits closed and other tabs/pages change appointment statuses.
+  useEffect(() => {
+    refresh();
+    if (user?.role !== "dentist") return;
+    const interval = setInterval(refresh, 60_000);
+    return () => clearInterval(interval);
   }, [user?.role]);
 
   const items: NotificationItem[] = useMemo(() => {
@@ -67,7 +76,7 @@ export function NotificationsBell() {
   if (user?.role !== "dentist") return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => open && refresh()}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
           <Bell className="w-5 h-5" />
