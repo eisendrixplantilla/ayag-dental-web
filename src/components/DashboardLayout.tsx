@@ -4,10 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar
+  SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { NotificationsProvider, useNotifications } from "@/contexts/NotificationsContext";
 import {
   Users, CalendarDays, ListOrdered, Package, DollarSign, FileText, LogOut,
   CalendarPlus, History, LayoutDashboard, ClipboardList, FolderOpen, CalendarCheck,
@@ -66,7 +67,8 @@ function getRoleLabel(role: string) {
 
 function AppSidebar() {
   const { user, logout } = useAuth();
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
+  const { unreadByRoute } = useNotifications();
   const collapsed = state === "collapsed";
   const nav = getNav(user?.role || "patient");
   const navigate = useNavigate();
@@ -86,16 +88,41 @@ function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {nav.map(item => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url === homeUrl} className="text-sidebar-foreground/70 hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
-                      <item.icon className="w-4 h-4 mr-2" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {nav.map(item => {
+                const unread = unreadByRoute[item.url] ?? 0;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        end={item.url === homeUrl}
+                        className="text-sidebar-foreground/70 hover:bg-sidebar-accent"
+                        activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                        // On phones the sidebar is an overlay drawer covering the page, so
+                        // picking a module should get it out of the way. Desktop is left alone.
+                        onClick={() => { if (isMobile) setOpenMobile(false); }}
+                      >
+                        <item.icon className="w-4 h-4 mr-2" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                    {unread > 0 && (
+                      <>
+                        <SidebarMenuBadge
+                          aria-label={`${unread} unread`}
+                          className="rounded-full bg-primary text-primary-foreground peer-hover/menu-button:text-primary-foreground peer-data-[active=true]/menu-button:text-primary-foreground"
+                        >
+                          {unread > 9 ? "9+" : unread}
+                        </SidebarMenuBadge>
+                        {/* The count badge is hidden in icon-only mode, so fall back to a dot. */}
+                        {collapsed && (
+                          <span className="pointer-events-none absolute top-1 right-1 w-2 h-2 rounded-full bg-primary" aria-hidden="true" />
+                        )}
+                      </>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -121,6 +148,7 @@ function AppSidebar() {
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
+      <NotificationsProvider>
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
@@ -134,6 +162,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+      </NotificationsProvider>
     </SidebarProvider>
   );
 }
