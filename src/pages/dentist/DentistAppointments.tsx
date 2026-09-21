@@ -27,6 +27,7 @@ import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppo
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -47,15 +48,19 @@ export default function DentistAppointments() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    setLoading(true);
+  // `silent` is for background refreshes: no spinner over the table and no error
+  // toast, so polling is invisible unless something actually changed.
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     getAppointments()
       .then(setAppointments)
-      .catch(() => toast({ title: "Failed to load appointments", variant: "destructive" }))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!silent) toast({ title: "Failed to load appointments", variant: "destructive" }); })
+      .finally(() => { if (!silent) setLoading(false); });
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
+  // Pick up changes made by other people without needing a manual page refresh.
+  useAutoRefresh(() => load(true));
 
   const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
   useEffect(() => {

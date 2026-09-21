@@ -1,5 +1,9 @@
 import { api } from "@/contexts/AuthContext";
 
+/** Fired after any appointment write, so live views (bell, sidebar counts) can update at once. */
+export const APPOINTMENTS_CHANGED = "appointments:changed";
+const announceChange = () => window.dispatchEvent(new Event(APPOINTMENTS_CHANGED));
+
 export type AptStatus = "pending" | "confirmed" | "completed" | "cancelled" | "rejected" | "rescheduled";
 
 export interface Appointment {
@@ -63,6 +67,7 @@ export async function createAppointment(input: AppointmentInput): Promise<Appoin
     method: "POST",
     body: JSON.stringify(input),
   });
+  announceChange();
   return data.appointment;
 }
 
@@ -81,11 +86,13 @@ export async function updateAppointment(id: string, patch: AppointmentUpdate): P
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+  announceChange();
   return data.appointment;
 }
 
 export async function deleteAppointment(id: string): Promise<void> {
   await api(`/appointments?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  announceChange();
 }
 
 export const confirmAppointment = (id: string) => updateAppointment(id, { status: "confirmed" });

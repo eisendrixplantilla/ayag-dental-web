@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -34,15 +35,19 @@ export default function AdminOnlineAppointments() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dentistFilter, setDentistFilter] = useState("all");
 
-  const load = () => {
-    setLoading(true);
+  // `silent` is for background refreshes: no spinner over the table and no error
+  // toast, so polling is invisible unless something actually changed.
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     getAppointments()
       .then(setAppointments)
-      .catch(() => toast.error("Failed to load appointments"))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!silent) toast.error("Failed to load appointments"); })
+      .finally(() => { if (!silent) setLoading(false); });
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
+  // Pick up changes made by other people without needing a manual page refresh.
+  useAutoRefresh(() => load(true));
 
   const dentists = useMemo(
     () => Array.from(new Set(appointments.map(a => a.dentistName).filter(Boolean))).sort() as string[],

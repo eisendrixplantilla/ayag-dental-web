@@ -4,7 +4,8 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, APPOINTMENTS_CHANGED, type Appointment } from "@/lib/api/appointments";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 
 const READ_STORAGE_PREFIX = "notifications:read:";
@@ -118,13 +119,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     getAppointments().then(setAppointments).catch(() => {});
   }, [user?.id]);
 
-  // Initial load, plus periodic refresh so counts don't go stale while nothing is
-  // open and other tabs/pages change appointment statuses.
+  // Initial load, then the same background polling the appointment pages use, so the
+  // bell and sidebar counts move in step with the lists on screen.
+  useEffect(() => refresh(), [refresh]);
+  useAutoRefresh(refresh);
+
+  // Changes made from this browser don't need to wait for the next poll.
   useEffect(() => {
-    refresh();
-    if (!user) return;
-    const interval = setInterval(refresh, 60_000);
-    return () => clearInterval(interval);
+    window.addEventListener(APPOINTMENTS_CHANGED, refresh);
+    return () => window.removeEventListener(APPOINTMENTS_CHANGED, refresh);
   }, [refresh]);
 
   // Read state is per account, and the user isn't known on the very first render.

@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
@@ -93,15 +94,19 @@ export default function AdminAppointments() {
       .join(", ");
   }, [schedule]);
 
-  const load = () => {
-    setLoading(true);
+  // `silent` is for background refreshes: no spinner over the table and no error
+  // toast, so polling is invisible unless something actually changed.
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     getAppointments({ type: "walk-in" })
       .then(setWalkIns)
-      .catch(() => toast.error("Failed to load walk-in appointments"))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!silent) toast.error("Failed to load walk-in appointments"); })
+      .finally(() => { if (!silent) setLoading(false); });
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
+  // Pick up changes made by other people without needing a manual page refresh.
+  useAutoRefresh(() => load(true));
 
   const handleAdd = async () => {
     if (!patientName || !service || !dentistId || !date || !time) {
