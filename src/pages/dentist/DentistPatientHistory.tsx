@@ -14,6 +14,7 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
 import { formatManilaDate } from "@/lib/formatDate";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useAuth } from "@/contexts/AuthContext";
 
 const statusClass = (s: string) =>
@@ -203,7 +204,7 @@ export default function DentistPatientHistory() {
                   ) : appointments.map(a => (
                     <TableRow key={a.id}>
                       <TableCell>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell>{a.time}</TableCell>
+                      <TableCell>{toLabel(toMinutes(a.time))}</TableCell>
                       <TableCell>{a.service}</TableCell>
                       <TableCell className="capitalize">{a.type}</TableCell>
                       <TableCell><Badge variant="outline" className={statusClass(a.status)}>{a.status}</Badge></TableCell>

@@ -10,6 +10,7 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { toast } from "sonner";
 import { formatManilaDate } from "@/lib/formatDate";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -131,7 +132,7 @@ export default function AdminPatientHistory() {
               {appointments.map(a => (
                 <TableRow key={a.id}>
                   <TableCell>{a.date}</TableCell>
-                  <TableCell>{a.time}</TableCell>
+                  <TableCell>{toLabel(toMinutes(a.time))}</TableCell>
                   <TableCell>{a.service}</TableCell>
                   <TableCell>{a.dentistName ?? "—"}</TableCell>
                   <TableCell>{a.type === "walk-in" ? "Walk-in" : "Online"}</TableCell>
