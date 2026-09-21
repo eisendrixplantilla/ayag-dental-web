@@ -20,6 +20,13 @@ interface NotificationItem {
   icon: LucideIcon;
   colorClass: string;
   time: string;
+  route: string;
+}
+
+// A finished consultation lives in Dental Records; everything else is still an
+// appointment, so it belongs in My Appointments.
+function routeFor(apt: Appointment): string {
+  return apt.status === "completed" ? "/dentist/records" : "/dentist/appointments";
 }
 
 function describe(apt: Appointment): { title: string; icon: LucideIcon; colorClass: string } {
@@ -71,16 +78,16 @@ export function NotificationsBell() {
     if (user?.role !== "dentist") return [];
     return appointments
       .filter(a => a.dentistName === user.name)
-      .map(a => ({ id: a.id, time: a.updatedAt, ...describe(a) }))
+      .map(a => ({ id: a.id, time: a.updatedAt, route: routeFor(a), ...describe(a) }))
       .sort((a, b) => b.time.localeCompare(a.time))
       .slice(0, 20);
   }, [appointments, user]);
 
   if (user?.role !== "dentist") return null;
 
-  const goToAppointment = (id: string) => {
+  const goToSource = (n: NotificationItem) => {
     setOpen(false);
-    navigate("/dentist/appointments", { state: { highlightId: id } });
+    navigate(n.route, { state: { highlightId: n.id } });
   };
 
   return (
@@ -105,7 +112,7 @@ export function NotificationsBell() {
             <button
               key={n.id}
               type="button"
-              onClick={() => goToAppointment(n.id)}
+              onClick={() => goToSource(n)}
               className="w-full flex items-start gap-2 px-2 py-2 text-sm text-left rounded-sm hover:bg-accent"
             >
               <n.icon className={`w-4 h-4 mt-0.5 shrink-0 ${n.colorClass}`} />

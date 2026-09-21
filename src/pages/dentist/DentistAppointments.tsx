@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +26,7 @@ import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
+import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -43,12 +43,9 @@ const emptyRecord = {
 
 export default function DentistAppointments() {
   const { user } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -75,19 +72,11 @@ export default function DentistAppointments() {
 
   const [details, setDetails] = useState<Appointment | null>(null);
 
-  // Arrived here from a notification bell click — open that appointment's details once loaded.
-  useEffect(() => {
-    const state = location.state as { highlightId?: string } | null;
-    if (state?.highlightId) setHighlightId(state.highlightId);
-  }, [location.state]);
+  // Arrived here from a notification bell click — scroll to that appointment's row.
+  const { highlightedKey, registerRow } = useNotificationJump(
+    useCallback((id: string) => mine.find(a => a.id === id)?.id, [mine]),
+  );
 
-  useEffect(() => {
-    if (!highlightId || appointments.length === 0) return;
-    const apt = appointments.find(a => a.id === highlightId);
-    if (apt) setDetails(apt);
-    setHighlightId(null);
-    navigate(location.pathname, { replace: true, state: {} });
-  }, [highlightId, appointments]);
   const [consult, setConsult] = useState<Appointment | null>(null);
   const [resched, setResched] = useState<Appointment | null>(null);
   const [cancelApt, setCancelApt] = useState<Appointment | null>(null);
@@ -238,7 +227,11 @@ export default function DentistAppointments() {
                 </TableRow>
               )}
               {mine.map(apt => (
-                <TableRow key={apt.id}>
+                <TableRow
+                  key={apt.id}
+                  ref={registerRow(apt.id)}
+                  className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
+                >
                   <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell>{apt.service}</TableCell>
                   <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>

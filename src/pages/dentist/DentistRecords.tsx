@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/dentalRecords";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
+import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 
 const emptyForm = {
   appointmentId: "",
@@ -62,6 +63,12 @@ export default function DentistRecords() {
       .filter(a => (a.status === "confirmed" || a.status === "completed") && !recordedAppointmentIds.has(a.id))
       .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)),
     [appointments, user, recordedAppointmentIds],
+  );
+
+  // Arrived here from a notification bell click — the bell sends an appointment id,
+  // so find the record saved against it and scroll to that row.
+  const { highlightedKey, registerRow } = useNotificationJump(
+    useCallback((id: string) => records.find(r => r.appointmentId === id)?.id, [records]),
   );
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -217,7 +224,11 @@ export default function DentistRecords() {
                 </TableRow>
               ) : (
                 records.map(r => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    ref={registerRow(r.id)}
+                    className={highlightedKey === r.id ? HIGHLIGHT_ROW_CLASS : undefined}
+                  >
                     <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
                     <TableCell className="font-medium">{r.patientName ?? "—"}</TableCell>
                     <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
