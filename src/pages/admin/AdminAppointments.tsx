@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2, Printer } from "lucide-react";
+import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2, Printer, Search, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
+import { getPatients, type Patient } from "@/lib/api/patients";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
@@ -30,6 +31,9 @@ const ACTIVE_STATUSES = new Set(["confirmed", "pending", "rescheduled"]);
 
 export default function AdminAppointments() {
   const [patientName, setPatientName] = useState("");
+  const [patientId, setPatientId] = useState("");
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientPickerOpen, setPatientPickerOpen] = useState(false);
   const [service, setService] = useState("");
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
@@ -51,6 +55,7 @@ export default function AdminAppointments() {
       .then(setDentists)
       .catch(() => toast.error("Failed to load dentists"))
       .finally(() => setLoadingDentists(false));
+    getPatients().then(setPatients).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -100,6 +105,7 @@ export default function AdminAppointments() {
     setSaving(true);
     try {
       await createAppointment({
+        patientId: patientId || undefined,
         patientName,
         dentistId,
         dentistName: dentist,
@@ -108,7 +114,7 @@ export default function AdminAppointments() {
         time,
         type: "walk-in",
       });
-      setPatientName(""); setService(""); setDentistId(""); setDate(undefined); setTime("");
+      setPatientName(""); setPatientId(""); setService(""); setDentistId(""); setDate(undefined); setTime("");
       toast.success("Walk-in appointment confirmed!");
       load();
     } catch (err) {
@@ -157,7 +163,53 @@ export default function AdminAppointments() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Patient Name</Label>
-              <Input placeholder="Enter patient name" value={patientName} onChange={e => setPatientName(e.target.value)} />
+              <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={patientPickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                      {patientName || "Enter or search patient name"}
+                    </span>
+                    <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="Type a name..."
+                      value={patientName}
+                      onValueChange={(v) => { setPatientName(v); setPatientId(""); }}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No existing patient found — this will be a guest walk-in.</CommandEmpty>
+                      <CommandGroup heading="Existing patients">
+                        {patients.map(p => (
+                          <CommandItem
+                            key={p.id}
+                            value={p.name}
+                            onSelect={() => {
+                              setPatientName(p.name);
+                              setPatientId(p.id);
+                              setPatientPickerOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 w-4 h-4", patientId === p.id ? "opacity-100" : "opacity-0")} />
+                            {p.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {patientId && (
+                <p className="text-xs text-muted-foreground mt-1">Linked to existing patient account — will appear in their full history.</p>
+              )}
             </div>
             <div>
               <Label>Service</Label>
