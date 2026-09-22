@@ -112,6 +112,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `;
     const updatedRow = updated[0];
 
+    // null = no email was due (status unchanged, or no address on file); otherwise
+    // whether it actually sent. Returned so the UI can say what really happened
+    // instead of always claiming success.
+    let emailSent: boolean | null = null;
     if (status && status !== existing.status && NOTIFY_STATUSES.has(status) && updatedRow.email) {
       const message = status === "confirmed"
         ? "Please arrive 10 minutes early and bring a valid ID."
@@ -129,12 +133,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           time: updatedRow.time,
           message,
         });
+        emailSent = true;
       } catch (err) {
         console.error("Appointment email failed:", err);
+        emailSent = false;
       }
     }
 
-    return res.status(200).json({ appointment: mapRow(updatedRow) });
+    return res.status(200).json({ appointment: mapRow(updatedRow), emailSent });
   }
 
   if (req.method === "DELETE") {

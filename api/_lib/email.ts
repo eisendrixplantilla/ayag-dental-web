@@ -38,6 +38,13 @@ const STATUS_LABELS: Record<AppointmentEmailParams["status"], string> = {
   rescheduled: "Rescheduled",
 };
 
+/** "13:00" -> "1:00 PM", matching how times are shown in the app. */
+function to12Hour(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
 export async function sendAppointmentEmail(params: AppointmentEmailParams) {
   const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
     method: "POST",
@@ -54,7 +61,7 @@ export async function sendAppointmentEmail(params: AppointmentEmailParams) {
         service: params.service,
         dentist_name: params.dentistName ?? "our clinic team",
         appointment_date: params.date,
-        appointment_time: params.time,
+        appointment_time: to12Hour(params.time),
         message: params.message ?? "",
       },
     }),

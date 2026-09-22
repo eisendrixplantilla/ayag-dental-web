@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { getAppointments, confirmAppointment, rejectAppointment, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { getAppointments, confirmAppointment, rejectAppointment, describeEmailOutcome, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
+import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
@@ -19,6 +20,9 @@ const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   confirmed: "bg-success/10 text-success border-success/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
+  rescheduled: "bg-warning/10 text-warning border-warning/20",
+  cancelled: "bg-destructive/10 text-destructive border-destructive/20",
+  completed: "bg-primary/10 text-primary border-primary/20",
 };
 
 export default function AdminOnlineAppointments() {
@@ -78,12 +82,9 @@ export default function AdminOnlineAppointments() {
   const handleApprove = async (apt: Appointment) => {
     setSaving(true);
     try {
-      await confirmAppointment(apt.id);
-      toast.success(`Appointment confirmed`, {
-        description: apt.email
-          ? `Confirmation email sent to ${apt.email}`
-          : "No email on file, so no confirmation was sent.",
-      });
+      const result = await confirmAppointment(apt.id);
+      const email = describeEmailOutcome(result, "Confirmation");
+      (email.ok ? toast.success : toast.warning)("Appointment approved", { description: email.text });
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to confirm appointment");
@@ -102,12 +103,9 @@ export default function AdminOnlineAppointments() {
     if (!selected || !reason.trim()) return;
     setSaving(true);
     try {
-      await rejectAppointment(selected.id, reason.trim());
-      toast.success(`Appointment rejected`, {
-        description: selected.email
-          ? `Rejection email sent to ${selected.email} with the reason provided.`
-          : "No email on file, so no notification was sent.",
-      });
+      const result = await rejectAppointment(selected.id, reason.trim());
+      const email = describeEmailOutcome(result, "Rejection");
+      (email.ok ? toast.success : toast.warning)("Appointment rejected", { description: email.text });
       setRejectOpen(false);
       setSelected(null);
       setReason("");
@@ -187,13 +185,13 @@ export default function AdminOnlineAppointments() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Appointment ID</TableHead>
+                <TableHead className="hidden lg:table-cell">Appointment ID</TableHead>
                 <TableHead>Patient Name</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Assigned Dentist</TableHead>
+                <TableHead className="hidden sm:table-cell">Service</TableHead>
+                <TableHead className="hidden md:table-cell">Assigned Dentist</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead className="hidden md:table-cell">Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
@@ -205,16 +203,17 @@ export default function AdminOnlineAppointments() {
                   ref={registerRow(apt.id)}
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="font-mono text-xs">{apt.id.slice(0, 8)}</TableCell>
+                  <TableCell className="hidden lg:table-cell font-mono text-xs">{apt.id.slice(0, 8)}</TableCell>
                   <TableCell className="font-medium">{apt.patientName}</TableCell>
-                  <TableCell>{apt.service}</TableCell>
-                  <TableCell>{apt.dentistName}</TableCell>
-                  <TableCell>{apt.date}</TableCell>
-                  <TableCell>{apt.time}</TableCell>
-                  <TableCell><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
+                  <TableCell className="hidden sm:table-cell">{apt.service}</TableCell>
+                  <TableCell className="hidden md:table-cell">{apt.dentistName}</TableCell>
+                  <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
+                  <TableCell className="whitespace-nowrap">{toLabel(toMinutes(apt.time))}</TableCell>
+                  <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
                   <TableCell className="print:hidden">
-                    <div className="flex gap-2 justify-end">
+                    {/* Full labelled buttons on wide screens... */}
+                    <div className="hidden lg:flex gap-2 justify-end">
                       <Button size="sm" variant="outline" onClick={() => openDetails(apt)}>
                         <Eye className="w-4 h-4 mr-1" /> View
                       </Button>
@@ -225,6 +224,22 @@ export default function AdminOnlineAppointments() {
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => openReject(apt)}>
                             <XCircle className="w-4 h-4 mr-1" /> Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {/* ...and compact icons on phones/tablets, so Approve/Reject stay on screen. */}
+                    <div className="flex lg:hidden gap-1 justify-end">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="View details" title="View details" onClick={() => openDetails(apt)}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {apt.status === "pending" && (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success hover:text-success hover:bg-success/10" aria-label="Approve" title="Approve" disabled={saving} onClick={() => handleApprove(apt)}>
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" aria-label="Reject" title="Reject" onClick={() => openReject(apt)}>
+                            <XCircle className="w-4 h-4" />
                           </Button>
                         </>
                       )}

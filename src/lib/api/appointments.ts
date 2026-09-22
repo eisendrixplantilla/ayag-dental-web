@@ -81,13 +81,26 @@ export interface AppointmentUpdate {
   dentistName?: string;
 }
 
-export async function updateAppointment(id: string, patch: AppointmentUpdate): Promise<Appointment> {
-  const data = await api<{ appointment: Appointment }>(`/appointments?id=${encodeURIComponent(id)}`, {
+/**
+ * `emailSent`: null when no email was due (no address on file, or the status didn't
+ * change); otherwise whether the patient's status email actually went out.
+ */
+export type UpdatedAppointment = Appointment & { emailSent: boolean | null };
+
+export async function updateAppointment(id: string, patch: AppointmentUpdate): Promise<UpdatedAppointment> {
+  const data = await api<{ appointment: Appointment; emailSent?: boolean | null }>(`/appointments?id=${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
   announceChange();
-  return data.appointment;
+  return { ...data.appointment, emailSent: data.emailSent ?? null };
+}
+
+/** Toast wording for the email outcome of a status change. */
+export function describeEmailOutcome(result: UpdatedAppointment, what: string): { ok: boolean; text: string } {
+  if (result.emailSent === true) return { ok: true, text: `${what} email sent to ${result.email}.` };
+  if (result.emailSent === false) return { ok: false, text: `Saved, but the ${what.toLowerCase()} email to ${result.email} couldn't be sent. Please let the patient know directly.` };
+  return { ok: true, text: "No email on file for this patient, so no email was sent." };
 }
 
 export async function deleteAppointment(id: string): Promise<void> {

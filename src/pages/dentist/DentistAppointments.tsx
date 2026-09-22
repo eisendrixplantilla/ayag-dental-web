@@ -23,7 +23,7 @@ import { toast } from "@/hooks/use-toast";
 import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
@@ -153,13 +153,9 @@ export default function DentistAppointments() {
     }
     setSaving(true);
     try {
-      await rescheduleAppointment(resched.id, { date: rsDate, time: rsSlot, reason: rsReason, remarks: rsRemarks });
-      toast({
-        title: "Appointment rescheduled",
-        description: resched.email
-          ? `Email notification sent to ${resched.email} with the new schedule.`
-          : "No email on file for this walk-in, so no notification was sent.",
-      });
+      const result = await rescheduleAppointment(resched.id, { date: rsDate, time: rsSlot, reason: rsReason, remarks: rsRemarks });
+      const email = describeEmailOutcome(result, "Reschedule");
+      toast({ title: "Appointment rescheduled", description: email.text, variant: email.ok ? "default" : "destructive" });
       setResched(null);
       load();
     } catch (err) {
@@ -177,13 +173,9 @@ export default function DentistAppointments() {
     }
     setSaving(true);
     try {
-      await cancelAppointment(cancelApt.id, cxReason, cxRemarks);
-      toast({
-        title: "Appointment cancelled",
-        description: cancelApt.email
-          ? `Email notification sent to ${cancelApt.email}.`
-          : "No email on file for this walk-in, so no notification was sent.",
-      });
+      const result = await cancelAppointment(cancelApt.id, cxReason, cxRemarks);
+      const email = describeEmailOutcome(result, "Cancellation");
+      toast({ title: "Appointment cancelled", description: email.text, variant: email.ok ? "default" : "destructive" });
       setCancelApt(null);
       load();
     } catch (err) {
