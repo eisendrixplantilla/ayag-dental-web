@@ -20,7 +20,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3 } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
@@ -185,7 +185,9 @@ export default function DentistAppointments() {
     }
   };
 
-  const actionable = (s: string) => s === "pending" || s === "confirmed" || s === "rescheduled";
+  // Only approved bookings can be treated, moved or cancelled from here. A pending one
+  // is still just a request — the clinic may yet reject it — so it waits for approval.
+  const actionable = (s: string) => s === "confirmed" || s === "rescheduled";
 
   return (
     <div className="space-y-6">
@@ -265,6 +267,9 @@ export default function DentistAppointments() {
                           </Button>
                         </>
                       )}
+                      {apt.status === "pending" && (
+                        <span className="self-center text-xs text-muted-foreground">Awaiting admin approval</span>
+                      )}
                     </div>
 
                     {/* Compact controls on phone/tablet */}
@@ -291,6 +296,10 @@ export default function DentistAppointments() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      ) : apt.status === "pending" ? (
+                        <span className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground" title="Awaiting admin approval" aria-label="Awaiting admin approval">
+                          <Clock3 className="w-4 h-4" />
+                        </span>
                       ) : (
                         <div className="h-8 w-8" aria-hidden="true" />
                       )}

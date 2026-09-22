@@ -15,7 +15,7 @@ import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
-import { getAppointments } from "@/lib/api/appointments";
+import { getBookedSlots } from "@/lib/api/appointments";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
@@ -36,7 +36,6 @@ const services = [
   "Fixed Bridge",
 ];
 
-const ACTIVE_STATUSES = new Set(["confirmed", "pending", "rescheduled"]);
 
 export default function PatientBook() {
   const { user } = useAuth();
@@ -46,6 +45,8 @@ export default function PatientBook() {
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
+  // Bumped to re-fetch the free slots, e.g. after someone else took the chosen one.
+  const [slotsVersion, setSlotsVersion] = useState(0);
   const [dentists, setDentists] = useState<DentistDirectoryEntry[]>([]);
   const [loadingDentists, setLoadingDentists] = useState(true);
   const [schedule, setSchedule] = useState<DentistScheduleData | null>(null);
@@ -74,14 +75,11 @@ export default function PatientBook() {
   useEffect(() => {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
-    getAppointments({ dentistId, date: toKey(date) })
-      .then((appts) => {
-        const booked = appts.filter((a) => ACTIVE_STATUSES.has(a.status)).map((a) => a.time);
-        setSlots(generateAvailableSlots(schedule, date, booked));
-      })
+    getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
+      .then((booked) => setSlots(generateAvailableSlots(schedule, date, booked)))
       .catch(() => toast.error("Failed to load available time slots"))
       .finally(() => setLoadingSlots(false));
-  }, [dentistId, date, schedule]);
+  }, [dentistId, date, schedule, slotsVersion]);
 
   const scheduleSummary = useMemo(() => {
     if (!schedule || schedule.days.length === 0) return "";
@@ -111,6 +109,9 @@ export default function PatientBook() {
       toast.success("Appointment request submitted — pending admin approval");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to submit appointment request");
+      // Most likely the slot was taken in the meantime: show what's actually free now.
+      setTime("");
+      setSlotsVersion((v) => v + 1);
     } finally {
       setSubmitting(false);
     }

@@ -5,6 +5,37 @@ import { sendAppointmentEmail } from "./_lib/email.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
+/** Statuses that occupy a dentist's time slot. */
+const HOLDING = ["pending", "confirmed", "rescheduled"];
+/** Statuses the dentist can act on (consult, reschedule, cancel) — i.e. approved. */
+const APPROVED = ["confirmed", "rescheduled"];
+
+const SLOT_TAKEN = "That time slot has already been taken. Please choose another time.";
+
+const isoDate = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
+
+/**
+ * Is this dentist's slot already held by another booking? Dentists are matched by id
+ * or by name, because older bookings only carry the name. `statuses` says which
+ * bookings count as holding it: any live one for a new booking or a move, but only
+ * approved ones when approving, so the first of two clashing requests can still be
+ * approved and the other rejected.
+ */
+async function slotTaken(opts: {
+  dentistId: string | null; dentistName: string | null; date: string; time: string;
+  excludeId?: string | null; statuses?: string[];
+}): Promise<boolean> {
+  if (!opts.dentistId && !opts.dentistName) return false;
+  const rows = await sql`
+    SELECT 1 /* slot-clash */ FROM appointments
+    WHERE date = ${opts.date} AND time = ${opts.time}
+      AND status = ANY(${opts.statuses ?? HOLDING}::text[])
+      AND (dentist_id = ${opts.dentistId} OR dentist_name = ${opts.dentistName})
+      AND (${opts.excludeId ?? null}::uuid IS NULL OR id <> ${opts.excludeId ?? null}::uuid)
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 function mapRow(r: any) {
   return {
     id: r.id,
@@ -36,6 +67,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
 
   if (req.method === "GET") {
+    // Patients only ever see their own appointments, so they can't tell from that list
+    // which times someone else already holds. This returns just the taken times — no
+    // names or details — so any signed-in user can see what's free.
+    if (req.query.bookedSlots) {
+      const q = (k: string) => (typeof req.query[k] === "string" && req.query[k] ? String(req.query[k]) : null);
+      const date = q("date");
+      const dentistId = q("dentistId");
+      const dentistName = q("dentistName");
+      const excludeId = q("excludeId");
+      if (!date || (!dentistId && !dentistName)) {
+        return res.status(400).json({ error: "date and dentistId or dentistName are required" });
+      }
+      const rows = await sql`
+        SELECT DISTINCT time /* booked-slots */ FROM appointments
+        WHERE date = ${date}
+          AND status = ANY(${HOLDING}::text[])
+          AND (dentist_id = ${dentistId} OR dentist_name = ${dentistName})
+          AND (${excludeId}::uuid IS NULL OR id <> ${excludeId}::uuid)`;
+      return res.status(200).json({ times: (rows as { time: string }[]).map(r => r.time) });
+    }
+
     if (id) {
       const rows = await sql`SELECT * FROM appointments WHERE id = ${id}`;
       const appt = rows[0];
@@ -76,6 +128,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const patientId = session.role === "patient" ? session.sub : (req.body?.patientId ?? null);
     const status = type === "walk-in" ? "confirmed" : "pending";
     const createdBy = session.role === "patient" ? "patient" : session.role;
+    // The booking pages only offer free slots, but two people can pick the same one at
+    // once, and the API can be called directly — so the server has the final word.
+    if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time })) {
+      return res.status(409).json({ error: SLOT_TAKEN });
+    }
     const inserted = await sql`
       INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type, status, reason, created_by)
       VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
@@ -95,6 +152,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { status, date, time, reason, remarks, dentistId, dentistName } = req.body ?? {};
+
+    // Completing means the consultation happened, which must not happen before the
+    // clinic has approved the booking.
+    if (status === "completed" && !APPROVED.includes(existing.status)) {
+      return res.status(409).json({ error: "Only approved appointments can be completed. Approve it first." });
+    }
+
+    const next = {
+      status: status ?? existing.status,
+      date: date ?? isoDate(existing.date),
+      time: time ?? existing.time,
+      dentistId: dentistId ?? existing.dentist_id,
+      dentistName: dentistName ?? existing.dentist_name,
+    };
+    const moving = next.date !== isoDate(existing.date) || next.time !== existing.time
+      || next.dentistId !== existing.dentist_id || next.dentistName !== existing.dentist_name;
+    const approving = next.status === "confirmed" && existing.status === "pending";
+    if (HOLDING.includes(next.status) && (moving || approving)) {
+      const taken = await slotTaken({
+        dentistId: next.dentistId, dentistName: next.dentistName, date: next.date, time: next.time,
+        excludeId: id,
+        // A move needs a genuinely free slot; an approval only has to not collide
+        // with a booking that's already been approved.
+        statuses: moving ? HOLDING : APPROVED,
+      });
+      if (taken) {
+        return res.status(409).json({
+          error: moving ? SLOT_TAKEN : "Another approved appointment already holds this time slot. Reject this request or ask the patient to reschedule.",
+        });
+      }
+    }
+
     const rescheduleIncrement = status === "rescheduled" ? 1 : 0;
     const updated = await sql`
       UPDATE appointments SET

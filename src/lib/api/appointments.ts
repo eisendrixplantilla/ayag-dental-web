@@ -57,6 +57,22 @@ export async function getAppointments(filters: AppointmentFilters = {}): Promise
   return data.appointments;
 }
 
+/**
+ * Times already taken for a dentist on a date, from every patient's bookings — not
+ * just the caller's own, which is all a patient can list. Returns times only.
+ * `excludeId` leaves out the appointment being rescheduled.
+ */
+export async function getBookedSlots(q: {
+  dentistId?: string | null; dentistName?: string | null; date: string; excludeId?: string;
+}): Promise<string[]> {
+  const params = new URLSearchParams({ bookedSlots: "1", date: q.date });
+  if (q.dentistId) params.set("dentistId", q.dentistId);
+  if (q.dentistName) params.set("dentistName", q.dentistName);
+  if (q.excludeId) params.set("excludeId", q.excludeId);
+  const data = await api<{ times: string[] }>(`/appointments?${params}`);
+  return data.times;
+}
+
 export async function getAppointment(id: string): Promise<Appointment> {
   const data = await api<{ appointment: Appointment }>(`/appointments?id=${encodeURIComponent(id)}`);
   return data.appointment;

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { getAppointments, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, getBookedSlots, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
@@ -29,7 +29,6 @@ const services = [
   "Teeth Whitening", "Fixed Bridge",
 ];
 
-const ACTIVE_STATUSES = new Set(["confirmed", "pending", "rescheduled"]);
 
 export default function AdminAppointments() {
   const [patientName, setPatientName] = useState("");
@@ -49,6 +48,8 @@ export default function AdminAppointments() {
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [slots, setSlots] = useState<{ value: string; label: string }[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  // Bumped to re-fetch the free slots, e.g. after someone else took the chosen one.
+  const [slotsVersion, setSlotsVersion] = useState(0);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
 
@@ -77,14 +78,11 @@ export default function AdminAppointments() {
   useEffect(() => {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
-    getAppointments({ dentistId, date: toKey(date) })
-      .then((appts) => {
-        const booked = appts.filter((a) => ACTIVE_STATUSES.has(a.status)).map((a) => a.time);
-        setSlots(generateAvailableSlots(schedule, date, booked));
-      })
+    getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
+      .then((booked) => setSlots(generateAvailableSlots(schedule, date, booked)))
       .catch(() => toast.error("Failed to load available time slots"))
       .finally(() => setLoadingSlots(false));
-  }, [dentistId, date, schedule]);
+  }, [dentistId, date, schedule, slotsVersion]);
 
   const scheduleSummary = useMemo(() => {
     if (!schedule || schedule.days.length === 0) return "";
@@ -130,6 +128,9 @@ export default function AdminAppointments() {
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add walk-in appointment");
+      // Most likely the slot was taken in the meantime: show what's actually free now.
+      setTime("");
+      setSlotsVersion((v) => v + 1);
     } finally {
       setSaving(false);
     }

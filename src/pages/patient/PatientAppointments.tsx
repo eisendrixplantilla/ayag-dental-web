@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { getAppointments, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
@@ -71,13 +71,11 @@ export default function PatientAppointments() {
   useEffect(() => {
     if (!rescheduleApt?.dentistId || !newDate || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
-    getAppointments({ dentistId: rescheduleApt.dentistId, date: toKey(newDate) })
-      .then((appts) => {
-        const booked = appts
-          .filter((a) => a.id !== rescheduleApt.id && ["confirmed", "pending", "rescheduled"].includes(a.status))
-          .map((a) => a.time);
-        setSlots(generateAvailableSlots(schedule, newDate, booked));
-      })
+    getBookedSlots({
+      dentistId: rescheduleApt.dentistId, dentistName: rescheduleApt.dentistName,
+      date: toKey(newDate), excludeId: rescheduleApt.id,
+    })
+      .then((booked) => setSlots(generateAvailableSlots(schedule, newDate, booked)))
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
   }, [rescheduleApt, newDate, schedule]);
@@ -124,6 +122,9 @@ export default function PatientAppointments() {
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to reschedule");
+      // If the slot was taken meanwhile, drop the choice so the list re-checks what's free.
+      setNewTime("");
+      setNewDate((d) => (d ? new Date(d) : d));
     } finally {
       setSaving(false);
     }
