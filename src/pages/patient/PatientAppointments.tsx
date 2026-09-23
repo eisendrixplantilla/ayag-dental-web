@@ -178,7 +178,9 @@ export default function PatientAppointments() {
                 {upcoming.length === 0 && <p className="text-sm text-muted-foreground">No upcoming appointments.</p>}
                 {upcoming.map((apt) => {
                   const allowed = hours24(apt);
-                  const canReschedule = allowed && apt.status !== "rescheduled";
+                  // A patient's move lands back in the pending queue, so the one-time
+                  // limit counts the moves themselves rather than the status.
+                  const canReschedule = allowed && apt.rescheduleCount === 0;
                   return (
                     <div
                       key={apt.id}
@@ -216,7 +218,12 @@ export default function PatientAppointments() {
                           <Info className="w-3 h-3" /> {NOTICE_24H}
                         </p>
                       )}
-                      {allowed && apt.status === "rescheduled" && (
+                      {apt.status === "pending" && apt.rescheduleCount > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Your new time is waiting for the clinic to approve it.
+                        </p>
+                      )}
+                      {allowed && apt.rescheduleCount > 0 && (
                         <p className="text-xs text-muted-foreground">You have already used your one-time reschedule for this appointment.</p>
                       )}
                     </div>
@@ -288,7 +295,8 @@ export default function PatientAppointments() {
           <DialogHeader><DialogTitle className="font-heading">Reschedule Appointment</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {rescheduleApt?.service} with {rescheduleApt?.dentistName}. You can reschedule only once.
+              {rescheduleApt?.service} with {rescheduleApt?.dentistName}. You can reschedule only once,
+              and the clinic has to approve the new time before it's confirmed.
             </p>
             <div>
               <Label>New Date</Label>

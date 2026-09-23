@@ -256,7 +256,11 @@ export default function AdminOnlineAppointments() {
                   <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
                   <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
                   <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`whitespace-nowrap ${statusColors[apt.status]}`}>
+                      {apt.status === "pending" && apt.rescheduleCount > 0 ? "reschedule request" : apt.status}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="print:hidden text-right">
                     {/* One way in: everything about an appointment, including approving or
                         rejecting it, lives behind View. */}
@@ -298,7 +302,9 @@ export default function AdminOnlineAppointments() {
               <p><span className="font-semibold text-foreground">Appointment Type:</span> {selectedLive.type === "walk-in" ? "Walk-in" : "Online"}</p>
               <p><span className="font-semibold text-foreground">Booked On:</span> {formatManilaStamp(selectedLive.createdAt)}</p>
               <p className="flex items-center gap-2"><span className="font-semibold text-foreground">Current Status:</span>
-                <Badge variant="outline" className={statusColors[selectedLive.status]}>{selectedLive.status}</Badge>
+                <Badge variant="outline" className={statusColors[selectedLive.status]}>
+                  {selectedLive.status === "pending" && selectedLive.rescheduleCount > 0 ? "reschedule request" : selectedLive.status}
+                </Badge>
               </p>
               {selectedLive.reason && <p><span className="font-semibold text-foreground">Rejection Reason:</span> {selectedLive.reason}</p>}
             </div>

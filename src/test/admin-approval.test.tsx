@@ -291,6 +291,25 @@ describe("the appointments list", () => {
     expect(screen.queryByText("Pedro Reyes")).toBeNull();
   });
 
+  it("marks a patient's reschedule as a request, not just another pending booking", async () => {
+    h.appts = [
+      apt({ id: "moved", patientName: "Allen Estrella", status: "pending", rescheduleCount: 1 }),
+      apt({ id: "new", patientName: "Pedro Reyes", status: "pending", rescheduleCount: 0 }),
+    ];
+    await renderPage();
+
+    expect(within(rowOf("Allen Estrella")).getByText("reschedule request")).toBeInTheDocument();
+    expect(within(rowOf("Pedro Reyes")).getByText("pending")).toBeInTheDocument();
+
+    // Either way it's the admin's call: both still offer Approve and Reject.
+    for (const name of ["Allen Estrella", "Pedro Reyes"]) {
+      const dialog = await openDetails(name);
+      expect(dialog.getByRole("button", { name: /Confirm Appointment/ })).toBeInTheDocument();
+      expect(dialog.getByRole("button", { name: /Reject Appointment/ })).toBeInTheDocument();
+      fireEvent.click(dialog.getAllByRole("button", { name: /^Close$/ })[0]);
+    }
+  });
+
   it("keeps the filters and the table in one card", async () => {
     await renderPage();
     const card = screen.getByRole("table").closest(".bg-card");

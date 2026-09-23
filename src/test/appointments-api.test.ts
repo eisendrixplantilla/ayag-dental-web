@@ -272,3 +272,52 @@ describe("appointments that run longer than one slot", () => {
     expect(res.body.appointment.endTime).toBe("10:30"); // still 90 minutes
   });
 });
+
+describe("a patient rescheduling", () => {
+  beforeEach(() => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    h.rows = [row({ status: "confirmed", time: "13:00", end_time: "14:00" })];
+  });
+
+  it("goes back to pending for the clinic to approve", async () => {
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(res.code).toBe(200);
+    expect(res.body.appointment.status).toBe("pending");
+    expect(res.body.appointment.date).toBe("2026-09-26");
+    expect(res.body.appointment.time).toBe("09:00");
+    expect(res.body.appointment.endTime).toBe("10:00"); // keeps its length
+  });
+
+  it("still spends the patient's one move", async () => {
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(res.body.appointment.rescheduleCount).toBe(1);
+  });
+
+  it("sends no email for the patient's own request", async () => {
+    await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+  });
+
+  it("emails the patient once the clinic approves the new time", async () => {
+    await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
+    const res = await patch("apt-1", { status: "confirmed" });
+
+    expect(res.body.appointment.status).toBe("confirmed");
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status: "confirmed", time: "09:00" }));
+  });
+
+  it("still holds the new slot against other bookings while it waits", async () => {
+    await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
+    const clash = await call("POST", { body: { ...booking, date: "2026-09-26", time: "09:30", endTime: "10:00" } });
+    expect(clash.code).toBe(409);
+  });
+
+  it("leaves a staff reschedule approved, as the clinic's own decision", async () => {
+    h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(res.body.appointment.status).toBe("rescheduled");
+  });
+});

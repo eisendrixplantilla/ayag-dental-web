@@ -174,7 +174,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const { status, date, time, reason, remarks, dentistId, dentistName } = req.body ?? {};
+    const { status: requestedStatus, date, time, reason, remarks, dentistId, dentistName } = req.body ?? {};
+    // A patient moving their own appointment is asking, not deciding: it goes back into
+    // the clinic's queue for approval instead of standing as an approved booking. Staff
+    // rescheduling on the patient's behalf is the clinic's own decision, so it stands.
+    const patientRescheduling = session.role === "patient" && requestedStatus === "rescheduled";
+    const status = patientRescheduling ? "pending" : requestedStatus;
     // A move keeps the visit as long as it already was, so the end time travels with it.
     const nextEndTime: string | null = req.body?.endTime
       ?? (time && existing.end_time
@@ -213,7 +218,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const rescheduleIncrement = status === "rescheduled" ? 1 : 0;
+    // Counted on the request, so a patient still only gets the one move.
+    const rescheduleIncrement = requestedStatus === "rescheduled" ? 1 : 0;
     const updated = await sql`
       UPDATE appointments SET
         status = COALESCE(${status ?? null}, status),
