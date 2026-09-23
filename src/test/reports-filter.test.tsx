@@ -151,7 +151,9 @@ describe("filtering a report that has already been generated", () => {
 
 describe("filtering by one field", () => {
   const field = () => screen.getByLabelText("Filter by field") as HTMLSelectElement;
-  const text = () => screen.getByLabelText("Filter the generated report");
+  const valuePicker = (name: string) => screen.getByLabelText(`Filter by ${name}`) as HTMLSelectElement;
+  const pick = (name: string, value: string) => fireEvent.change(valuePicker(name), { target: { value } });
+  const chooseField = (index: string) => fireEvent.change(field(), { target: { value: index } });
 
   it("offers every column of the report to filter by", async () => {
     await generate();
@@ -159,49 +161,78 @@ describe("filtering by one field", () => {
       .toEqual(["All fields", "Reference", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"]);
   });
 
-  it("searches only the column chosen", async () => {
+  it("offers the values that column actually holds, so nothing has to be typed", async () => {
     await generate();
-    // "Oral" is a service here, and every row's dentist or patient could contain other
-    // words — scoping to Service keeps it to the two Oral appointments.
-    fireEvent.change(field(), { target: { value: "3" } }); // Service
-    fireEvent.change(text(), { target: { value: "oral" } });
+    chooseField("3"); // Service
+    await waitFor(() => expect(valuePicker("Service")).toBeInTheDocument());
+    expect(within(valuePicker("Service")).getAllByRole("option").map(o => o.textContent).filter(Boolean))
+      .toEqual(["Any service", "Oral", "Root Canal"]);
+
+    pick("Service", "Oral");
     await waitFor(() => expect(names()).toEqual(["Maria Santos", "Pedro Reyes"]));
 
-    // The same text against Patient Name matches nobody.
-    fireEvent.change(field(), { target: { value: "1" } });
-    await waitFor(() => expect(screen.getByText(/No records match "oral"/)).toBeInTheDocument());
+    pick("Service", "all"); // back to any
+    await waitFor(() => expect(names()).toHaveLength(3));
   });
 
-  it("filters by status, dentist and appointment date", async () => {
+  it("filters by dentist, status, date and reference the same way", async () => {
     await generate();
-    fireEvent.change(field(), { target: { value: "5" } }); // Status
-    fireEvent.change(text(), { target: { value: "confirmed" } });
-    await waitFor(() => expect(names()).toHaveLength(3));
 
-    fireEvent.change(field(), { target: { value: "2" } }); // Dentist
-    fireEvent.change(text(), { target: { value: "aerhol" } });
+    chooseField("2"); // Dentist
+    await waitFor(() => expect(valuePicker("Dentist")).toBeInTheDocument());
+    pick("Dentist", "Aerhol Gocalin");
     await waitFor(() => expect(names()).toEqual(["Maria Santos"]));
 
-    fireEvent.change(field(), { target: { value: "4" } }); // Appointment Date
-    fireEvent.change(text(), { target: { value: "2026-09-25" } });
+    chooseField("5"); // Status
+    await waitFor(() => expect(valuePicker("Status")).toBeInTheDocument());
+    pick("Status", "Confirmed");
     await waitFor(() => expect(names()).toHaveLength(3));
+
+    chooseField("4"); // Appointment Date
+    await waitFor(() => expect(valuePicker("Appointment Date")).toBeInTheDocument());
+    pick("Appointment Date", "2026-09-25");
+    await waitFor(() => expect(names()).toHaveLength(3));
+
+    chooseField("0"); // Reference
+    await waitFor(() => expect(valuePicker("Reference")).toBeInTheDocument());
+    pick("Reference", "APT-3F9C2A");
+    await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
   });
 
-  it("filters by reference", async () => {
+  it("switching the field drops what was filtered for the old one", async () => {
     await generate();
-    fireEvent.change(field(), { target: { value: "0" } }); // Reference
-    fireEvent.change(text(), { target: { value: "3f9c2a" } });
-    await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
+    fireEvent.change(screen.getByLabelText("Filter the generated report"), { target: { value: "maria" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos"]));
+
+    // Before, "maria" carried over to the new column and emptied the table.
+    chooseField("5"); // Status
+    await waitFor(() => expect(names()).toHaveLength(3));
+    expect(screen.getByText("3 record(s)")).toBeInTheDocument();
+  });
+
+  it("goes back to typing when a column holds too many values to list", async () => {
+    h.appts = Array.from({ length: 20 }, (_, i) =>
+      apt({ id: `${i}0000000-0000-4000-8000-00000000000${i.toString(16)}`, patientName: `Patient ${i}` }));
+    render(<MemoryRouter><AdminReports /></MemoryRouter>);
+    fireEvent.change(await screen.findByLabelText("Report type"), { target: { value: "appointment" } });
+    fireEvent.click(screen.getByRole("button", { name: /Generate Report/ }));
+    await waitFor(() => expect(dataRows()).toHaveLength(20));
+
+    chooseField("1"); // Patient Name — 20 distinct
+    await waitFor(() => expect(screen.getByLabelText("Filter the generated report")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Filter the generated report"), { target: { value: "Patient 7" } });
+    await waitFor(() => expect(names()).toEqual(["Patient 7"]));
   });
 
   it("names the column it was filtered by on the printed document", async () => {
     await generate();
-    fireEvent.change(field(), { target: { value: "3" } });
-    fireEvent.change(text(), { target: { value: "root canal" } });
+    chooseField("3");
+    await waitFor(() => expect(valuePicker("Service")).toBeInTheDocument());
+    pick("Service", "Root Canal");
     await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
-    expect(printed.calls[0].filters).toContainEqual({ label: "Filtered By", value: "Service: root canal" });
+    expect(printed.calls[0].filters).toContainEqual({ label: "Filtered By", value: "Service: Root Canal" });
     expect(printed.calls[0].rows).toHaveLength(1);
   });
 });

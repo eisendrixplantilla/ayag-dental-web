@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Printer, Search, Loader2 } from "lucide-react";
+import { FileText, Search, Loader2 } from "lucide-react";
+import ReportToolbar, { ALL_FIELDS } from "@/components/ReportToolbar";
 import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
@@ -70,7 +71,7 @@ export default function AdminReports() {
   // running it again.
   const [rowFilter, setRowFilter] = useState("");
   /** "all", or the index of the column to search. */
-  const [filterField, setFilterField] = useState("all");
+  const [filterField, setFilterField] = useState(ALL_FIELDS);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [dentist, setDentist] = useState("all");
@@ -127,7 +128,7 @@ export default function AdminReports() {
     }
 
     setRowFilter("");
-    setFilterField("all");
+    setFilterField(ALL_FIELDS);
     setReport({
       type,
       rows,
@@ -144,7 +145,7 @@ export default function AdminReports() {
     const q = rowFilter.trim().toLowerCase();
     if (!report) return [];
     if (!q) return report.rows;
-    const col = filterField === "all" ? -1 : Number(filterField);
+    const col = filterField === ALL_FIELDS ? -1 : Number(filterField);
     return report.rows.filter((r) =>
       (col < 0 ? r.join(" ") : r[col] ?? "").toLowerCase().includes(q));
   }, [report, rowFilter, filterField]);
@@ -167,7 +168,7 @@ export default function AdminReports() {
         ...(rowFilter.trim()
           ? [{
               label: "Filtered By",
-              value: filterField === "all"
+              value: filterField === ALL_FIELDS
                 ? rowFilter.trim()
                 : `${meta.columns[Number(filterField)]}: ${rowFilter.trim()}`,
             }]
@@ -270,47 +271,16 @@ export default function AdminReports() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Narrows the report that was just generated, without running it again.
-                What is on screen is what gets printed. */}
-            <div className="flex items-end justify-between gap-3 flex-wrap print:hidden">
-              <div className="flex items-end gap-2 flex-wrap">
-                <div className="w-full sm:w-44">
-                  <Label className="text-xs text-muted-foreground">Filter by</Label>
-                  <Select value={filterField} onValueChange={setFilterField}>
-                    <SelectTrigger aria-label="Filter by field"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="all">All fields</SelectItem>
-                      {reportMeta[report.type].columns.map((c, i) => (
-                        <SelectItem key={c} value={String(i)}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    aria-label="Filter the generated report"
-                    placeholder="Filter these results..."
-                    value={rowFilter}
-                    onChange={(e) => setRowFilter(e.target.value)}
-                  />
-                </div>
-                {rowFilter.trim() && (
-                  <Button variant="ghost" size="sm" onClick={() => setRowFilter("")}>Clear filter</Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">
-                  {rowFilter.trim()
-                    ? `${visibleRows.length} of ${report.rows.length} record(s)`
-                    : `${report.rows.length} record(s)`}
-                </Badge>
-                <Button onClick={handlePrint}>
-                  <Printer className="w-4 h-4 mr-2" /> Print Report
-                </Button>
-              </div>
-            </div>
+            <ReportToolbar
+              columns={reportMeta[report.type].columns}
+              rows={report.rows}
+              field={filterField}
+              onFieldChange={setFilterField}
+              value={rowFilter}
+              onValueChange={setRowFilter}
+              shown={visibleRows.length}
+              onPrint={handlePrint}
+            />
 
             <div className="rounded-lg border overflow-x-auto">
               <Table>
