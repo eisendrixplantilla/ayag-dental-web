@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The booking form runs for real; only the network and Radix's Select are replaced.
-const h = vi.hoisted(() => ({ posted: [] as any[], services: [] as any[] }));
+const h = vi.hoisted(() => ({ posted: [] as any[], services: [] as any[], booked: [] as any[] }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "p1", name: "Allen Estrella", email: "allen@example.com", role: "patient", verified: true } }),
@@ -13,7 +13,7 @@ vi.mock("@/contexts/AuthContext", () => ({
       h.posted.push(body);
       return { appointment: { id: "new-1", ...body } };
     }
-    if (path.includes("bookedSlots")) return { times: [], slots: [] };
+    if (path.includes("bookedSlots")) return { times: h.booked.map((b: any) => b.time), slots: h.booked };
     // The clinic's own list, as the superadmin maintains it under Dental Services & Pricing.
     if (path.includes("services=true")) return { services: h.services };
     return {};
@@ -27,14 +27,30 @@ vi.mock("@/lib/api/staff", async (importOriginal) => {
     getDentistDirectory: vi.fn(async () => [{ id: "dr-mike", name: "Dr. Mike Johnson" }]),
     getDentistSchedule: vi.fn(async () => ({
       days: [0, 1, 2, 3, 4, 5, 6].map(dayOfWeek => ({
-        dayOfWeek, start: "09:00", end: "17:00", lunchStart: null, lunchEnd: null, durationMinutes: 60, maxPatient: null,
+        dayOfWeek, start: "09:00", end: "17:00", lunchStart: null, lunchEnd: null, duration: 30, maxPatients: 20,
       })),
       unavailable: [],
     })),
   };
 });
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
+const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+
+// Left permanently open, and the calendar reduced to a button that picks one day —
+// neither widget can be driven in jsdom.
+vi.mock("@/components/ui/popover", async () => {
+  const React = await import("react");
+  const div = ({ children }: any) => React.createElement("div", null, children);
+  return { Popover: div, PopoverTrigger: div, PopoverContent: div };
+});
+vi.mock("@/components/ui/calendar", async () => {
+  const React = await import("react");
+  return {
+    Calendar: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2026, 8, 25)) }, "Pick Sep 25"),
+  };
+});
 
 // Same swap as the admin tests: a native <select> with the same items, because
 // opening a Radix Select in jsdom takes tens of seconds.
@@ -74,7 +90,12 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
-beforeEach(() => { h.posted = []; h.services = []; });
+beforeEach(() => {
+  h.posted = [];
+  h.services = [];
+  h.booked = [];
+  Object.values(toasts).forEach(fn => fn.mockClear());
+});
 afterEach(cleanup);
 
 const renderPage = async () => {
@@ -154,5 +175,47 @@ describe("the services on offer", () => {
     h.services = [];
     await renderPage();
     expect(options()).toContain("Root Canal");
+  });
+});
+
+describe("slots while the form sits open", () => {
+  const slotPicker = () => screen.getByLabelText("Choose a time slot") as HTMLSelectElement;
+  const slotOptions = () => within(slotPicker()).getAllByRole("option").map(o => o.textContent).filter(Boolean);
+
+  const pickVisit = async () => {
+    await renderPage();
+    fireEvent.change(picker(), { target: { value: "Oral" } });
+    await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Pick Sep 25" }));
+    await waitFor(() => expect(slotOptions().length).toBeGreaterThan(0));
+  };
+
+  it("offers every free half hour of the dentist's day", async () => {
+    await pickVisit();
+    expect(slotOptions()[0]).toBe("9:00 AM – 9:30 AM");
+    expect(slotOptions()).toContain("4:30 PM – 5:00 PM");
+  });
+
+  it("leaves out what another patient already holds", async () => {
+    h.booked = [{ time: "09:00", endTime: "10:00" }];
+    await pickVisit();
+    expect(slotOptions()).not.toContain("9:00 AM – 9:30 AM");
+    expect(slotOptions()).not.toContain("9:30 AM – 10:00 AM"); // inside the same booking
+    expect(slotOptions()[0]).toBe("10:00 AM – 10:30 AM");
+  });
+
+  it("drops a time somebody else takes while this form is open, and says so", async () => {
+    await pickVisit();
+    fireEvent.change(slotPicker(), { target: { value: "09:00" } });
+    await waitFor(() => expect(slotPicker().value).toBe("09:00"));
+
+    // Another patient books it; coming back to the tab picks that up.
+    h.booked = [{ time: "09:00", endTime: "09:30" }];
+    fireEvent(window, new Event("focus"));
+
+    await waitFor(() => expect(slotOptions()).not.toContain("9:00 AM – 9:30 AM"));
+    expect(slotPicker().value).toBe("");
+    expect(toasts.info).toHaveBeenCalledWith("That time has just been taken. Please choose another.");
   });
 });

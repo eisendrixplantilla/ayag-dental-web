@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
 import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
 import { getServices } from "@/lib/api/dentalRecords";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { getBookedSlots } from "@/lib/api/appointments";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
@@ -78,19 +79,34 @@ export default function PatientBook() {
       .finally(() => setLoadingSchedule(false));
   }, [dentistId]);
 
-  useEffect(() => {
+  // Read through a ref so a silent refresh can tell whether the chosen time is still
+  // free, without re-running this whole effect every time the patient picks one.
+  const timeRef = useRef(time);
+  timeRef.current = time;
+
+  const loadSlots = useCallback((silent = false) => {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
-    setLoadingSlots(true);
+    if (!silent) setLoadingSlots(true);
     getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
       .then((booked) => {
         const free = generateAvailableSlots(schedule, date, booked, visitMinutes);
         setSlots(free);
-        // Adding a service can make the time already picked too short to fit.
-        setTime(t => (free.some(s => s.value === t) ? t : ""));
+        const picked = timeRef.current;
+        if (picked && !free.some(s => s.value === picked)) {
+          // Either another service just made the visit too long for it, or somebody
+          // else took it while this form was open.
+          setTime("");
+          if (silent) toast.info("That time has just been taken. Please choose another.");
+        }
       })
-      .catch(() => toast.error("Failed to load available time slots"))
-      .finally(() => setLoadingSlots(false));
-  }, [dentistId, date, schedule, slotsVersion, visitMinutes]);
+      .catch(() => { if (!silent) toast.error("Failed to load available time slots"); })
+      .finally(() => { if (!silent) setLoadingSlots(false); });
+  }, [dentistId, date, schedule, dentist, visitMinutes]);
+
+  useEffect(() => { loadSlots(); }, [loadSlots, slotsVersion]);
+  // Someone else can book the same slot while this form sits open, so keep what's
+  // free up to date rather than only at the moment the date was picked.
+  useAutoRefresh(() => loadSlots(true));
 
   const scheduleSummary = useMemo(() => {
     if (!schedule || schedule.days.length === 0) return "";
