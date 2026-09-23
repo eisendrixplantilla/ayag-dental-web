@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { appointmentRef } from "@/lib/appointmentRef";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -79,6 +80,9 @@ export default function SuperAdminReports() {
   }, []);
 
   const [type, setType] = useState<ReportType | "">("");
+  // Applied to the generated report itself, so a long report can be narrowed without
+  // running it again.
+  const [rowFilter, setRowFilter] = useState("");
   const [report, setReport] = useState<GeneratedReport | null>(null);
 
   const totalAppointments = appointments.length;
@@ -126,9 +130,18 @@ export default function SuperAdminReports() {
       rows = [...accountRows, ...guestRows];
     }
 
+    setRowFilter("");
     setReport({ type, rows, generatedAt: formatManilaDateTime() });
     toast.success("Report preview generated");
   };
+
+  // The rows left after the on-screen filter: what is shown is what prints.
+  const visibleRows = useMemo(() => {
+    const q = rowFilter.trim().toLowerCase();
+    if (!report) return [];
+    if (!q) return report.rows;
+    return report.rows.filter((r) => r.join(" ").toLowerCase().includes(q));
+  }, [report, rowFilter]);
 
   // Both buttons print the same document — one to paper, one to a PDF.
   const sendToPrinter = (what: string) => {
@@ -137,9 +150,10 @@ export default function SuperAdminReports() {
     const ok = printReport({
       title: meta.title,
       columns: meta.columns,
-      rows: report.rows,
+      rows: visibleRows,
       generatedAt: report.generatedAt,
       preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
+      filters: rowFilter.trim() ? [{ label: "Filtered By", value: rowFilter.trim() }] : undefined,
     });
     if (ok) toast.success(`${what} ready`);
     else toast.error(`Failed to prepare the ${what.toLowerCase()}`);
@@ -225,6 +239,24 @@ export default function SuperAdminReports() {
                 <p className="text-xs text-muted-foreground">Ayag Dental Clinic · Generated: {report.generatedAt}</p>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Narrows the report that was just generated, without running it again.
+                    What is on screen is what gets printed. */}
+                <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      aria-label="Filter the generated report"
+                      placeholder="Filter these results..."
+                      value={rowFilter}
+                      onChange={(e) => setRowFilter(e.target.value)}
+                    />
+                  </div>
+                  {rowFilter.trim() && (
+                    <Button variant="ghost" size="sm" onClick={() => setRowFilter("")}>Clear filter</Button>
+                  )}
+                </div>
+
                 <div className="rounded-lg border overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -233,13 +265,13 @@ export default function SuperAdminReports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {report.rows.length === 0 ? (
+                      {visibleRows.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={reportMeta[report.type].columns.length} className="text-center text-muted-foreground py-8">
-                            No records found.
+                            {report.rows.length === 0 ? "No records found." : `No records match "${rowFilter.trim()}".`}
                           </TableCell>
                         </TableRow>
-                      ) : report.rows.map((row, i) => (
+                      ) : visibleRows.map((row, i) => (
                         <TableRow key={i}>
                           {row.map((cell, j) => (
                             <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusClassByLabel(cell)}` : ""}>
@@ -253,7 +285,11 @@ export default function SuperAdminReports() {
                 </div>
 
                 <div className="flex items-center justify-between gap-2 print:hidden">
-                  <Badge variant="secondary">{report.rows.length} record(s)</Badge>
+                  <Badge variant="secondary">
+                    {rowFilter.trim()
+                      ? `${visibleRows.length} of ${report.rows.length} record(s)`
+                      : `${report.rows.length} record(s)`}
+                  </Badge>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={handlePrint}>
                       <Printer className="w-4 h-4 mr-2" /> Print Report

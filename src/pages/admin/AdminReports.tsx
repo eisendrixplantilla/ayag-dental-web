@@ -66,6 +66,9 @@ export default function AdminReports() {
   );
 
   const [type, setType] = useState<ReportType | "">("");
+  // Applied to the generated report itself, so a long report can be narrowed without
+  // running it again.
+  const [rowFilter, setRowFilter] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [dentist, setDentist] = useState("all");
@@ -121,6 +124,7 @@ export default function AdminReports() {
         .map(({ label, total, latest }) => [label, String(total), latest || "—"]);
     }
 
+    setRowFilter("");
     setReport({
       type,
       rows,
@@ -130,6 +134,14 @@ export default function AdminReports() {
     toast.success("Report preview generated");
   };
 
+  // The rows left after the on-screen filter: what is shown is what prints.
+  const visibleRows = useMemo(() => {
+    const q = rowFilter.trim().toLowerCase();
+    if (!report) return [];
+    if (!q) return report.rows;
+    return report.rows.filter((r) => r.join(" ").toLowerCase().includes(q));
+  }, [report, rowFilter]);
+
   // Both buttons print the same document — one to paper, one to a PDF — so a printed
   // copy never depends on what the screen happened to look like.
   const sendToPrinter = (what: string) => {
@@ -138,13 +150,14 @@ export default function AdminReports() {
     const ok = printReport({
       title: meta.title,
       columns: meta.columns,
-      rows: report.rows,
+      rows: visibleRows,
       generatedAt: report.generatedAt,
       preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
       filters: [
         { label: "Date Range", value: `${report.filters.start || "All"} to ${report.filters.end || "All"}` },
         { label: "Dentist", value: report.filters.dentist === "all" ? "All dentists" : report.filters.dentist },
         { label: "Status", value: report.filters.status === "all" ? "All statuses" : capitalize(report.filters.status) },
+        ...(rowFilter.trim() ? [{ label: "Filtered By", value: rowFilter.trim() }] : []),
       ],
     });
     if (ok) toast.success(`${what} ready`);
@@ -176,7 +189,7 @@ export default function AdminReports() {
             <div className="space-y-2">
               <Label>Report Type</Label>
               <Select value={type} onValueChange={(v) => { setType(v as ReportType); setReport(null); }}>
-                <SelectTrigger><SelectValue placeholder="Select report" /></SelectTrigger>
+                <SelectTrigger aria-label="Report type"><SelectValue placeholder="Select report" /></SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="appointment">Appointment Report</SelectItem>
                   <SelectItem value="walkin">Walk-in Report</SelectItem>
@@ -186,16 +199,16 @@ export default function AdminReports() {
             </div>
             <div className="space-y-2">
               <Label>Start Date (optional)</Label>
-              <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+              <Input type="date" aria-label="Start date" value={start} onChange={(e) => setStart(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>End Date (optional)</Label>
-              <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+              <Input type="date" aria-label="End date" value={end} onChange={(e) => setEnd(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Dentist (optional)</Label>
               <Select value={dentist} onValueChange={setDentist} disabled={type === "patient"}>
-                <SelectTrigger><SelectValue placeholder="All dentists" /></SelectTrigger>
+                <SelectTrigger aria-label="Dentist"><SelectValue placeholder="All dentists" /></SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">All Dentists</SelectItem>
                   {dentists.map((d) => (
@@ -207,7 +220,7 @@ export default function AdminReports() {
             <div className="space-y-2">
               <Label>Status (optional)</Label>
               <Select value={status} onValueChange={setStatus} disabled={type === "patient"}>
-                <SelectTrigger><SelectValue placeholder="All statuses" /></SelectTrigger>
+                <SelectTrigger aria-label="Status"><SelectValue placeholder="All statuses" /></SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">All Statuses</SelectItem>
                   {statuses.map((s) => (
@@ -244,6 +257,24 @@ export default function AdminReports() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Narrows the report that was just generated, without running it again.
+                What is on screen is what gets printed. */}
+            <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  aria-label="Filter the generated report"
+                  placeholder="Filter these results..."
+                  value={rowFilter}
+                  onChange={(e) => setRowFilter(e.target.value)}
+                />
+              </div>
+              {rowFilter.trim() && (
+                <Button variant="ghost" size="sm" onClick={() => setRowFilter("")}>Clear filter</Button>
+              )}
+            </div>
+
             <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -254,14 +285,16 @@ export default function AdminReports() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {report.rows.length === 0 ? (
+                  {visibleRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={reportMeta[report.type].columns.length} className="text-center text-muted-foreground py-8">
-                        No records found for the selected filters.
+                        {report.rows.length === 0
+                          ? "No records found for the selected filters."
+                          : `No records match "${rowFilter.trim()}".`}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    report.rows.map((row, i) => (
+                    visibleRows.map((row, i) => (
                       <TableRow key={i}>
                         {row.map((cell, j) => (
                           <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusVariant(cell)}` : ""}>
@@ -276,7 +309,11 @@ export default function AdminReports() {
             </div>
 
             <div className="flex items-center justify-between gap-2 print:hidden">
-              <Badge variant="secondary">{report.rows.length} record(s)</Badge>
+              <Badge variant="secondary">
+                {rowFilter.trim()
+                  ? `${visibleRows.length} of ${report.rows.length} record(s)`
+                  : `${report.rows.length} record(s)`}
+              </Badge>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={handlePrint}>
                   <Printer className="w-4 h-4 mr-2" /> Print Report
