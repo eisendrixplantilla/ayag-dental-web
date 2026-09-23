@@ -82,3 +82,15 @@ describe("visit length", () => {
     expect(formatDuration(90)).toBe("1 hr 30 min");
   });
 });
+
+describe("what each option says", () => {
+  it("spells out when the visit would finish", () => {
+    const [first] = generateAvailableSlots(schedule(), DATE, [], 90);
+    expect(first).toEqual({ value: "09:00", label: "9:00 AM – 10:30 AM" });
+  });
+
+  it("shows the start alone when no duration is given", () => {
+    const [first] = generateAvailableSlots(schedule(), DATE, []);
+    expect(first).toEqual({ value: "09:00", label: "9:00 AM" });
+  });
+});

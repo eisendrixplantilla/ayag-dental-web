@@ -179,7 +179,10 @@ export function generateAvailableSlots(
     if (lunchStart != null && lunchEnd != null && t < lunchEnd && slotEnd > lunchStart) continue;
     if (held.some((b) => t < b.to && slotEnd > b.from)) continue;
     if (isToday && t <= nowMinutes) continue;
-    slots.push({ value: toValue(t), label: toLabel(t) });
+    // Once the visit's length is known, the option says when it would finish, so the
+    // booker can see what the chosen services actually take up.
+    const label = durationMinutes ? `${toLabel(t)} – ${toLabel(slotEnd)}` : toLabel(t);
+    slots.push({ value: toValue(t), label });
   }
 
   return slots.slice(0, remaining);

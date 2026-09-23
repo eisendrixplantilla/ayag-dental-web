@@ -22,14 +22,8 @@ import {
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
+import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
 import { getServices } from "@/lib/api/dentalRecords";
-
-const services = [
-  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veeners",
-  "Denture (Pustiso)", "Implant", "Surgery", "TMJ", "Root Canal",
-  "Teeth Whitening", "Fixed Bridge",
-];
 
 
 export default function AdminAppointments() {
@@ -39,6 +33,14 @@ export default function AdminAppointments() {
   const [patientPickerOpen, setPatientPickerOpen] = useState(false);
   // A visit can cover several services, e.g. a cleaning and a filling in one sitting.
   const [chosen, setChosen] = useState<string[]>([]);
+
+  // What the clinic offers, and how long each one takes — straight from the
+  // superadmin's Dental Services & Pricing list. A service becomes bookable once it
+  // has a duration there.
+  const [catalog, setCatalog] = useState<{ name: string; minutes: number }[]>([]);
+  const services = catalog.length ? catalog.map(s => s.name) : FALLBACK_SERVICES;
+  const durations = Object.fromEntries(catalog.map(s => [s.name, s.minutes]));
+  const visitMinutes = totalServiceMinutes(chosen, durations);
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
@@ -62,15 +64,12 @@ export default function AdminAppointments() {
     useCallback((id: string) => walkIns.find(w => w.id === id)?.id, [walkIns]),
   );
 
-  // How long each service takes, as the clinic has it configured.
-  const [durations, setDurations] = useState<Record<string, number>>({});
-  const visitMinutes = totalServiceMinutes(chosen, durations);
-
   useEffect(() => {
     getServices()
-      .then(list => setDurations(Object.fromEntries(
-        list.filter(s => s.duration != null).map(s => [s.name, s.duration as number]))))
-      .catch(() => {/* fall back to the default length per service */});
+      .then(list => setCatalog((list ?? [])
+        .filter(s => s.duration != null)
+        .map(s => ({ name: s.name, minutes: s.duration as number }))))
+      .catch(() => {/* keep the fallback list and the default length per service */});
   }, []);
 
   useEffect(() => {

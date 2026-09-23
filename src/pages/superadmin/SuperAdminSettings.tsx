@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Settings, Clock, Stethoscope, Printer, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
-import { getServices, updateServicePrice, type Service } from "@/lib/api/dentalRecords";
+import { getServices, updateService, type Service } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 
 export default function SuperAdminSettings() {
@@ -18,6 +18,7 @@ export default function SuperAdminSettings() {
 
   const [services, setServices] = useState<Service[]>([]);
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
 
   const [info, setInfo] = useState<ClinicInfo>({ name: "", phone: "", email: "", address: "" });
@@ -29,6 +30,7 @@ export default function SuperAdminSettings() {
         setHours(h);
         setServices(s);
         setPriceDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.price != null ? String(svc.price) : ""])));
+        setDurationDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.duration != null ? String(svc.duration) : ""])));
         setInfo(i);
       })
       .catch(() => toast.error("Failed to load settings"))
@@ -51,20 +53,24 @@ export default function SuperAdminSettings() {
     }
   };
 
-  const savePrice = async (service: Service) => {
-    const raw = priceDrafts[service.id];
-    const price = Number(raw);
-    if (!raw || Number.isNaN(price) || price < 0) {
+  const saveService = async (service: Service) => {
+    const price = Number(priceDrafts[service.id]);
+    const duration = Number(durationDrafts[service.id]);
+    if (!priceDrafts[service.id] || Number.isNaN(price) || price < 0) {
       toast.error("Enter a valid price");
+      return;
+    }
+    if (!durationDrafts[service.id] || !Number.isInteger(duration) || duration <= 0) {
+      toast.error("Enter the minutes this service takes");
       return;
     }
     setSavingServiceId(service.id);
     try {
-      const updated = await updateServicePrice(service.id, { price });
+      const updated = await updateService(service.id, { price, duration });
       setServices((prev) => prev.map((s) => (s.id === service.id ? updated : s)));
-      toast.success("Price updated");
+      toast.success(`${updated.name} updated`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update price");
+      toast.error(err instanceof Error ? err.message : "Failed to update service");
     } finally {
       setSavingServiceId(null);
     }
@@ -133,6 +139,10 @@ export default function SuperAdminSettings() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2"><Stethoscope className="w-5 h-5 text-primary" /> Dental Services & Pricing</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Duration is what the booking forms reserve: a visit is offered only the time slots
+            long enough for the services chosen. A service can be booked once it has one.
+          </p>
         </CardHeader>
         <CardContent>
           <Table>
@@ -148,17 +158,31 @@ export default function SuperAdminSettings() {
               {services.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.duration != null ? `${s.duration} min` : "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={5}
+                        step={5}
+                        aria-label={`Duration for ${s.name} in minutes`}
+                        value={durationDrafts[s.id] ?? ""}
+                        onChange={(e) => setDurationDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">min</span>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Input
                       type="number"
+                      aria-label={`Price for ${s.name}`}
                       value={priceDrafts[s.id] ?? ""}
                       onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
                       className="w-28"
                     />
                   </TableCell>
                   <TableCell className="print:hidden">
-                    <Button variant="ghost" size="sm" onClick={() => savePrice(s)} disabled={savingServiceId === s.id}>
+                    <Button variant="ghost" size="sm" onClick={() => saveService(s)} disabled={savingServiceId === s.id}>
                       {savingServiceId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
                     </Button>
                   </TableCell>

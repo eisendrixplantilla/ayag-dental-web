@@ -8,6 +8,14 @@ export function splitServices(service: string | null | undefined): string[] {
   return service ? service.split(",").map((s) => s.trim()).filter(Boolean) : [];
 }
 
+/** What the booking forms offer when the clinic's own list can't be loaded. Normally the
+ * list comes from Dental Services & Pricing, where the superadmin maintains it. */
+export const FALLBACK_SERVICES = [
+  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veeners",
+  "Denture (Pustiso)", "Implant", "Surgery", "TMJ", "Root Canal",
+  "Teeth Whitening", "Fixed Bridge",
+];
+
 /** What a service takes when the clinic hasn't set a duration for it. */
 export const DEFAULT_SERVICE_MINUTES = 30;
 

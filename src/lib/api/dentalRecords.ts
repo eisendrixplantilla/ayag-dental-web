@@ -86,7 +86,7 @@ export async function getServices(): Promise<Service[]> {
   return data.services;
 }
 
-export async function updateServicePrice(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
+export async function updateService(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
   const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),

@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The booking form runs for real; only the network and Radix's Select are replaced.
-const h = vi.hoisted(() => ({ posted: [] as any[] }));
+const h = vi.hoisted(() => ({ posted: [] as any[], services: [] as any[] }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "p1", name: "Allen Estrella", email: "allen@example.com", role: "patient", verified: true } }),
@@ -13,7 +13,9 @@ vi.mock("@/contexts/AuthContext", () => ({
       h.posted.push(body);
       return { appointment: { id: "new-1", ...body } };
     }
-    if (path.includes("bookedSlots")) return { times: [] };
+    if (path.includes("bookedSlots")) return { times: [], slots: [] };
+    // The clinic's own list, as the superadmin maintains it under Dental Services & Pricing.
+    if (path.includes("services=true")) return { services: h.services };
     return {};
   }),
 }));
@@ -72,7 +74,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
-beforeEach(() => { h.posted = []; });
+beforeEach(() => { h.posted = []; h.services = []; });
 afterEach(cleanup);
 
 const renderPage = async () => {
@@ -119,3 +121,38 @@ describe("booking more than one service", () => {
   });
 });
 
+
+describe("the services on offer", () => {
+  const catalog = [
+    { id: "1", name: "Braces", description: null, duration: 60, price: null },
+    { id: "2", name: "Check-up", description: null, duration: 30, price: null },
+    { id: "3", name: "Typo service", description: null, duration: null, price: null },
+  ];
+
+  it("comes from the clinic's own list, and only what has a duration", async () => {
+    h.services = catalog;
+    await renderPage();
+    await waitFor(() => expect(options()).toEqual(["Braces", "Check-up"]));
+    // Not the built-in fallback list.
+    expect(options()).not.toContain("Root Canal");
+    expect(options()).not.toContain("Typo service");
+  });
+
+  it("adds up those durations for the visit", async () => {
+    h.services = catalog;
+    await renderPage();
+    await waitFor(() => expect(options()).toContain("Braces"));
+
+    fireEvent.change(picker(), { target: { value: "Braces" } });
+    await waitFor(() => expect(screen.getByText(/About 1 hr/)).toBeInTheDocument());
+
+    fireEvent.change(picker(), { target: { value: "Check-up" } });
+    await waitFor(() => expect(screen.getByText(/About 1 hr 30 min/)).toBeInTheDocument());
+  });
+
+  it("falls back to the built-in list when the clinic's can't be loaded", async () => {
+    h.services = [];
+    await renderPage();
+    expect(options()).toContain("Root Canal");
+  });
+});
