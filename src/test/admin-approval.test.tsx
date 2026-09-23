@@ -78,7 +78,9 @@ function apt(over: Partial<Appointment>): Appointment {
   };
 }
 
-const rowOf = (name: string) => screen.getByText(name).closest("tr")!;
+// Scoped to the table: an open dialog shows the patient name too.
+const rowOf = (name: string) =>
+  within(document.querySelector("table") as HTMLElement).getByText(name).closest("tr")!;
 
 beforeEach(() => {
   h.appts = [
@@ -96,17 +98,35 @@ const renderPage = async () => {
   await screen.findByText("Allen Estrella");
 };
 
-describe("admin approve / reject", () => {
-  it("offers Approve and Reject on pending bookings only, including the compact phone controls", async () => {
-    await renderPage();
-    const pending = within(rowOf("Allen Estrella"));
-    // One labelled button (wide screens) and one icon button (phones) for each action.
-    expect(pending.getAllByRole("button", { name: /Approve/ })).toHaveLength(2);
-    expect(pending.getAllByRole("button", { name: /Reject/ })).toHaveLength(2);
+// Approving and rejecting now live behind View, so most of these go through the dialog.
+const openDetails = async (name: string) => {
+  fireEvent.click(within(rowOf(name)).getAllByRole("button", { name: /View/ })[0]);
+  return within(await screen.findByRole("dialog"));
+};
 
-    const confirmed = within(rowOf("Pedro Reyes"));
-    expect(confirmed.queryByRole("button", { name: /Approve/ })).toBeNull();
-    expect(confirmed.queryByRole("button", { name: /Reject/ })).toBeNull();
+describe("admin approve / reject", () => {
+  it("leaves View as the only action in the table", async () => {
+    await renderPage();
+    for (const name of ["Allen Estrella", "Pedro Reyes"]) {
+      const row = within(rowOf(name));
+      expect(row.getAllByRole("button", { name: /View/ })).toHaveLength(2); // labelled + phone icon
+      expect(row.queryByRole("button", { name: /Approve|Confirm/ })).toBeNull();
+      expect(row.queryByRole("button", { name: /Reject/ })).toBeNull();
+    }
+  });
+
+  it("offers Confirm and Reject inside the View dialog of a pending booking", async () => {
+    await renderPage();
+    const dialog = await openDetails("Allen Estrella");
+    expect(dialog.getByRole("button", { name: /Confirm Appointment/ })).toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: /Reject Appointment/ })).toBeInTheDocument();
+  });
+
+  it("offers neither once the booking is already confirmed", async () => {
+    await renderPage();
+    const dialog = await openDetails("Pedro Reyes");
+    expect(dialog.queryByRole("button", { name: /Confirm Appointment/ })).toBeNull();
+    expect(dialog.queryByRole("button", { name: /Reject Appointment/ })).toBeNull();
   });
 
   it("shows times in 12-hour format", async () => {
@@ -115,22 +135,24 @@ describe("admin approve / reject", () => {
     expect(within(rowOf("Pedro Reyes")).getByText("9:30 AM")).toBeInTheDocument();
   });
 
-  it("approving confirms it, reports the email as sent, and removes the actions", async () => {
+  it("approving confirms it, reports the email as sent, and drops the dialog's actions", async () => {
     await renderPage();
-    fireEvent.click(within(rowOf("Allen Estrella")).getAllByRole("button", { name: /Approve/ })[1]); // phone icon
+    const dialog = await openDetails("Allen Estrella");
+    fireEvent.click(dialog.getByRole("button", { name: /Confirm Appointment/ }));
 
     await waitFor(() => expect(h.patches).toEqual([{ id: "pending-1", body: { status: "confirmed" } }]));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Appointment approved", {
       description: "Confirmation email sent to allen@example.com.",
     }));
     await waitFor(() => expect(within(rowOf("Allen Estrella")).getByText("confirmed")).toBeInTheDocument());
-    expect(within(rowOf("Allen Estrella")).queryByRole("button", { name: /Approve/ })).toBeNull();
+    expect(dialog.queryByRole("button", { name: /Confirm Appointment/ })).toBeNull();
   });
 
   it("warns instead of claiming success when the email fails to send", async () => {
     h.emailSent = false;
     await renderPage();
-    fireEvent.click(within(rowOf("Allen Estrella")).getAllByRole("button", { name: /Approve/ })[0]);
+    const dialog = await openDetails("Allen Estrella");
+    fireEvent.click(dialog.getByRole("button", { name: /Confirm Appointment/ }));
 
     await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith("Appointment approved", {
       description: expect.stringContaining("couldn't be sent"),
@@ -140,12 +162,13 @@ describe("admin approve / reject", () => {
 
   it("rejecting requires a reason, sends it, and reports the email", async () => {
     await renderPage();
-    fireEvent.click(within(rowOf("Allen Estrella")).getAllByRole("button", { name: /Reject/ })[1]);
+    const details = await openDetails("Allen Estrella");
+    fireEvent.click(details.getByRole("button", { name: /Reject Appointment/ }));
 
-    const dialog = await screen.findByRole("dialog");
-    const send = within(dialog).getByRole("button", { name: /Reject & Notify/ });
+    const send = await screen.findByRole("button", { name: /Reject & Notify/ });
+    const reject = within(send.closest("[role=dialog]") as HTMLElement);
     expect(send).toBeDisabled(); // no reason yet
-    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Dentist on leave that day" } });
+    fireEvent.change(reject.getByRole("textbox"), { target: { value: "Dentist on leave that day" } });
     fireEvent.click(send);
 
     await waitFor(() => expect(h.patches).toEqual([

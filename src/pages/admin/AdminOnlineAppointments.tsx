@@ -232,39 +232,15 @@ export default function AdminOnlineAppointments() {
                   <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
                   <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
-                  <TableCell className="print:hidden">
-                    {/* Full labelled buttons on wide screens... */}
-                    <div className="hidden lg:flex gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => openDetails(apt)}>
-                        <Eye className="w-4 h-4 mr-1" /> View
-                      </Button>
-                      {apt.status === "pending" && (
-                        <>
-                          <Button size="sm" className="gradient-primary text-primary-foreground" disabled={saving} onClick={() => handleApprove(apt)}>
-                            <CheckCircle className="w-4 h-4 mr-1" /> Approve
-                          </Button>
-                          <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => openReject(apt)}>
-                            <XCircle className="w-4 h-4 mr-1" /> Reject
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                    {/* ...and compact icons on phones/tablets, so Approve/Reject stay on screen. */}
-                    <div className="flex lg:hidden gap-1 justify-end">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="View details" title="View details" onClick={() => openDetails(apt)}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      {apt.status === "pending" && (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success hover:text-success hover:bg-success/10" aria-label="Approve" title="Approve" disabled={saving} onClick={() => handleApprove(apt)}>
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" aria-label="Reject" title="Reject" onClick={() => openReject(apt)}>
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                  <TableCell className="print:hidden text-right">
+                    {/* One way in: everything about an appointment, including approving or
+                        rejecting it, lives behind View. */}
+                    <Button size="sm" variant="outline" className="hidden lg:inline-flex" onClick={() => openDetails(apt)}>
+                      <Eye className="w-4 h-4 mr-1" /> View
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 lg:hidden" aria-label="View details" title="View details" onClick={() => openDetails(apt)}>
+                      <Eye className="w-4 h-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -313,7 +289,7 @@ export default function AdminOnlineAppointments() {
                 >
                   <XCircle className="w-4 h-4 mr-1" /> Reject Appointment
                 </Button>
-                <Button className="gradient-primary text-primary-foreground" onClick={() => handleApprove(selectedLive)}>
+                <Button className="gradient-primary text-primary-foreground" disabled={saving} onClick={() => handleApprove(selectedLive)}>
                   <CheckCircle className="w-4 h-4 mr-1" /> Confirm Appointment
                 </Button>
               </>
