@@ -40,3 +40,15 @@ export function manilaNowMinutes(): number {
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
   return hour * 60 + minute;
 }
+
+/** "Sep 23, 2026, 5:45 PM" — a compact Manila timestamp for "booked on" / "created" columns. */
+export function formatManilaStamp(d: Date | string): string {
+  return new Date(d).toLocaleString("en-US", {
+    timeZone: MANILA_TZ,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

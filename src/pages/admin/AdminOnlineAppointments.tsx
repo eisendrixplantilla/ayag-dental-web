@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, describeEmailOutcome, type Appointment, type AptStatus } from "@/lib/api/appointments";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, formatManilaStamp } from "@/lib/formatDate";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -194,6 +194,7 @@ export default function AdminOnlineAppointments() {
                 <TableHead className="hidden md:table-cell">Assigned Dentist</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
+                <TableHead className="hidden lg:table-cell">Booked On</TableHead>
                 <TableHead className="hidden md:table-cell">Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right print:hidden">Actions</TableHead>
@@ -212,6 +213,7 @@ export default function AdminOnlineAppointments() {
                   <TableCell className="hidden md:table-cell">{apt.dentistName}</TableCell>
                   <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
                   <TableCell className="whitespace-nowrap">{toLabel(toMinutes(apt.time))}</TableCell>
+                  <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
                   <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
                   <TableCell className="print:hidden">
@@ -251,7 +253,7 @@ export default function AdminOnlineAppointments() {
                 </TableRow>
               ))}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No appointments found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No appointments found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -277,6 +279,7 @@ export default function AdminOnlineAppointments() {
               <p><span className="font-semibold text-foreground">Appointment Date:</span> {selectedLive.date}</p>
               <p><span className="font-semibold text-foreground">Appointment Time:</span> {selectedLive.time}</p>
               <p><span className="font-semibold text-foreground">Appointment Type:</span> {selectedLive.type === "walk-in" ? "Walk-in" : "Online"}</p>
+              <p><span className="font-semibold text-foreground">Booked On:</span> {formatManilaStamp(selectedLive.createdAt)}</p>
               <p className="flex items-center gap-2"><span className="font-semibold text-foreground">Current Status:</span>
                 <Badge variant="outline" className={statusColors[selectedLive.status]}>{selectedLive.status}</Badge>
               </p>

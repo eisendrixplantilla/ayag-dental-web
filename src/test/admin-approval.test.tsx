@@ -137,8 +137,15 @@ describe("the appointments list", () => {
     ];
     await renderPage();
 
-    const names = screen.getAllByRole("row").slice(1).map(r => r.cells[1].textContent);
+    const names = screen.getAllByRole("row").slice(1).map(r => (r as HTMLTableRowElement).cells[1].textContent);
     expect(names).toEqual(["Maria Santos", "Allen Estrella", "Pedro Reyes"]);
+  });
+
+  it("shows when each booking was created, in Manila time", async () => {
+    h.appts = [apt({ patientName: "Allen Estrella", createdAt: "2026-09-22T00:00:00Z" })];
+    await renderPage();
+    // 00:00 UTC is 8am the same morning in Manila, wherever the admin is sitting.
+    expect(within(rowOf("Allen Estrella")).getByText("Sep 22, 2026, 8:00 AM")).toBeInTheDocument();
   });
 
   it("keeps the filters and the table in one card", async () => {
