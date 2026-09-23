@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { appointmentRef } from "@/lib/appointmentRef";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,7 @@ type ReportType = "appointment" | "patient";
 const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   appointment: {
     title: "Appointment Summary Report",
-    columns: ["Appointment ID", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"],
+    columns: ["Reference", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"],
   },
   patient: {
     title: "Patient Summary Report",
@@ -87,7 +88,7 @@ export default function SuperAdminReports() {
     if (type === "appointment") {
       rows = [...appointments]
         .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
-        .map((a) => [a.id, a.patientName, a.dentistName ?? "—", a.service, a.date, statusMeta[a.status]?.label ?? a.status]);
+        .map((a) => [appointmentRef(a.id), a.patientName, a.dentistName ?? "—", a.service, a.date, statusMeta[a.status]?.label ?? a.status]);
     } else {
       const latestOf = (rs: typeof records) => rs.length
         ? rs.reduce((max, r) => (r.date > max ? r.date : max), rs[0].date)

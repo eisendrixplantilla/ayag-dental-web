@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { appointmentRef } from "@/lib/appointmentRef";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ type ReportType = "appointment" | "walkin" | "patient";
 const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   appointment: {
     title: "Appointment Report",
-    columns: ["Appointment ID", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"],
+    columns: ["Reference", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"],
   },
   walkin: { title: "Walk-in Report", columns: ["Patient Name", "Dentist", "Date", "Time"] },
   patient: { title: "Patient Report", columns: ["Patient Information", "Total Appointments", "Latest Consultation"] },
@@ -79,7 +80,7 @@ export default function AdminReports() {
     if (type === "appointment") {
       rows = appointments
         .filter((a) => inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
-        .map((a) => [a.id, a.patientName, a.dentistName ?? "—", a.service, a.date, capitalize(a.status)]);
+        .map((a) => [appointmentRef(a.id), a.patientName, a.dentistName ?? "—", a.service, a.date, capitalize(a.status)]);
     } else if (type === "walkin") {
       rows = appointments
         .filter((a) => a.type === "walk-in" && inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))

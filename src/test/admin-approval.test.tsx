@@ -268,6 +268,29 @@ describe("the appointments list", () => {
     await waitFor(() => expect(names()).toHaveLength(3));
   });
 
+  it("gives each appointment a short reference, and finds it by that", async () => {
+    h.appts = [
+      apt({ id: "3f9c2a10-0000-4000-8000-000000000001", patientName: "Allen Estrella" }),
+      apt({ id: "b7d41e55-0000-4000-8000-000000000002", patientName: "Pedro Reyes" }),
+    ];
+    await renderPage();
+
+    expect(within(rowOf("Allen Estrella")).getByText("APT-3F9C2A")).toBeInTheDocument();
+    expect(within(rowOf("Pedro Reyes")).getByText("APT-B7D41E")).toBeInTheDocument();
+
+    const search = screen.getByPlaceholderText(/Search patient name or reference/);
+    fireEvent.change(search, { target: { value: "apt-3f9c2a" } });
+    await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
+    expect(screen.getByText("Allen Estrella")).toBeInTheDocument();
+
+    // The bare reference works too, as does the full id somebody pasted in.
+    fireEvent.change(search, { target: { value: "b7d41e" } });
+    await waitFor(() => expect(screen.getByText("Pedro Reyes")).toBeInTheDocument());
+    fireEvent.change(search, { target: { value: "3f9c2a10-0000-4000-8000-000000000001" } });
+    await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
+    expect(screen.queryByText("Pedro Reyes")).toBeNull();
+  });
+
   it("keeps the filters and the table in one card", async () => {
     await renderPage();
     const card = screen.getByRole("table").closest(".bg-card");

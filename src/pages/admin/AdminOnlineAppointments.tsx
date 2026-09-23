@@ -16,6 +16,7 @@ import { formatTimeRange } from "@/lib/dentistSchedules";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { splitServices } from "@/lib/services";
+import { appointmentRef, matchesRef } from "@/lib/appointmentRef";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -76,7 +77,9 @@ export default function AdminOnlineAppointments() {
   );
 
   const filtered = useMemo(() => ordered.filter(a => {
-    const matchesSearch = !search || a.patientName.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search
+      || a.patientName.toLowerCase().includes(search.toLowerCase())
+      || matchesRef(a.id, search);
     // Dates are "YYYY-MM-DD", so a plain string compare is a date compare.
     const matchesDate = (!fromDate || a.date >= fromDate) && (!toDate || a.date <= toDate);
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
@@ -170,7 +173,7 @@ export default function AdminOnlineAppointments() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="relative sm:col-span-2">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
+                <Input className="pl-9" placeholder="Search patient name or reference..." value={search} onChange={e => setSearch(e.target.value)} />
               </div>
               {/* An open-ended range is fine: leave either end blank for "any". */}
               <div className="flex items-center gap-2 sm:col-span-2">
@@ -226,7 +229,7 @@ export default function AdminOnlineAppointments() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="hidden lg:table-cell">Appointment ID</TableHead>
+                <TableHead className="hidden lg:table-cell">Reference</TableHead>
                 <TableHead>Patient Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Service</TableHead>
                 <TableHead className="hidden md:table-cell">Assigned Dentist</TableHead>
@@ -245,7 +248,7 @@ export default function AdminOnlineAppointments() {
                   ref={registerRow(apt.id)}
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="hidden lg:table-cell font-mono text-xs">{apt.id.slice(0, 8)}</TableCell>
+                  <TableCell className="hidden lg:table-cell font-mono text-xs whitespace-nowrap">{appointmentRef(apt.id)}</TableCell>
                   <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell className="hidden sm:table-cell">{apt.service}</TableCell>
                   <TableCell className="hidden md:table-cell">{apt.dentistName}</TableCell>
@@ -284,7 +287,7 @@ export default function AdminOnlineAppointments() {
           </DialogHeader>
           {selectedLive && (
             <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-1.5 text-sm">
-              <p><span className="font-semibold text-foreground">Appointment ID:</span> {selectedLive.id}</p>
+              <p><span className="font-semibold text-foreground">Reference:</span> <span className="font-mono">{appointmentRef(selectedLive.id)}</span></p>
               <p><span className="font-semibold text-foreground">Patient Name:</span> {selectedLive.patientName}</p>
               <p><span className="font-semibold text-foreground">Contact Number:</span> {selectedLive.contact}</p>
               <p><span className="font-semibold text-foreground">Email Address:</span> {selectedLive.email}</p>
