@@ -1,6 +1,7 @@
 import { api } from "@/contexts/AuthContext";
 import { toKey, toMinutes, toLabel, toValue } from "@/lib/dentistSchedules";
 import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
+import type { BookedSlot } from "@/lib/api/appointments";
 
 export interface DentistDirectoryEntry {
   id: string;
@@ -139,21 +140,31 @@ export async function removeDentistUnavailable(id: string): Promise<void> {
   await api(`/staff?unavailable=true&id=${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** Generates bookable time-of-day slots for a given date from a real dentist schedule,
- * excluding already-booked times and enforcing that day's max-patients cap. */
+/** Generates bookable start times for a given date from a real dentist schedule, keeping
+ * only those where a visit of `durationMinutes` fits: inside working hours, clear of
+ * lunch, and clear of what's already booked. Enforces that day's max-patients cap. */
 export function generateAvailableSlots(
   schedule: DentistScheduleData,
   date: Date,
-  bookedTimes: string[],
+  booked: (string | BookedSlot)[],
+  durationMinutes?: number,
 ): { value: string; label: string }[] {
   const key = toKey(date);
   if (schedule.unavailable.some((u) => u.date === key)) return [];
 
   const day = schedule.days.find((d) => d.dayOfWeek === date.getDay());
   if (!day) return [];
-  if (bookedTimes.length >= day.maxPatients) return [];
+  if (booked.length >= day.maxPatients) return [];
 
-  const remaining = day.maxPatients - bookedTimes.length;
+  const remaining = day.maxPatients - booked.length;
+  // However long the chosen services need, but never less than one of the dentist's slots.
+  const needed = Math.max(durationMinutes ?? day.duration, day.duration);
+  // A booking with no end time recorded occupies a single slot.
+  const held = booked.map((b) => {
+    const from = toMinutes(typeof b === "string" ? b : b.time);
+    const end = typeof b === "string" ? null : b.endTime;
+    return { from, to: end ? toMinutes(end) : from + day.duration };
+  });
   const slots: { value: string; label: string }[] = [];
   const endMin = toMinutes(day.end);
   const lunchStart = day.lunchStart ? toMinutes(day.lunchStart) : null;
@@ -163,13 +174,12 @@ export function generateAvailableSlots(
   const isToday = manilaTodayDateStr() === key;
   const nowMinutes = manilaNowMinutes();
 
-  for (let t = toMinutes(day.start); t + day.duration <= endMin; t += day.duration) {
-    const slotEnd = t + day.duration;
+  for (let t = toMinutes(day.start); t + needed <= endMin; t += day.duration) {
+    const slotEnd = t + needed;
     if (lunchStart != null && lunchEnd != null && t < lunchEnd && slotEnd > lunchStart) continue;
-    const value = toValue(t);
-    if (bookedTimes.includes(value)) continue;
+    if (held.some((b) => t < b.to && slotEnd > b.from)) continue;
     if (isToday && t <= nowMinutes) continue;
-    slots.push({ value, label: toLabel(t) });
+    slots.push({ value: toValue(t), label: toLabel(t) });
   }
 
   return slots.slice(0, remaining);

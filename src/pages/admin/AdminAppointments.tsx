@@ -22,7 +22,8 @@ import {
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { SERVICE_SEPARATOR } from "@/lib/services";
+import { SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
+import { getServices } from "@/lib/api/dentalRecords";
 
 const services = [
   "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veeners",
@@ -61,6 +62,17 @@ export default function AdminAppointments() {
     useCallback((id: string) => walkIns.find(w => w.id === id)?.id, [walkIns]),
   );
 
+  // How long each service takes, as the clinic has it configured.
+  const [durations, setDurations] = useState<Record<string, number>>({});
+  const visitMinutes = totalServiceMinutes(chosen, durations);
+
+  useEffect(() => {
+    getServices()
+      .then(list => setDurations(Object.fromEntries(
+        list.filter(s => s.duration != null).map(s => [s.name, s.duration as number]))))
+      .catch(() => {/* fall back to the default length per service */});
+  }, []);
+
   useEffect(() => {
     getDentistDirectory()
       .then(setDentists)
@@ -82,10 +94,15 @@ export default function AdminAppointments() {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
     getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
-      .then((booked) => setSlots(generateAvailableSlots(schedule, date, booked)))
+      .then((booked) => {
+        const free = generateAvailableSlots(schedule, date, booked, visitMinutes);
+        setSlots(free);
+        // Adding a service can make the time already picked too short to fit.
+        setTime(t => (free.some(s => s.value === t) ? t : ""));
+      })
       .catch(() => toast.error("Failed to load available time slots"))
       .finally(() => setLoadingSlots(false));
-  }, [dentistId, date, schedule, slotsVersion]);
+  }, [dentistId, date, schedule, slotsVersion, visitMinutes]);
 
   const scheduleSummary = useMemo(() => {
     if (!schedule || schedule.days.length === 0) return "";
@@ -124,6 +141,7 @@ export default function AdminAppointments() {
         service: chosen.join(SERVICE_SEPARATOR),
         date: toKey(date),
         time,
+        endTime: endTimeFor(time, visitMinutes),
         type: "walk-in",
       });
       setPatientName(""); setPatientId(""); setChosen([]); setDentistId(""); setDate(undefined); setTime("");
@@ -279,7 +297,11 @@ export default function AdminAppointments() {
                 </SelectTrigger>
                 <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Add as many services as this visit needs.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {chosen.length === 0
+                  ? "Add as many services as this visit needs."
+                  : `About ${formatDuration(visitMinutes)} in the chair — only slots with that much free time are offered.`}
+              </p>
             </div>
           </div>
 

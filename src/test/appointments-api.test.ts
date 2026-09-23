@@ -13,32 +13,37 @@ const h = vi.hoisted(() => ({
 const sameDentist = (r: Row, id: string | null, name: string | null) =>
   (id !== null && r.dentist_id === id) || (name !== null && r.dentist_name === name);
 
+// The handler asks for the dentist's bookings that day and compares the spans itself,
+// so the fake only has to hand back the rows.
+const onThatDay = (date: string, statuses: string[], dentistId: string | null, dentistName: string | null, excludeId: string | null) =>
+  h.rows.filter(r => r.date === date && statuses.includes(r.status)
+    && sameDentist(r, dentistId, dentistName) && r.id !== excludeId);
+
 vi.mock("../../api/_lib/db.js", () => ({
   sql: vi.fn(async (strings: TemplateStringsArray, ...v: any[]) => {
     const text = strings.join("?");
     if (text.includes("slot-clash")) {
-      const [date, time, statuses, dentistId, dentistName, excludeId] = v;
-      return h.rows.filter(r => r.date === date && r.time === time && statuses.includes(r.status)
-        && sameDentist(r, dentistId, dentistName) && r.id !== excludeId).slice(0, 1).map(() => ({ "?column?": 1 }));
+      const [date, statuses, dentistId, dentistName, excludeId] = v;
+      return onThatDay(date, statuses, dentistId, dentistName, excludeId)
+        .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("booked-slots")) {
       const [date, statuses, dentistId, dentistName, excludeId] = v;
-      const times = h.rows.filter(r => r.date === date && statuses.includes(r.status)
-        && sameDentist(r, dentistId, dentistName) && r.id !== excludeId).map(r => r.time);
-      return [...new Set(times)].map(time => ({ time }));
+      return onThatDay(date, statuses, dentistId, dentistName, excludeId)
+        .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("INSERT INTO appointments")) {
-      const [patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type, status, reason, created_by] = v;
+      const [patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by] = v;
       const row = { id: `new-${++h.n}`, patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type,
-        status, reason, remarks: null, reschedule_count: 0, created_by, end_time: null,
+        status, reason, remarks: null, reschedule_count: 0, created_by, end_time,
         created_at: "2026-09-23T00:00:00Z", updated_at: "2026-09-23T00:00:00Z" };
       h.rows.push(row);
       return [row];
     }
     if (text.includes("UPDATE appointments")) {
-      const [status, date, time, reason, remarks, dentist_id, dentist_name, inc, id] = v;
+      const [status, date, time, end_time, reason, remarks, dentist_id, dentist_name, inc, id] = v;
       const row = h.rows.find(r => r.id === id)!;
-      Object.assign(row, Object.fromEntries(Object.entries({ status, date, time, reason, remarks, dentist_id, dentist_name })
+      Object.assign(row, Object.fromEntries(Object.entries({ status, date, time, end_time, reason, remarks, dentist_id, dentist_name })
         .filter(([, val]) => val !== null)));
       row.reschedule_count += inc;
       return [{ ...row }];
@@ -175,14 +180,18 @@ describe("double-booking protection", () => {
     h.session = { sub: "p-other", email: "someone@example.com", role: "patient" };
     h.rows = [
       row(), // Allen, another patient
-      row({ id: "apt-2", time: "09:30", status: "confirmed" }),
+      row({ id: "apt-2", time: "09:30", end_time: "10:30", status: "confirmed" }),
       row({ id: "apt-3", time: "10:00", status: "cancelled" }), // freed
       row({ id: "apt-4", time: "11:00", dentist_id: "dr-other", dentist_name: "Aerhol Gocalin" }), // other dentist
     ];
     const res = await call("GET", { query: { bookedSlots: "1", dentistId: DR, dentistName: "Dr. Mike Johnson", date: "2026-09-25" } });
     expect(res.code).toBe(200);
-    expect(res.body).toEqual({ times: expect.arrayContaining(["13:00", "09:30"]) });
+    expect(res.body.times).toEqual(expect.arrayContaining(["13:00", "09:30"]));
     expect(res.body.times).toHaveLength(2);
+    // Spans, so a longer visit can be checked against them.
+    expect(res.body.slots).toEqual(expect.arrayContaining([
+      { time: "13:00", endTime: null }, { time: "09:30", endTime: "10:30" },
+    ]));
     expect(JSON.stringify(res.body)).not.toMatch(/Allen|allen@example\.com/);
   });
 });
@@ -218,5 +227,48 @@ describe("a service that was renamed", () => {
   it("leaves every other service exactly as stored", async () => {
     h.rows = [row({ service: "Restoration" })];
     expect((await patch("apt-1", { status: "confirmed" })).body.appointment.service).toBe("Restoration");
+  });
+});
+
+describe("appointments that run longer than one slot", () => {
+  it("stores the end time the booking form worked out", async () => {
+    const res = await call("POST", { body: { ...booking, date: "2026-09-25", time: "13:00", endTime: "14:30" } });
+    expect(res.code).toBe(201);
+    expect(res.body.appointment.endTime).toBe("14:30");
+    expect(h.rows[0].end_time).toBe("14:30");
+  });
+
+  it("refuses a booking that would start inside a longer one", async () => {
+    h.rows = [row({ time: "13:00", end_time: "14:30", status: "confirmed" })];
+    const res = await call("POST", { body: { ...booking, date: "2026-09-25", time: "14:00", endTime: "14:30" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/already been taken/);
+  });
+
+  it("refuses a long booking that would swallow a later one", async () => {
+    h.rows = [row({ time: "14:00", end_time: "14:30", status: "confirmed" })];
+    const res = await call("POST", { body: { ...booking, date: "2026-09-25", time: "13:00", endTime: "15:00" } });
+    expect(res.code).toBe(409);
+  });
+
+  it("allows a booking that ends exactly as the next one starts", async () => {
+    h.rows = [row({ time: "14:30", end_time: "15:00", status: "confirmed" })];
+    const res = await call("POST", { body: { ...booking, date: "2026-09-25", time: "13:00", endTime: "14:30" } });
+    expect(res.code).toBe(201);
+  });
+
+  it("assumes half an hour for bookings saved before end times were recorded", async () => {
+    h.rows = [row({ time: "13:00", end_time: null, status: "confirmed" })];
+    const inside = await call("POST", { body: { ...booking, date: "2026-09-25", time: "13:15", endTime: "13:45" } });
+    expect(inside.code).toBe(409);
+    const after = await call("POST", { body: { ...booking, date: "2026-09-25", time: "13:30", endTime: "14:00" } });
+    expect(after.code).toBe(201);
+  });
+
+  it("carries the visit's length across a reschedule", async () => {
+    h.rows = [row({ time: "13:00", end_time: "14:30", status: "confirmed" })];
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(res.code).toBe(200);
+    expect(res.body.appointment.endTime).toBe("10:30"); // still 90 minutes
   });
 });

@@ -15,6 +15,18 @@ const SLOT_TAKEN = "That time slot has already been taken. Please choose another
 
 const isoDate = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
 
+/** How long a booking occupies when nothing says otherwise — including the rows saved
+ * before end times were recorded. */
+const DEFAULT_MINUTES = 30;
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+const toTime = (mins: number) =>
+  `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+const spanOf = (start: string, end: string | null) =>
+  ({ from: toMinutes(start), to: end ? toMinutes(end) : toMinutes(start) + DEFAULT_MINUTES });
+
 /**
  * Is this dentist's slot already held by another booking? Dentists are matched by id
  * or by name, because older bookings only carry the name. `statuses` says which
@@ -24,17 +36,23 @@ const isoDate = (d: unknown) => new Date(d as string).toISOString().slice(0, 10)
  */
 async function slotTaken(opts: {
   dentistId: string | null; dentistName: string | null; date: string; time: string;
-  excludeId?: string | null; statuses?: string[];
+  endTime?: string | null; excludeId?: string | null; statuses?: string[];
 }): Promise<boolean> {
   if (!opts.dentistId && !opts.dentistName) return false;
   const rows = await sql`
-    SELECT 1 /* slot-clash */ FROM appointments
-    WHERE date = ${opts.date} AND time = ${opts.time}
+    SELECT time, end_time /* slot-clash */ FROM appointments
+    WHERE date = ${opts.date}
       AND status = ANY(${opts.statuses ?? HOLDING}::text[])
       AND (dentist_id = ${opts.dentistId} OR dentist_name = ${opts.dentistName})
-      AND (${opts.excludeId ?? null}::uuid IS NULL OR id <> ${opts.excludeId ?? null}::uuid)
-    LIMIT 1`;
-  return rows.length > 0;
+      AND (${opts.excludeId ?? null}::uuid IS NULL OR id <> ${opts.excludeId ?? null}::uuid)`;
+  // A booking now covers a span, not just a start time, so two of them clash when the
+  // spans overlap. Comparing in minutes keeps it out of reach of time-zone surprises;
+  // one dentist's day is a handful of rows either way.
+  const want = spanOf(opts.time, opts.endTime ?? null);
+  return (rows as { time: string; end_time: string | null }[]).some((r) => {
+    const held = spanOf(r.time, r.end_time);
+    return want.from < held.to && want.to > held.from;
+  });
 }
 
 function mapRow(r: any) {
@@ -81,12 +99,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "date and dentistId or dentistName are required" });
       }
       const rows = await sql`
-        SELECT DISTINCT time /* booked-slots */ FROM appointments
+        SELECT DISTINCT time, end_time /* booked-slots */ FROM appointments
         WHERE date = ${date}
           AND status = ANY(${HOLDING}::text[])
           AND (dentist_id = ${dentistId} OR dentist_name = ${dentistName})
           AND (${excludeId}::uuid IS NULL OR id <> ${excludeId}::uuid)`;
-      return res.status(200).json({ times: (rows as { time: string }[]).map(r => r.time) });
+      // Spans, so the booking form can tell whether a longer visit still fits. Never
+      // any patient detail: this is answered for whoever is booking.
+      const slots = (rows as { time: string; end_time: string | null }[])
+        .map(r => ({ time: r.time, endTime: r.end_time }));
+      return res.status(200).json({ times: slots.map(s => s.time), slots });
     }
 
     if (id) {
@@ -122,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { patientName, contact, email, dentistId, dentistName, service, date, time, type, reason } = req.body ?? {};
+    const { patientName, contact, email, dentistId, dentistName, service, date, time, endTime, type, reason } = req.body ?? {};
     if (!patientName || !service || !date || !time || !type) {
       return res.status(400).json({ error: "Missing required appointment fields" });
     }
@@ -131,12 +153,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const createdBy = session.role === "patient" ? "patient" : session.role;
     // The booking pages only offer free slots, but two people can pick the same one at
     // once, and the API can be called directly — so the server has the final word.
-    if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time })) {
+    if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null })) {
       return res.status(409).json({ error: SLOT_TAKEN });
     }
     const inserted = await sql`
-      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type, status, reason, created_by)
-      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
+      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
+      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
       RETURNING *
     `;
     return res.status(201).json({ appointment: mapRow(inserted[0]) });
@@ -153,6 +175,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { status, date, time, reason, remarks, dentistId, dentistName } = req.body ?? {};
+    // A move keeps the visit as long as it already was, so the end time travels with it.
+    const nextEndTime: string | null = req.body?.endTime
+      ?? (time && existing.end_time
+        ? toTime(toMinutes(time) + (toMinutes(existing.end_time) - toMinutes(existing.time)))
+        : null);
 
     // Completing means the consultation happened, which must not happen before the
     // clinic has approved the booking.
@@ -173,6 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (HOLDING.includes(next.status) && (moving || approving)) {
       const taken = await slotTaken({
         dentistId: next.dentistId, dentistName: next.dentistName, date: next.date, time: next.time,
+        endTime: nextEndTime ?? existing.end_time,
         excludeId: id,
         // A move needs a genuinely free slot; an approval only has to not collide
         // with a booking that's already been approved.
@@ -191,6 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status = COALESCE(${status ?? null}, status),
         date = COALESCE(${date ?? null}, date),
         time = COALESCE(${time ?? null}, time),
+        end_time = COALESCE(${nextEndTime}, end_time),
         reason = COALESCE(${reason ?? null}, reason),
         remarks = COALESCE(${remarks ?? null}, remarks),
         dentist_id = COALESCE(${dentistId ?? null}, dentist_id),

@@ -17,6 +17,10 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { splitServices } from "@/lib/services";
 
+/** "1:00 PM" on its own, or "1:00 PM – 2:30 PM" once the visit's length is known. */
+const timeRange = (apt: Appointment) =>
+  toLabel(toMinutes(apt.time)) + (apt.endTime ? ` – ${toLabel(toMinutes(apt.endTime))}` : "");
+
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   confirmed: "bg-success/10 text-success border-success/20",
@@ -250,7 +254,7 @@ export default function AdminOnlineAppointments() {
                   <TableCell className="hidden sm:table-cell">{apt.service}</TableCell>
                   <TableCell className="hidden md:table-cell">{apt.dentistName}</TableCell>
                   <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
-                  <TableCell className="whitespace-nowrap">{toLabel(toMinutes(apt.time))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{timeRange(apt)}</TableCell>
                   <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
                   <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell><Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge></TableCell>
@@ -291,7 +295,7 @@ export default function AdminOnlineAppointments() {
               <p><span className="font-semibold text-foreground">Selected Service:</span> {selectedLive.service}</p>
               <p><span className="font-semibold text-foreground">Assigned Dentist:</span> {selectedLive.dentistName}</p>
               <p><span className="font-semibold text-foreground">Appointment Date:</span> {selectedLive.date}</p>
-              <p><span className="font-semibold text-foreground">Appointment Time:</span> {selectedLive.time}</p>
+              <p><span className="font-semibold text-foreground">Appointment Time:</span> {timeRange(selectedLive)}</p>
               <p><span className="font-semibold text-foreground">Appointment Type:</span> {selectedLive.type === "walk-in" ? "Walk-in" : "Online"}</p>
               <p><span className="font-semibold text-foreground">Booked On:</span> {formatManilaStamp(selectedLive.createdAt)}</p>
               <p className="flex items-center gap-2"><span className="font-semibold text-foreground">Current Status:</span>

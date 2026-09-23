@@ -38,6 +38,8 @@ export interface AppointmentInput {
   service: string;
   date: string;
   time: string;
+  /** When the visit runs until, from the chosen services. Older clients may omit it. */
+  endTime?: string;
   type: "online" | "walk-in";
   reason?: string;
 }
@@ -62,15 +64,22 @@ export async function getAppointments(filters: AppointmentFilters = {}): Promise
  * just the caller's own, which is all a patient can list. Returns times only.
  * `excludeId` leaves out the appointment being rescheduled.
  */
+/** A slot another booking already holds. `endTime` is null on bookings saved before
+ * end times were recorded; treat those as one of the dentist's own slots. */
+export interface BookedSlot {
+  time: string;
+  endTime: string | null;
+}
+
 export async function getBookedSlots(q: {
   dentistId?: string | null; dentistName?: string | null; date: string; excludeId?: string;
-}): Promise<string[]> {
+}): Promise<BookedSlot[]> {
   const params = new URLSearchParams({ bookedSlots: "1", date: q.date });
   if (q.dentistId) params.set("dentistId", q.dentistId);
   if (q.dentistName) params.set("dentistName", q.dentistName);
   if (q.excludeId) params.set("excludeId", q.excludeId);
-  const data = await api<{ times: string[] }>(`/appointments?${params}`);
-  return data.times;
+  const data = await api<{ times: string[]; slots?: BookedSlot[] }>(`/appointments?${params}`);
+  return data.slots ?? data.times.map(time => ({ time, endTime: null }));
 }
 
 export async function getAppointment(id: string): Promise<Appointment> {
