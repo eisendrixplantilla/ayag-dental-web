@@ -12,7 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { toMinutes, toLabel } from "@/lib/dentistSchedules";
+import { toMinutes, toLabel, formatTimeRange } from "@/lib/dentistSchedules";
 import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
 
 const today = manilaTodayDateStr();
@@ -97,7 +97,7 @@ export default function DentistDashboard() {
                   <div>
                     <p className="font-medium text-sm text-foreground">{apt.patientName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {apt.service} • {toLabel(toMinutes(apt.time))} • {apt.type === "walk-in" ? "Walk-in" : "Online"}
+                      {apt.service} • {formatTimeRange(apt.time, apt.endTime)} • {apt.type === "walk-in" ? "Walk-in" : "Online"}
                     </p>
                   </div>
                   <Badge variant="outline" className={statusColors[apt.status]}>

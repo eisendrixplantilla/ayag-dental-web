@@ -17,3 +17,8 @@ export const toLabel = (mins: number) => {
 
 export const toValue = (mins: number) =>
   `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+/** "1:00 PM" on its own, or "1:00 PM – 2:30 PM" once the visit's length is known.
+ * Bookings saved before end times were recorded have none, so they show the start only. */
+export const formatTimeRange = (time: string, endTime?: string | null) =>
+  toLabel(toMinutes(time)) + (endTime ? ` – ${toLabel(toMinutes(endTime))}` : "");

@@ -12,7 +12,7 @@ import { Eye, CalendarIcon, Edit, X, Info, Loader2, Printer } from "lucide-react
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
@@ -189,7 +189,7 @@ export default function PatientAppointments() {
                         <div>
                           <p className="font-medium text-foreground">{apt.service}</p>
                           <p className="text-sm text-muted-foreground">
-                            {format(parseISO(apt.date), "PPP")} at {toLabel(toMinutes(apt.time))} • {apt.dentistName}
+                            {format(parseISO(apt.date), "PPP")} at {formatTimeRange(apt.time, apt.endTime)} • {apt.dentistName}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -236,7 +236,7 @@ export default function PatientAppointments() {
                     <div>
                       <p className="font-medium text-foreground">{apt.service}</p>
                       <p className="text-sm text-muted-foreground">
-                        {format(parseISO(apt.date), "PPP")} at {toLabel(toMinutes(apt.time))} • {apt.dentistName}
+                        {format(parseISO(apt.date), "PPP")} at {formatTimeRange(apt.time, apt.endTime)} • {apt.dentistName}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -262,7 +262,7 @@ export default function PatientAppointments() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Service</span><span className="font-medium">{detailsApt.service}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span className="font-medium">{format(parseISO(detailsApt.date), "PPP")}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Time</span><span className="font-medium">{toLabel(toMinutes(detailsApt.time))}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Time</span><span className="font-medium">{formatTimeRange(detailsApt.time, detailsApt.endTime)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Dentist</span><span className="font-medium">{detailsApt.dentistName}</span></div>
               <div className="flex justify-between items-center"><span className="text-muted-foreground">Status</span><Badge variant="outline" className={statusColors[detailsApt.status]}>{detailsApt.status}</Badge></div>
               {detailsApt.reason && (

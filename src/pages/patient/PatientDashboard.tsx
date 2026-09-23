@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarDays, History, Bell, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
 import { manilaTodayDateStr } from "@/lib/formatDate";
 
 const today = manilaTodayDateStr();
@@ -89,7 +89,7 @@ export default function PatientDashboard() {
                   <div>
                     <p className="font-medium text-foreground">{apt.service}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(parseISO(apt.date), "MMM d, yyyy")} at {toLabel(toMinutes(apt.time))}
+                      {format(parseISO(apt.date), "MMM d, yyyy")} at {formatTimeRange(apt.time, apt.endTime)}
                     </p>
                   </div>
                   <Badge

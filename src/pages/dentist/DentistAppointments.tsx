@@ -22,7 +22,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3 } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
-import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
@@ -244,7 +244,7 @@ export default function DentistAppointments() {
                   <TableCell className="font-medium">{apt.patientName}</TableCell>
                   <TableCell>{apt.service}</TableCell>
                   <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{toLabel(toMinutes(apt.time))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                   </TableCell>
@@ -326,7 +326,7 @@ export default function DentistAppointments() {
               <Field label="Email Address" value={details.email ?? "—"} />
               <Field label="Selected Service" value={details.service} />
               <Field label="Appointment Date" value={format(parseISO(details.date), "MMMM d, yyyy")} />
-              <Field label="Appointment Time" value={toLabel(toMinutes(details.time))} />
+              <Field label="Appointment Time" value={formatTimeRange(details.time, details.endTime)} />
               <Field label="Appointment Type" value={details.type === "walk-in" ? "Walk-in" : "Online"} />
               <Field label="Current Status" value={details.status} />
               {details.reason && <div className="col-span-2"><Field label="Reason" value={details.reason} /></div>}

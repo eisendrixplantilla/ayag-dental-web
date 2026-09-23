@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
-import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, getBookedSlots, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import {
@@ -419,7 +419,7 @@ export default function AdminAppointments() {
                   <TableCell>{w.service}</TableCell>
                   <TableCell>{w.dentistName}</TableCell>
                   <TableCell>{w.date}</TableCell>
-                  <TableCell>{toLabel(toMinutes(w.time))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatTimeRange(w.time, w.endTime)}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
                   <TableCell className="print:hidden">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(w.id)}>
