@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { sendAppointmentEmail } from "./_lib/email.js";
+import { displayService } from "./_lib/services.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
@@ -45,7 +46,7 @@ function mapRow(r: any) {
     email: r.email,
     dentistId: r.dentist_id,
     dentistName: r.dentist_name,
-    service: r.service,
+    service: displayService(r.service),
     date: new Date(r.date).toISOString().slice(0, 10),
     time: r.time,
     endTime: r.end_time,
@@ -216,7 +217,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           email: updatedRow.email,
           status,
           patientName: updatedRow.patient_name,
-          service: updatedRow.service,
+          service: displayService(updatedRow.service),
           dentistName: updatedRow.dentist_name,
           date: new Date(updatedRow.date).toISOString().slice(0, 10),
           time: updatedRow.time,

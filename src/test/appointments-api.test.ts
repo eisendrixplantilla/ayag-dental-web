@@ -204,3 +204,19 @@ describe("dentists can't complete unapproved bookings", () => {
     expect((await patch("apt-2", { status: "completed" })).code).toBe(200);
   });
 });
+
+describe("a service that was renamed", () => {
+  it("reads back under the corrected spelling, without rewriting what's stored", async () => {
+    h.rows = [row({ service: "Venners" })];
+    const res = await patch("apt-1", { status: "confirmed" });
+
+    expect(res.body.appointment.service).toBe("Veeners");
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ service: "Veeners" }));
+    expect(h.rows[0].service).toBe("Venners"); // the row itself is left as it was
+  });
+
+  it("leaves every other service exactly as stored", async () => {
+    h.rows = [row({ service: "Restoration" })];
+    expect((await patch("apt-1", { status: "confirmed" })).body.appointment.service).toBe("Restoration");
+  });
+});

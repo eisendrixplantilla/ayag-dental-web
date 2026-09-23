@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
+import { displayService, legacyNames } from "./_lib/services.js";
 
 function toDateStr(v: unknown): string | null {
   if (v == null) return null;
@@ -23,7 +24,7 @@ function mapRecord(r: any, treatments: any[], prescriptions: any[]) {
     createdAt: r.created_at,
     treatments: treatments
       .filter((t) => t.record_id === r.id)
-      .map((t) => ({ id: t.id, serviceId: t.service_id, serviceName: t.service_name })),
+      .map((t) => ({ id: t.id, serviceId: t.service_id, serviceName: displayService(t.service_name) })),
     prescriptions: prescriptions
       .filter((p) => p.record_id === r.id)
       .map((p) => ({ id: p.id, medicine: p.medicine, dosage: p.dosage, instructions: p.instructions })),
@@ -44,7 +45,10 @@ async function loadTreatmentsAndPrescriptions(recordIds: string[]) {
 
 async function findOrCreateService(name: string): Promise<string> {
   const trimmed = name.trim();
-  const existing = await sql`SELECT id FROM services WHERE service_name = ${trimmed}`;
+  // Match the old spelling too, so a corrected name reuses its row rather than
+  // creating a near-duplicate next to it.
+  const names = [trimmed, ...legacyNames(trimmed)];
+  const existing = await sql`SELECT id FROM services WHERE service_name = ANY(${names}::text[])`;
   if (existing[0]) return existing[0].id;
   const inserted = await sql`INSERT INTO services (service_name) VALUES (${trimmed}) RETURNING id`;
   return inserted[0].id;
@@ -87,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     if (req.query.services === "true") {
       const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services ORDER BY service_name`;
-      return res.status(200).json({ services: rows });
+      return res.status(200).json({ services: rows.map((r) => ({ ...r, name: displayService(r.name) })) });
     }
 
     if (id) {
@@ -127,6 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { price, duration } = req.body ?? {};
     await sql`UPDATE services SET price = COALESCE(${price ?? null}, price), duration = COALESCE(${duration ?? null}, duration) WHERE id = ${id}`;
     const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services WHERE id = ${id}`;
+    if (rows[0]) rows[0].name = displayService(rows[0].name);
     if (!rows[0]) return res.status(404).json({ error: "Service not found" });
     return res.status(200).json({ service: rows[0] });
   }
