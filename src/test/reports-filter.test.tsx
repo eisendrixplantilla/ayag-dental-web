@@ -73,9 +73,9 @@ function apt(over: Partial<Appointment>): Appointment {
 beforeEach(() => {
   printed.calls = [];
   h.appts = [
-    apt({ id: "00000000-0000-4000-8000-00000000000a", patientName: "Allen Estrella", service: "Root Canal" }),
-    apt({ id: "00000000-0000-4000-8000-00000000000b", patientName: "Maria Santos", service: "Oral", dentistName: "Aerhol Gocalin" }),
-    apt({ id: "00000000-0000-4000-8000-00000000000c", patientName: "Pedro Reyes", service: "Oral" }),
+    apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", patientName: "Allen Estrella", service: "Root Canal" }),
+    apt({ id: "b7d41e55-0000-4000-8000-00000000000b", patientName: "Maria Santos", service: "Oral", dentistName: "Aerhol Gocalin" }),
+    apt({ id: "c2e58a99-0000-4000-8000-00000000000c", patientName: "Pedro Reyes", service: "Oral" }),
   ];
 });
 
@@ -136,9 +136,72 @@ describe("filtering a report that has already been generated", () => {
 
   it("prints every row when nothing is filtered", async () => {
     await generate();
-    fireEvent.click(screen.getByRole("button", { name: /Download PDF/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
 
     expect(printed.calls[0].rows).toHaveLength(3);
     expect(printed.calls[0].filters.map((f: any) => f.label)).not.toContain("Filtered By");
+  });
+
+  it("offers Print on its own — there is no separate PDF button", async () => {
+    await generate();
+    expect(screen.getByRole("button", { name: /Print Report/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Download PDF/ })).toBeNull();
+  });
+});
+
+describe("filtering by one field", () => {
+  const field = () => screen.getByLabelText("Filter by field") as HTMLSelectElement;
+  const text = () => screen.getByLabelText("Filter the generated report");
+
+  it("offers every column of the report to filter by", async () => {
+    await generate();
+    expect(within(field()).getAllByRole("option").map(o => o.textContent).filter(Boolean))
+      .toEqual(["All fields", "Reference", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"]);
+  });
+
+  it("searches only the column chosen", async () => {
+    await generate();
+    // "Oral" is a service here, and every row's dentist or patient could contain other
+    // words — scoping to Service keeps it to the two Oral appointments.
+    fireEvent.change(field(), { target: { value: "3" } }); // Service
+    fireEvent.change(text(), { target: { value: "oral" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos", "Pedro Reyes"]));
+
+    // The same text against Patient Name matches nobody.
+    fireEvent.change(field(), { target: { value: "1" } });
+    await waitFor(() => expect(screen.getByText(/No records match "oral"/)).toBeInTheDocument());
+  });
+
+  it("filters by status, dentist and appointment date", async () => {
+    await generate();
+    fireEvent.change(field(), { target: { value: "5" } }); // Status
+    fireEvent.change(text(), { target: { value: "confirmed" } });
+    await waitFor(() => expect(names()).toHaveLength(3));
+
+    fireEvent.change(field(), { target: { value: "2" } }); // Dentist
+    fireEvent.change(text(), { target: { value: "aerhol" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos"]));
+
+    fireEvent.change(field(), { target: { value: "4" } }); // Appointment Date
+    fireEvent.change(text(), { target: { value: "2026-09-25" } });
+    await waitFor(() => expect(names()).toHaveLength(3));
+  });
+
+  it("filters by reference", async () => {
+    await generate();
+    fireEvent.change(field(), { target: { value: "0" } }); // Reference
+    fireEvent.change(text(), { target: { value: "3f9c2a" } });
+    await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
+  });
+
+  it("names the column it was filtered by on the printed document", async () => {
+    await generate();
+    fireEvent.change(field(), { target: { value: "3" } });
+    fireEvent.change(text(), { target: { value: "root canal" } });
+    await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
+    expect(printed.calls[0].filters).toContainEqual({ label: "Filtered By", value: "Service: root canal" });
+    expect(printed.calls[0].rows).toHaveLength(1);
   });
 });
