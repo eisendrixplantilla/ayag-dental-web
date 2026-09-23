@@ -13,7 +13,8 @@ import { getPatients, type Patient } from "@/lib/api/patients";
 import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
-import { printHtmlAsPdf } from "@/lib/printPdf";
+import { printReport } from "@/lib/printReport";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatManilaDateTime } from "@/lib/formatDate";
 
 type ReportType = "appointment" | "patient";
@@ -30,6 +31,13 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
 };
 
 const statusList = ["pending", "confirmed", "completed", "cancelled"] as const;
+
+const roleLabel: Record<string, string> = {
+  admin: "Clinic Admin",
+  superadmin: "Super Admin",
+  dentist: "Dentist",
+  patient: "Patient",
+};
 
 const statusMeta: Record<string, { label: string; className: string }> = {
   pending: { label: "Pending", className: "text-warning" },
@@ -50,6 +58,7 @@ interface GeneratedReport {
 }
 
 export default function SuperAdminReports() {
+  const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -121,23 +130,23 @@ export default function SuperAdminReports() {
     toast.success("Report preview generated");
   };
 
-  const handlePrint = () => window.print();
-
-  const handleDownloadPdf = () => {
+  // Both buttons print the same document — one to paper, one to a PDF.
+  const sendToPrinter = (what: string) => {
     if (!report) return;
     const meta = reportMeta[report.type];
-    const rowsHtml = report.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("");
-    const body = `
-      <h1>Ayag Dental Clinic — ${meta.title}</h1>
-      <p class="meta">Generated: ${report.generatedAt}</p>
-      <table><thead><tr>${meta.columns.map(c => `<th>${c}</th>`).join("")}</tr></thead>
-      <tbody>${rowsHtml || `<tr><td colspan="${meta.columns.length}">No records found</td></tr>`}</tbody></table>`;
-    if (printHtmlAsPdf(meta.title, body)) {
-      toast.success("PDF export ready");
-    } else {
-      toast.error("Failed to prepare PDF");
-    }
+    const ok = printReport({
+      title: meta.title,
+      columns: meta.columns,
+      rows: report.rows,
+      generatedAt: report.generatedAt,
+      preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
+    });
+    if (ok) toast.success(`${what} ready`);
+    else toast.error(`Failed to prepare the ${what.toLowerCase()}`);
   };
+
+  const handlePrint = () => sendToPrinter("Print preview");
+  const handleDownloadPdf = () => sendToPrinter("PDF export");
 
   return (
     <div className="space-y-6">

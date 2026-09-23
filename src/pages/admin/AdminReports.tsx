@@ -12,7 +12,8 @@ import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { printHtmlAsPdf } from "@/lib/printPdf";
+import { printReport } from "@/lib/printReport";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatManilaDateTime } from "@/lib/formatDate";
 
 type ReportType = "appointment" | "walkin" | "patient";
@@ -24,6 +25,13 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   },
   walkin: { title: "Walk-in Report", columns: ["Patient Name", "Dentist", "Date", "Time"] },
   patient: { title: "Patient Report", columns: ["Patient Information", "Total Appointments", "Latest Consultation"] },
+};
+
+const roleLabel: Record<string, string> = {
+  admin: "Clinic Admin",
+  superadmin: "Super Admin",
+  dentist: "Dentist",
+  patient: "Patient",
 };
 
 const statuses: AptStatus[] = ["pending", "confirmed", "completed", "cancelled", "rejected", "rescheduled"];
@@ -40,6 +48,7 @@ interface GeneratedReport {
 }
 
 export default function AdminReports() {
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,28 +130,29 @@ export default function AdminReports() {
     toast.success("Report preview generated");
   };
 
-  const handlePrint = () => window.print();
-
-  const handleDownloadPdf = () => {
+  // Both buttons print the same document — one to paper, one to a PDF — so a printed
+  // copy never depends on what the screen happened to look like.
+  const sendToPrinter = (what: string) => {
     if (!report) return;
     const meta = reportMeta[report.type];
-    const rowsHtml = report.rows
-      .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`)
-      .join("");
-    const body = `
-      <h1>Ayag Dental Clinic — ${meta.title}</h1>
-      <p class="meta">Date Range: ${report.filters.start || "All"} to ${report.filters.end || "All"} |
-        Dentist: ${report.filters.dentist === "all" ? "All" : report.filters.dentist} |
-        Status: ${report.filters.status === "all" ? "All" : capitalize(report.filters.status)} |
-        Generated: ${report.generatedAt}</p>
-      <table><thead><tr>${meta.columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
-      <tbody>${rowsHtml || `<tr><td colspan="${meta.columns.length}">No records found</td></tr>`}</tbody></table>`;
-    if (printHtmlAsPdf(meta.title, body)) {
-      toast.success("PDF export ready");
-    } else {
-      toast.error("Failed to prepare PDF");
-    }
+    const ok = printReport({
+      title: meta.title,
+      columns: meta.columns,
+      rows: report.rows,
+      generatedAt: report.generatedAt,
+      preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
+      filters: [
+        { label: "Date Range", value: `${report.filters.start || "All"} to ${report.filters.end || "All"}` },
+        { label: "Dentist", value: report.filters.dentist === "all" ? "All dentists" : report.filters.dentist },
+        { label: "Status", value: report.filters.status === "all" ? "All statuses" : capitalize(report.filters.status) },
+      ],
+    });
+    if (ok) toast.success(`${what} ready`);
+    else toast.error(`Failed to prepare the ${what.toLowerCase()}`);
   };
+
+  const handlePrint = () => sendToPrinter("Print preview");
+  const handleDownloadPdf = () => sendToPrinter("PDF export");
 
   return (
     <div className="space-y-6">
