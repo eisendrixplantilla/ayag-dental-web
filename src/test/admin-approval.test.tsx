@@ -221,6 +221,29 @@ describe("the appointments list", () => {
     await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
   });
 
+  it("lists a multi-service booking under each of its services", async () => {
+    h.appts = [
+      apt({ id: "a", patientName: "Allen Estrella", service: "Oral, Veeners" }),
+      apt({ id: "b", patientName: "Pedro Reyes", service: "Restoration" }),
+    ];
+    await renderPage();
+
+    const select = screen.getByRole("combobox", { name: "Filter by service" });
+    // Split apart: "Oral, Veeners" is two services, not a third option of its own.
+    expect(within(select).getAllByRole("option").map(o => o.textContent))
+      .toEqual(["All Services", "Oral", "Restoration", "Veeners"]);
+
+    for (const service of ["Oral", "Veeners"]) {
+      fireEvent.change(select, { target: { value: service } });
+      await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
+      expect(screen.getByText("Allen Estrella")).toBeInTheDocument();
+    }
+
+    fireEvent.change(select, { target: { value: "Restoration" } });
+    await waitFor(() => expect(screen.getByText("Pedro Reyes")).toBeInTheDocument());
+    expect(screen.queryByText("Allen Estrella")).toBeNull();
+  });
+
   it("keeps only the appointments inside the chosen date range", async () => {
     h.appts = [
       apt({ id: "a", patientName: "Allen Estrella", date: "2026-09-20" }),

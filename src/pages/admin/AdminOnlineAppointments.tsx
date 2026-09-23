@@ -15,6 +15,7 @@ import { formatManilaDate, formatManilaStamp } from "@/lib/formatDate";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { splitServices } from "@/lib/services";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -61,9 +62,10 @@ export default function AdminOnlineAppointments() {
   );
 
   // The services offered change over time, so list the ones actually booked
-  // rather than a hard-coded menu.
+  // rather than a hard-coded menu. One appointment can cover several, so split
+  // them apart instead of offering "Oral, Veeners" as its own option.
   const services = useMemo(
-    () => Array.from(new Set(appointments.map(a => a.service).filter(Boolean))).sort() as string[],
+    () => Array.from(new Set(appointments.flatMap(a => splitServices(a.service)))).sort(),
     [appointments]
   );
 
@@ -79,7 +81,7 @@ export default function AdminOnlineAppointments() {
     const matchesDate = (!fromDate || a.date >= fromDate) && (!toDate || a.date <= toDate);
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
-    const matchesService = serviceFilter === "all" || a.service === serviceFilter;
+    const matchesService = serviceFilter === "all" || splitServices(a.service).includes(serviceFilter);
     return matchesSearch && matchesDate && matchesStatus && matchesDentist && matchesService;
   }), [ordered, search, fromDate, toDate, statusFilter, dentistFilter, serviceFilter]);
 

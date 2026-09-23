@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Clock3, CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarPlus, Clock3, CalendarIcon, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -15,6 +15,7 @@ import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
+import { SERVICE_SEPARATOR } from "@/lib/services";
 import { getBookedSlots } from "@/lib/api/appointments";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
@@ -41,7 +42,8 @@ export default function PatientBook() {
   const { user } = useAuth();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [service, setService] = useState("");
+  // A visit can cover several services, e.g. a cleaning and a filling in one sitting.
+  const [chosen, setChosen] = useState<string[]>([]);
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
@@ -55,6 +57,8 @@ export default function PatientBook() {
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
+  const remaining = services.filter((s) => !chosen.includes(s));
+  const serviceLabel = chosen.join(SERVICE_SEPARATOR);
 
   useEffect(() => {
     getDentistDirectory()
@@ -92,7 +96,7 @@ export default function PatientBook() {
   const selectedLabel = slots.find((s) => s.value === time)?.label ?? "";
 
   const handleSubmit = async () => {
-    if (!service || !dentistId || !date || !time || !user) return;
+    if (chosen.length === 0 || !dentistId || !date || !time || !user) return;
     setSubmitting(true);
     try {
       await createAppointment({
@@ -100,7 +104,7 @@ export default function PatientBook() {
         email: user.email,
         dentistId,
         dentistName: dentist,
-        service,
+        service: serviceLabel,
         date: toKey(date),
         time,
         type: "online",
@@ -127,7 +131,7 @@ export default function PatientBook() {
           <h2 className="text-2xl font-bold font-heading text-foreground">Appointment Request Submitted</h2>
           <Badge variant="outline" className="mt-3 bg-warning/10 text-warning border-warning/20">Pending admin approval</Badge>
           <p className="text-muted-foreground mt-3">
-            {service} on {date ? format(date, "PPP") : ""} at {selectedLabel} with {dentist}
+            {serviceLabel} on {date ? format(date, "PPP") : ""} at {selectedLabel} with {dentist}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
             Your request is not confirmed yet. You will be notified once the clinic admin approves it.
@@ -136,7 +140,7 @@ export default function PatientBook() {
             className="mt-6 gradient-primary text-primary-foreground"
             onClick={() => {
               setSubmitted(false);
-              setService("");
+              setChosen([]);
               setDentistId("");
               setDate(undefined);
               setTime("");
@@ -158,16 +162,45 @@ export default function PatientBook() {
 
       <Card className="shadow-card">
         <CardContent className="p-6 space-y-5">
-          {/* Step 1: Service */}
+          {/* Step 1: Service(s) */}
           <div>
             <Label>Select Service</Label>
+            {chosen.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {chosen.map(s => (
+                  <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1 text-sm font-normal">
+                    {s}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s}`}
+                      className="rounded-full p-0.5 hover:bg-foreground/10"
+                      onClick={() => setChosen(prev => prev.filter(c => c !== s))}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {/* Always shows its placeholder: picking an option adds to the list above
+                rather than replacing a single selection. */}
             <Select
-              value={service}
-              onValueChange={(v) => { setService(v); setDentistId(""); setDate(undefined); setTime(""); }}
+              value=""
+              disabled={remaining.length === 0}
+              onValueChange={(v) => setChosen(prev => [...prev, v])}
             >
-              <SelectTrigger><SelectValue placeholder="Choose a service" /></SelectTrigger>
-              <SelectContent>{services.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="mt-2" aria-label="Add a service">
+                <SelectValue placeholder={
+                  remaining.length === 0 ? "All services added"
+                    : chosen.length === 0 ? "Choose a service"
+                    : "Add another service"
+                } />
+              </SelectTrigger>
+              <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Add as many services as you need for this visit.
+            </p>
           </div>
 
           {/* Step 2: Dentist */}
@@ -175,11 +208,11 @@ export default function PatientBook() {
             <Label className="font-semibold">Select Dentist</Label>
             <Select
               value={dentistId}
-              disabled={!service || loadingDentists}
+              disabled={chosen.length === 0 || loadingDentists}
               onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder={!service ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
+              <SelectTrigger aria-label="Choose a dentist">
+                <SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
               </SelectTrigger>
               <SelectContent>
                 {dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
@@ -231,7 +264,7 @@ export default function PatientBook() {
             <div>
               <Label className="font-semibold">Available Time Slot</Label>
               <Select value={time} onValueChange={setTime} disabled={!dentistId || !date || loadingSlots || slots.length === 0}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Choose a time slot">
                   <SelectValue placeholder={!dentistId || !date ? "Select dentist and date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,7 +290,7 @@ export default function PatientBook() {
 
           <Button
             className="w-full gradient-primary text-primary-foreground"
-            disabled={!service || !dentistId || !date || !time || submitting}
+            disabled={chosen.length === 0 || !dentistId || !date || !time || submitting}
             onClick={handleSubmit}
           >
             {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarPlus className="w-4 h-4 mr-2" />}
