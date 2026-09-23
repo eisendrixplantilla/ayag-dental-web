@@ -12,7 +12,7 @@ const services = [
   { name: "EXO (Bunot)", icon: Stethoscope },
   { name: "Restoration", icon: Sparkles },
   { name: "Oral Prophylaxis", icon: ShieldCheck },
-  { name: "Veneers", icon: Sparkles },
+  { name: "Veeners", icon: Sparkles },
   { name: "Denture (Pustiso)", icon: Smile },
   { name: "Implant", icon: HeartPulse },
   { name: "Surgery", icon: Stethoscope },

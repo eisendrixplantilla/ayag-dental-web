@@ -26,7 +26,7 @@ const services = [
   "EXO (Bunot)",
   "Restoration",
   "Oral",
-  "Venners",
+  "Veeners",
   "Denture (Pustiso)",
   "Implant",
   "Surgery",

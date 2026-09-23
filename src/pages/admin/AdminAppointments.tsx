@@ -24,7 +24,7 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const services = [
-  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Venners",
+  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veeners",
   "Denture (Pustiso)", "Implant", "Surgery", "TMJ", "Root Canal",
   "Teeth Whitening", "Fixed Bridge",
 ];

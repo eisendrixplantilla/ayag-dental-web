@@ -62,7 +62,7 @@ const DEFAULT_SERVICES = [
   { name: "EXO (Bunot)", duration: 45, price: 3000 },
   { name: "Restoration", duration: 30, price: 2500 },
   { name: "Oral", duration: 30, price: 1500 },
-  { name: "Venners", duration: 60, price: 15000 },
+  { name: "Veeners", duration: 60, price: 15000 },
   { name: "Denture (Pustiso)", duration: 60, price: 12000 },
   { name: "Implant", duration: 90, price: 35000 },
   { name: "Surgery", duration: 90, price: 20000 },
