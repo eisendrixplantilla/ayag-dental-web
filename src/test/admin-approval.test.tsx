@@ -221,6 +221,30 @@ describe("the appointments list", () => {
     await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
   });
 
+  it("keeps only the appointments inside the chosen date range", async () => {
+    h.appts = [
+      apt({ id: "a", patientName: "Allen Estrella", date: "2026-09-20" }),
+      apt({ id: "b", patientName: "Pedro Reyes", date: "2026-09-25" }),
+      apt({ id: "c", patientName: "Maria Santos", date: "2026-10-02" }),
+    ];
+    await renderPage();
+    const names = () => Array.from(document.querySelectorAll("tbody tr"))
+      .map(r => (r as HTMLTableRowElement).cells[1].textContent);
+
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-24" } });
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "Maria Santos"]));
+
+    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-09-30" } });
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes"]));
+
+    // Either end on its own is a valid, open-ended range.
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "" } });
+    await waitFor(() => expect(names()).toEqual(["Allen Estrella", "Pedro Reyes"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
+    await waitFor(() => expect(names()).toHaveLength(3));
+  });
+
   it("keeps the filters and the table in one card", async () => {
     await renderPage();
     const card = screen.getByRole("table").closest(".bg-card");

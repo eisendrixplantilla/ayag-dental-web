@@ -35,7 +35,8 @@ export default function AdminOnlineAppointments() {
   const [saving, setSaving] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dentistFilter, setDentistFilter] = useState("all");
   const [serviceFilter, setServiceFilter] = useState("all");
@@ -74,17 +75,19 @@ export default function AdminOnlineAppointments() {
 
   const filtered = useMemo(() => ordered.filter(a => {
     const matchesSearch = !search || a.patientName.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
-    const matchesDate = !dateFilter || a.date === dateFilter;
+    // Dates are "YYYY-MM-DD", so a plain string compare is a date compare.
+    const matchesDate = (!fromDate || a.date >= fromDate) && (!toDate || a.date <= toDate);
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
     const matchesService = serviceFilter === "all" || a.service === serviceFilter;
     return matchesSearch && matchesDate && matchesStatus && matchesDentist && matchesService;
-  }), [ordered, search, dateFilter, statusFilter, dentistFilter, serviceFilter]);
+  }), [ordered, search, fromDate, toDate, statusFilter, dentistFilter, serviceFilter]);
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
   const clearFilters = () => {
-    setSearch(""); setDateFilter(""); setStatusFilter("all"); setDentistFilter("all"); setServiceFilter("all");
+    setSearch(""); setFromDate(""); setToDate("");
+    setStatusFilter("all"); setDentistFilter("all"); setServiceFilter("all");
   };
 
   // Arrived here from a notification — drop any active filter first, otherwise the
@@ -162,12 +165,29 @@ export default function AdminOnlineAppointments() {
             <CalendarDays className="w-5 h-5 text-primary" /> Appointments ({filtered.length})
           </CardTitle>
           <div className="space-y-3 print:hidden">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-              <div className="relative sm:col-span-2 lg:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="relative sm:col-span-2">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
               </div>
-              <Input type="date" aria-label="Filter by date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+              {/* An open-ended range is fine: leave either end blank for "any". */}
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <Input
+                  type="date"
+                  aria-label="From date"
+                  max={toDate || undefined}
+                  value={fromDate}
+                  onChange={e => setFromDate(e.target.value)}
+                />
+                <span className="text-sm text-muted-foreground shrink-0">to</span>
+                <Input
+                  type="date"
+                  aria-label="To date"
+                  min={fromDate || undefined}
+                  value={toDate}
+                  onChange={e => setToDate(e.target.value)}
+                />
+              </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
