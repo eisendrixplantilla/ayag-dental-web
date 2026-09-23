@@ -58,13 +58,19 @@ export default function AdminOnlineAppointments() {
     [appointments]
   );
 
-  const filtered = useMemo(() => appointments.filter(a => {
+  // Newest bookings first, so a request that just came in is at the top of the list.
+  const ordered = useMemo(
+    () => [...appointments].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    [appointments]
+  );
+
+  const filtered = useMemo(() => ordered.filter(a => {
     const matchesSearch = !search || a.patientName.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
     const matchesDate = !dateFilter || a.date === dateFilter;
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
     return matchesSearch && matchesDate && matchesStatus && matchesDentist;
-  }), [appointments, search, dateFilter, statusFilter, dentistFilter]);
+  }), [ordered, search, dateFilter, statusFilter, dentistFilter]);
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
@@ -141,42 +147,39 @@ export default function AdminOnlineAppointments() {
         </Button>
       </div>
 
-      <Card className="shadow-card print:hidden">
-        <CardContent className="pt-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="relative sm:col-span-2 lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            <Input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={dentistFilter} onValueChange={setDentistFilter}>
-              <SelectTrigger><SelectValue placeholder="Dentist" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Dentists</SelectItem>
-                {dentists.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="space-y-4">
           <CardTitle className="font-heading text-lg flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-primary" /> Appointments ({filtered.length})
           </CardTitle>
+          <div className="space-y-3 print:hidden">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="relative sm:col-span-2 lg:col-span-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+              <Input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={dentistFilter} onValueChange={setDentistFilter}>
+                <SelectTrigger><SelectValue placeholder="Dentist" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Dentists</SelectItem>
+                  {dentists.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? (

@@ -127,3 +127,25 @@ describe("admin approve / reject", () => {
     }));
   });
 });
+
+describe("the appointments list", () => {
+  it("puts the newest bookings first, whatever order the server sent them in", async () => {
+    h.appts = [
+      apt({ id: "old", patientName: "Pedro Reyes", createdAt: "2026-09-20T08:00:00Z" }),
+      apt({ id: "newest", patientName: "Maria Santos", createdAt: "2026-09-23T17:45:00Z" }),
+      apt({ id: "middle", patientName: "Allen Estrella", createdAt: "2026-09-22T10:00:00Z" }),
+    ];
+    await renderPage();
+
+    const names = screen.getAllByRole("row").slice(1).map(r => r.cells[1].textContent);
+    expect(names).toEqual(["Maria Santos", "Allen Estrella", "Pedro Reyes"]);
+  });
+
+  it("keeps the filters and the table in one card", async () => {
+    await renderPage();
+    const card = screen.getByRole("table").closest(".bg-card");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByPlaceholderText(/Search patient name/)).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByRole("button", { name: /Clear filters/ })).toBeInTheDocument();
+  });
+});
