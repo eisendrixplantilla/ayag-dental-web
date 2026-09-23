@@ -29,6 +29,35 @@ vi.mock("@/contexts/AuthContext", () => ({
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
 
+// Radix's Select needs pointer geometry jsdom doesn't have — opening one there takes
+// tens of seconds. Swap it for a native <select> with the same items, which exercises
+// the page's own filter wiring without the unusable dropdown.
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  const items = (node: any): any[] =>
+    React.Children.toArray(node).flatMap((c: any) =>
+      c?.props?.value !== undefined ? [c] : c?.props?.children ? items(c.props.children) : []);
+  const passthrough = ({ children }: any) => children ?? null;
+  return {
+    Select: ({ value, onValueChange, children }: any) =>
+      React.createElement(
+        "select",
+        {
+          "aria-label": (React.Children.toArray(children) as any[])
+            .find(c => c?.props?.["aria-label"])?.props["aria-label"],
+          value,
+          onChange: (e: any) => onValueChange(e.target.value),
+        },
+        items(children).map((i: any) =>
+          React.createElement("option", { key: i.props.value, value: i.props.value }, i.props.children)),
+      ),
+    SelectTrigger: passthrough,
+    SelectContent: passthrough,
+    SelectItem: passthrough,
+    SelectValue: () => null,
+  };
+});
+
 import AdminOnlineAppointments from "@/pages/admin/AdminOnlineAppointments";
 
 beforeAll(() => {
@@ -146,6 +175,27 @@ describe("the appointments list", () => {
     await renderPage();
     // 00:00 UTC is 8am the same morning in Manila, wherever the admin is sitting.
     expect(within(rowOf("Allen Estrella")).getByText("Sep 22, 2026, 8:00 AM")).toBeInTheDocument();
+  });
+
+  it("narrows the list to one service, and clears back again", async () => {
+    h.appts = [
+      apt({ id: "a", patientName: "Allen Estrella", service: "Oral Prophylaxis" }),
+      apt({ id: "b", patientName: "Pedro Reyes", service: "Tooth Extraction" }),
+    ];
+    await renderPage();
+
+    const select = screen.getByRole("combobox", { name: "Filter by service" });
+    // Only the services actually booked are offered — no hard-coded menu to drift.
+    expect(within(select).getAllByRole("option").map(o => o.textContent))
+      .toEqual(["All Services", "Oral Prophylaxis", "Tooth Extraction"]);
+
+    fireEvent.change(select, { target: { value: "Tooth Extraction" } });
+    await waitFor(() => expect(screen.queryByText("Allen Estrella")).toBeNull());
+    expect(screen.getByText("Pedro Reyes")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(2); // header + the one match
+
+    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
+    await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
   });
 
   it("keeps the filters and the table in one card", async () => {

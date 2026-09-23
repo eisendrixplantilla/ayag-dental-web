@@ -38,6 +38,7 @@ export default function AdminOnlineAppointments() {
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dentistFilter, setDentistFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
 
   // `silent` is for background refreshes: no spinner over the table and no error
   // toast, so polling is invisible unless something actually changed.
@@ -58,6 +59,13 @@ export default function AdminOnlineAppointments() {
     [appointments]
   );
 
+  // The services offered change over time, so list the ones actually booked
+  // rather than a hard-coded menu.
+  const services = useMemo(
+    () => Array.from(new Set(appointments.map(a => a.service).filter(Boolean))).sort() as string[],
+    [appointments]
+  );
+
   // Newest bookings first, so a request that just came in is at the top of the list.
   const ordered = useMemo(
     () => [...appointments].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
@@ -69,13 +77,14 @@ export default function AdminOnlineAppointments() {
     const matchesDate = !dateFilter || a.date === dateFilter;
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
-    return matchesSearch && matchesDate && matchesStatus && matchesDentist;
-  }), [ordered, search, dateFilter, statusFilter, dentistFilter]);
+    const matchesService = serviceFilter === "all" || a.service === serviceFilter;
+    return matchesSearch && matchesDate && matchesStatus && matchesDentist && matchesService;
+  }), [ordered, search, dateFilter, statusFilter, dentistFilter, serviceFilter]);
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
   const clearFilters = () => {
-    setSearch(""); setDateFilter(""); setStatusFilter("all"); setDentistFilter("all");
+    setSearch(""); setDateFilter(""); setStatusFilter("all"); setDentistFilter("all"); setServiceFilter("all");
   };
 
   // Arrived here from a notification — drop any active filter first, otherwise the
@@ -153,14 +162,14 @@ export default function AdminOnlineAppointments() {
             <CalendarDays className="w-5 h-5 text-primary" /> Appointments ({filtered.length})
           </CardTitle>
           <div className="space-y-3 print:hidden">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <div className="relative sm:col-span-2 lg:col-span-2">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input className="pl-9" placeholder="Search patient name or ID..." value={search} onChange={e => setSearch(e.target.value)} />
               </div>
-              <Input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+              <Input type="date" aria-label="Filter by date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectTrigger aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
@@ -169,10 +178,17 @@ export default function AdminOnlineAppointments() {
                 </SelectContent>
               </Select>
               <Select value={dentistFilter} onValueChange={setDentistFilter}>
-                <SelectTrigger><SelectValue placeholder="Dentist" /></SelectTrigger>
+                <SelectTrigger aria-label="Filter by dentist"><SelectValue placeholder="Dentist" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Dentists</SelectItem>
                   {dentists.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={serviceFilter} onValueChange={setServiceFilter}>
+                <SelectTrigger aria-label="Filter by service"><SelectValue placeholder="Service" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Services</SelectItem>
+                  {services.map(sv => <SelectItem key={sv} value={sv}>{sv}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
