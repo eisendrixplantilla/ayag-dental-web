@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import StatCard from "@/components/StatCard";
 import { BarChart3, CalendarDays, FileText, Search, Users, UserCog, Loader2 } from "lucide-react";
-import ReportToolbar, { ALL_FIELDS } from "@/components/ReportToolbar";
+import ReportToolbar from "@/components/ReportToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getStaff, type StaffMember } from "@/lib/api/staff";
@@ -83,9 +84,7 @@ export default function SuperAdminReports() {
   const [type, setType] = useState<ReportType | "">("");
   // Applied to the generated report itself, so a long report can be narrowed without
   // running it again.
-  const [rowFilter, setRowFilter] = useState("");
-  /** "all", or the index of the column to search. */
-  const [filterField, setFilterField] = useState(ALL_FIELDS);
+  const [filter, setFilter] = useState(EMPTY_FILTER);
   const [report, setReport] = useState<GeneratedReport | null>(null);
 
   const totalAppointments = appointments.length;
@@ -133,23 +132,16 @@ export default function SuperAdminReports() {
       rows = [...accountRows, ...guestRows];
     }
 
-    setRowFilter("");
-    setFilterField(ALL_FIELDS);
+    setFilter(EMPTY_FILTER);
     setReport({ type, rows, generatedAt: formatManilaDateTime() });
     toast.success("Report preview generated");
   };
 
-  // The rows left after the on-screen filter: what is shown is what prints. "all"
-  // searches every column; otherwise only the chosen one, so "Oral" can mean the
-  // service and not a patient called Oral.
-  const visibleRows = useMemo(() => {
-    const q = rowFilter.trim().toLowerCase();
-    if (!report) return [];
-    if (!q) return report.rows;
-    const col = filterField === ALL_FIELDS ? -1 : Number(filterField);
-    return report.rows.filter((r) =>
-      (col < 0 ? r.join(" ") : r[col] ?? "").toLowerCase().includes(q));
-  }, [report, rowFilter, filterField]);
+  // The rows left after the on-screen filter: what is shown is what prints.
+  const visibleRows = useMemo(
+    () => (report ? filterReportRows(report.rows, filter) : []),
+    [report, filter],
+  );
 
   // Both buttons print the same document — one to paper, one to a PDF.
   const sendToPrinter = (what: string) => {
@@ -161,13 +153,8 @@ export default function SuperAdminReports() {
       rows: visibleRows,
       generatedAt: report.generatedAt,
       preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
-      filters: rowFilter.trim()
-        ? [{
-            label: "Filtered By",
-            value: filterField === ALL_FIELDS
-              ? rowFilter.trim()
-              : `${meta.columns[Number(filterField)]}: ${rowFilter.trim()}`,
-          }]
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(meta.columns, filter) ?? "" }]
         : undefined,
     });
     if (ok) toast.success(`${what} ready`);
@@ -256,10 +243,8 @@ export default function SuperAdminReports() {
                 <ReportToolbar
                   columns={reportMeta[report.type].columns}
                   rows={report.rows}
-                  field={filterField}
-                  onFieldChange={setFilterField}
-                  value={rowFilter}
-                  onValueChange={setRowFilter}
+                  filter={filter}
+                  onChange={setFilter}
                   shown={visibleRows.length}
                   onPrint={handlePrint}
                 />
@@ -275,7 +260,7 @@ export default function SuperAdminReports() {
                       {visibleRows.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={reportMeta[report.type].columns.length} className="text-center text-muted-foreground py-8">
-                            {report.rows.length === 0 ? "No records found." : `No records match "${rowFilter.trim()}".`}
+                            {report.rows.length === 0 ? "No records found." : "No records match this filter."}
                           </TableCell>
                         </TableRow>
                       ) : visibleRows.map((row, i) => (

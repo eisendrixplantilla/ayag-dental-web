@@ -113,7 +113,7 @@ describe("filtering a report that has already been generated", () => {
   it("says so when nothing matches, and clears back to everything", async () => {
     await generate();
     fireEvent.change(screen.getByLabelText("Filter the generated report"), { target: { value: "zzz" } });
-    await waitFor(() => expect(screen.getByText(/No records match "zzz"/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No records match this filter/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /Clear filter/ }));
     await waitFor(() => expect(dataRows()).toHaveLength(3));
@@ -188,11 +188,6 @@ describe("filtering by one field", () => {
     pick("Status", "Confirmed");
     await waitFor(() => expect(names()).toHaveLength(3));
 
-    chooseField("4"); // Appointment Date
-    await waitFor(() => expect(valuePicker("Appointment Date")).toBeInTheDocument());
-    pick("Appointment Date", "2026-09-25");
-    await waitFor(() => expect(names()).toHaveLength(3));
-
     chooseField("0"); // Reference
     await waitFor(() => expect(valuePicker("Reference")).toBeInTheDocument());
     pick("Reference", "APT-3F9C2A");
@@ -234,5 +229,82 @@ describe("filtering by one field", () => {
     fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
     expect(printed.calls[0].filters).toContainEqual({ label: "Filtered By", value: "Service: Root Canal" });
     expect(printed.calls[0].rows).toHaveLength(1);
+  });
+});
+
+describe("filtering a date column by range", () => {
+  const chooseField = (index: string) =>
+    fireEvent.change(screen.getByLabelText("Filter by field"), { target: { value: index } });
+  const from = () => screen.getByLabelText("From date");
+  const to = () => screen.getByLabelText("To date");
+
+  beforeEach(() => {
+    h.appts = [
+      apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", patientName: "Allen Estrella", date: "2026-09-20" }),
+      apt({ id: "b7d41e55-0000-4000-8000-00000000000b", patientName: "Maria Santos", date: "2026-09-25" }),
+      apt({ id: "c2e58a99-0000-4000-8000-00000000000c", patientName: "Pedro Reyes", date: "2026-10-02" }),
+    ];
+  });
+
+  it("offers a date range instead of a list of dates", async () => {
+    await generate();
+    chooseField("4"); // Appointment Date
+
+    await waitFor(() => expect(from()).toBeInTheDocument());
+    expect(to()).toBeInTheDocument();
+    expect(screen.queryByLabelText("Filter by Appointment Date")).toBeNull();
+  });
+
+  it("keeps only the records inside the range, either end optional", async () => {
+    await generate();
+    chooseField("4");
+    await waitFor(() => expect(from()).toBeInTheDocument());
+
+    fireEvent.change(from(), { target: { value: "2026-09-24" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos", "Pedro Reyes"]));
+
+    fireEvent.change(to(), { target: { value: "2026-09-30" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos"]));
+
+    fireEvent.change(from(), { target: { value: "" } });
+    await waitFor(() => expect(names()).toEqual(["Allen Estrella", "Maria Santos"]));
+  });
+
+  it("counts what is showing and clears back to everything", async () => {
+    await generate();
+    chooseField("4");
+    await waitFor(() => expect(from()).toBeInTheDocument());
+    fireEvent.change(from(), { target: { value: "2026-10-01" } });
+
+    await waitFor(() => expect(screen.getByText("1 of 3 record(s)")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Clear filter/ }));
+    await waitFor(() => expect(names()).toHaveLength(3));
+  });
+
+  it("prints the range on the document, however it was bounded", async () => {
+    await generate();
+    chooseField("4");
+    await waitFor(() => expect(from()).toBeInTheDocument());
+
+    fireEvent.change(from(), { target: { value: "2026-09-21" } });
+    fireEvent.change(to(), { target: { value: "2026-09-30" } });
+    await waitFor(() => expect(names()).toEqual(["Maria Santos"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
+    expect(printed.calls[0].filters).toContainEqual({
+      label: "Filtered By", value: "Appointment Date: 2026-09-21 to 2026-09-30",
+    });
+    expect(printed.calls[0].rows).toHaveLength(1);
+  });
+
+  it("drops the range when another field is chosen", async () => {
+    await generate();
+    chooseField("4");
+    await waitFor(() => expect(from()).toBeInTheDocument());
+    fireEvent.change(from(), { target: { value: "2026-10-01" } });
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes"]));
+
+    chooseField("1"); // Patient Name
+    await waitFor(() => expect(names()).toHaveLength(3));
   });
 });
