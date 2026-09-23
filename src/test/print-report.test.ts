@@ -17,41 +17,46 @@ const sheets = (html: string) => html.split('<section class="sheet">').length - 
 const bodyRows = (html: string) => html.split("<tbody>").slice(1).map(part => part.split("</tbody>")[0]);
 
 describe("paginating a report", () => {
-  it("puts ten records on a page by default", () => {
-    expect(ROWS_PER_PAGE).toBe(10);
-    expect(paginate(rows(25)).map(p => p.length)).toEqual([10, 10, 5]);
+  it("puts twenty records on a page by default", () => {
+    expect(ROWS_PER_PAGE).toBe(20);
+    expect(paginate(rows(45)).map(p => p.length)).toEqual([20, 20, 5]);
+  });
+
+  it("takes a different page size when one is asked for", () => {
+    expect(paginate(rows(25), 10).map(p => p.length)).toEqual([10, 10, 5]);
+    expect(sheets(buildReportHtml(doc(25, { rowsPerPage: 10 })))).toBe(3);
   });
 
   it("still makes one page out of an empty report", () => {
     expect(paginate([])).toEqual([[]]);
   });
 
-  it("prints a sheet per ten records", () => {
-    expect(sheets(buildReportHtml(doc(10)))).toBe(1);
-    expect(sheets(buildReportHtml(doc(11)))).toBe(2);
-    expect(sheets(buildReportHtml(doc(25)))).toBe(3);
+  it("prints a sheet per twenty records", () => {
+    expect(sheets(buildReportHtml(doc(20)))).toBe(1);
+    expect(sheets(buildReportHtml(doc(21)))).toBe(2);
+    expect(sheets(buildReportHtml(doc(45)))).toBe(3);
   });
 
   it("splits the records across those sheets, in order and numbered", () => {
-    const parts = bodyRows(buildReportHtml(doc(12)));
+    const parts = bodyRows(buildReportHtml(doc(22)));
     expect(parts).toHaveLength(2);
     expect(parts[0]).toContain("Patient 1");
-    expect(parts[0]).toContain("Patient 10");
-    expect(parts[0]).not.toContain("Patient 11");
-    expect(parts[1]).toContain("Patient 11");
-    expect(parts[1]).toContain(">12</td>"); // the running record number
+    expect(parts[0]).toContain("Patient 20");
+    expect(parts[0]).not.toContain("Patient 21");
+    expect(parts[1]).toContain("Patient 21");
+    expect(parts[1]).toContain(">22</td>"); // the running record number
   });
 
   it("numbers every page and says which records are on it", () => {
-    const html = buildReportHtml(doc(25));
+    const html = buildReportHtml(doc(45));
     expect(html).toContain("Page 1 of 3");
     expect(html).toContain("Page 3 of 3");
-    expect(html).toContain("Records 1–10 of 25");
-    expect(html).toContain("Records 21–25 of 25");
+    expect(html).toContain("Records 1–20 of 45");
+    expect(html).toContain("Records 41–45 of 45");
   });
 
   it("repeats the letterhead and column headings on each sheet", () => {
-    const html = buildReportHtml(doc(25));
+    const html = buildReportHtml(doc(45));
     expect(html.split("Ayag Dental Clinic").length - 1).toBe(3);
     expect(html.split("<thead>").length - 1).toBe(3);
   });
@@ -68,7 +73,7 @@ describe("what the document says", () => {
   });
 
   it("signs off once, on the last sheet only", () => {
-    const html = buildReportHtml(doc(25));
+    const html = buildReportHtml(doc(45));
     expect(html.split('class="sign"').length - 1).toBe(1);
     expect(html.indexOf('class="sign"')).toBeGreaterThan(html.lastIndexOf("Page 2 of 3"));
   });

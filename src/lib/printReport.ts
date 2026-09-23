@@ -7,7 +7,7 @@
  */
 
 /** Records on one sheet. Kept small enough that a page never overflows. */
-export const ROWS_PER_PAGE = 10;
+export const ROWS_PER_PAGE = 20;
 
 export interface ReportDoc {
   /** e.g. "Appointment Report" */
@@ -44,18 +44,18 @@ const STYLES = `
   .letterhead img { width: 44px; height: 44px; object-fit: contain; }
   .clinic { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: .2px; }
   .tagline { font-size: 10px; color: #6b7280; margin: 2px 0 0; }
-  h2 { font-size: 14px; margin: 14px 0 8px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+  h2 { font-size: 14px; margin: 10px 0 6px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
   .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 24px; margin: 0 0 12px; font-size: 10px; }
   .meta div { display: flex; gap: 6px; }
   .meta dt { color: #6b7280; margin: 0; }
   .meta dd { margin: 0; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  th, td { border: 1px solid #d1d5db; padding: 4px 7px; text-align: left; vertical-align: top; }
   th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
   tbody tr:nth-child(even) { background: #fafafa; }
   td.num, th.num { width: 32px; text-align: right; color: #6b7280; }
   .empty { text-align: center; color: #6b7280; padding: 24px; font-style: italic; }
-  .sign { margin-top: 28px; }
+  .sign { margin-top: 20px; }
   .sign .line { border-bottom: 1px solid #1f2937; width: 220px; height: 26px; }
   .sign .name { font-weight: 600; margin: 4px 0 0; }
   .sign .role { color: #6b7280; margin: 0; }
