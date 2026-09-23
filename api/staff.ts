@@ -16,6 +16,9 @@ function mapStaff(u: any) {
     status: u.status,
     photoUrl: u.photo_url,
     createdAt: manilaDateStr(u.created_at),
+    archivedAt: manilaDateStr(u.archived_at),
+    archivedBy: u.archived_by,
+    archivedReason: u.archived_reason,
   };
 }
 
@@ -250,10 +253,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   if (req.method === "PATCH") {
-    const { action, name, contact, email, password, status } = req.body ?? {};
+    const { action, name, contact, email, password, status, reason, archivedBy } = req.body ?? {};
 
-    if (action === "archive" || action === "restore") {
-      await sql`UPDATE users SET status = ${action === "archive" ? "archived" : "active"}, updated_at = now() WHERE id = ${id}`;
+    if (action === "archive") {
+      // A reason is required: the Archive has to say why an account was taken out of service.
+      const archivedReason = typeof reason === "string" ? reason.trim() : "";
+      if (!archivedReason) return res.status(400).json({ error: "A reason is required to archive a staff account" });
+      await sql`
+        UPDATE users SET
+          status = 'archived',
+          archived_at = now(),
+          archived_by = ${archivedBy ?? "Super Admin"},
+          archived_reason = ${archivedReason},
+          updated_at = now()
+        WHERE id = ${id}
+      `;
+    } else if (action === "restore") {
+      await sql`
+        UPDATE users SET status = 'active', archived_at = NULL, archived_by = NULL, archived_reason = NULL, updated_at = now()
+        WHERE id = ${id}
+      `;
     } else {
       const nameParts = name ? splitName(name) : null;
       const passwordHash = password ? await bcrypt.hash(password, 10) : null;

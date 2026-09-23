@@ -22,6 +22,7 @@ type ArchiveRow = {
   role?: string;
   archivedAt: string;
   archivedBy: string;
+  reason: string;
 };
 
 export default function SuperAdminArchives() {
@@ -46,8 +47,9 @@ export default function SuperAdminArchives() {
           email: s.email,
           contact: s.contact ?? "—",
           role: s.role === "dentist" ? "Dentist" : "Admin",
-          archivedAt: s.createdAt ?? "—",
-          archivedBy: "Super Admin",
+          archivedAt: s.archivedAt ?? "—",
+          archivedBy: s.archivedBy ?? "Super Admin",
+          reason: s.archivedReason ?? "—",
         })),
         ...patients.map<ArchiveRow>((p) => ({
           id: p.id,
@@ -57,6 +59,7 @@ export default function SuperAdminArchives() {
           contact: p.phone || "—",
           archivedAt: p.archivedAt ?? "—",
           archivedBy: p.archivedBy ?? "Super Admin",
+          reason: "—",
         })),
       ]);
     } catch {
@@ -167,19 +170,20 @@ export default function SuperAdminArchives() {
                 <TableHead>Account Type</TableHead>
                 <TableHead>Date Archived</TableHead>
                 <TableHead>Archived By</TableHead>
+                <TableHead>Reason</TableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No archived accounts</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No archived accounts</TableCell>
                 </TableRow>
               ) : filtered.map(r => (
                 <TableRow key={`${r.type}-${r.id}`}>
@@ -190,6 +194,7 @@ export default function SuperAdminArchives() {
                   </TableCell>
                   <TableCell>{r.archivedAt}</TableCell>
                   <TableCell>{r.archivedBy}</TableCell>
+                  <TableCell className="max-w-[16rem] whitespace-normal break-words">{r.reason}</TableCell>
                   <TableCell className="print:hidden">
                     <div className="flex flex-wrap gap-1">
                       <Button variant="ghost" size="sm" onClick={() => setViewing(r)}>
@@ -221,6 +226,7 @@ export default function SuperAdminArchives() {
               <Row label="Contact Number" value={viewing.contact} />
               <Row label="Date Archived" value={viewing.archivedAt} />
               <Row label="Archived By" value={viewing.archivedBy} />
+              <Row label="Reason" value={viewing.reason} />
             </div>
           )}
           <DialogFooter className="gap-2">

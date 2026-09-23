@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +19,7 @@ import {
   generateAvailableSlots, DAY_NAMES, type ScheduleDay, type UnavailableDate,
 } from "@/lib/api/staff";
 import { formatManilaDate } from "@/lib/formatDate";
+import { useAuth } from "@/contexts/AuthContext";
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
 
@@ -37,6 +39,7 @@ const emptyDayConfig = (): DayConfig => ({
 
 export default function SuperAdminStaff() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +50,7 @@ export default function SuperAdminStaff() {
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", contact: "", password: "", status: "active" });
   const [archiving, setArchiving] = useState<StaffMember | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [scheduleFor, setScheduleFor] = useState<StaffMember | null>(null);
@@ -105,11 +109,21 @@ export default function SuperAdminStaff() {
     }
   };
 
+  const openArchive = (s: StaffMember) => {
+    setArchiveReason("");
+    setArchiving(s);
+  };
+
   const confirmArchive = async () => {
     if (!archiving) return;
+    const reason = archiveReason.trim();
+    if (!reason) {
+      toast.error("Please give a reason for archiving this account");
+      return;
+    }
     setSaving(true);
     try {
-      await archiveStaff(archiving.id);
+      await archiveStaff(archiving.id, reason, user?.name);
       toast.success("Staff account archived");
       setArchiving(null);
       load();
@@ -314,7 +328,7 @@ export default function SuperAdminStaff() {
                           <CalendarClock className="w-4 h-4 mr-1" />Schedule
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-warning" title="Archive" onClick={() => setArchiving(s)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-warning" title="Archive" onClick={() => openArchive(s)}>
                         <Archive className="w-4 h-4" />
                       </Button>
                     </div>
@@ -386,15 +400,29 @@ export default function SuperAdminStaff() {
           <DialogHeader>
             <DialogTitle className="font-heading">Archive Staff Account</DialogTitle>
             <DialogDescription>
-              {archiving?.name} will be moved to the Archive with status "Archived". The account can be restored later.
+              {archiving?.name} ({archiving && roleLabel(archiving.role)}) will be moved to the Archive with status
+              "Archived". The account can be restored later.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="archive-reason">Reason for archiving</Label>
+            <Textarea
+              id="archive-reason"
+              rows={3}
+              value={archiveReason}
+              onChange={e => setArchiveReason(e.target.value)}
+              placeholder="e.g. Resigned effective September 30, 2026."
+            />
+            <p className="text-xs text-muted-foreground">
+              Required. The reason is kept with the account in the Archive.
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setArchiving(null)}>Cancel</Button>
             <Button
               className="bg-warning text-warning-foreground hover:bg-warning/90"
               onClick={confirmArchive}
-              disabled={saving}
+              disabled={saving || !archiveReason.trim()}
             >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Archive
             </Button>

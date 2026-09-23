@@ -22,6 +22,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_number TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;
+-- Why a staff account was archived, recorded at the moment it is archived and cleared on restore.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_by TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS otp_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

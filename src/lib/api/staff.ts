@@ -23,6 +23,9 @@ export interface StaffMember {
   status: string;
   photoUrl: string | null;
   createdAt: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archivedReason?: string | null;
 }
 
 export interface StaffInput {
@@ -74,10 +77,11 @@ export async function updateStaff(id: string, patch: StaffUpdate): Promise<Staff
   return data.staff;
 }
 
-export async function archiveStaff(id: string): Promise<StaffMember> {
+/** `reason` is required — the Archive records why the account was taken out of service. */
+export async function archiveStaff(id: string, reason: string, archivedBy?: string): Promise<StaffMember> {
   const data = await api<{ staff: StaffMember }>(`/staff?id=${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify({ action: "archive" }),
+    body: JSON.stringify({ action: "archive", reason, archivedBy }),
   });
   return data.staff;
 }
