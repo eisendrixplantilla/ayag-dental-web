@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Clock3, Loader2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Clock3, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -264,6 +264,40 @@ export default function PatientBook() {
             </div>
           </div>
 
+          {/* What a patient needs to know before choosing a day: the slot isn't theirs
+              yet, the clock is the clinic's, and moving it later has limits. Loud on
+              purpose — people skim booking forms. */}
+          <div
+            role="note"
+            aria-label="Appointment date notice"
+            className="rounded-md border border-warning/40 border-l-4 border-l-warning bg-warning/10 p-3"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+              <div className="space-y-1 text-xs sm:text-sm leading-snug">
+                <p className="font-semibold text-foreground">Before you pick a date</p>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>
+                    <span className="font-medium text-foreground">Your date and time are not reserved yet.</span>{" "}
+                    The request stays <span className="font-medium text-warning">Pending</span> until the
+                    clinic approves it, and you will be notified either way.
+                  </li>
+                  <li>
+                    All dates and times are{" "}
+                    <span className="font-medium text-foreground">Philippine time (GMT+8)</span> — the
+                    clinic's local time, not your device's.
+                  </li>
+                  <li>
+                    You may reschedule or cancel{" "}
+                    <span className="font-medium text-foreground">only up to 24 hours before</span> your
+                    appointment, and a booking can be{" "}
+                    <span className="font-medium text-foreground">rescheduled once</span>.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
           {/* When — the month and the free times side by side, so picking a day and seeing
               what is left is one glance rather than two dropdowns. */}
           <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
@@ -331,10 +365,12 @@ export default function PatientBook() {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-3">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {time
-                ? `${serviceLabel} with ${dentist} on ${date ? format(date, "PPP") : ""} at ${selectedLabel}.`
-                : <>Requests are submitted as <span className="text-warning font-medium">Pending</span> and need admin approval.</>}
+                ? <span className="font-medium text-foreground">
+                    {serviceLabel} with {dentist} on {date ? format(date, "PPP") : ""} at {selectedLabel}.
+                  </span>
+                : "Pick a service, a dentist, a date and a time to continue."}
             </p>
             <Button
               className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"

@@ -231,3 +231,42 @@ describe("slots while the form sits open", () => {
     expect(toasts.info).toHaveBeenCalledWith("That time has just been taken. Please choose another.");
   });
 });
+
+describe("what the form says about the date being booked", () => {
+  it("warns, before a date is picked, that the slot isn't held yet", async () => {
+    await renderPage();
+    const notice = within(screen.getByRole("note", { name: "Appointment date notice" }));
+
+    // The three things a patient can be caught out by.
+    expect(notice.getByText(/not reserved yet/)).toBeInTheDocument();
+    expect(notice.getByText("Pending")).toBeInTheDocument();
+    expect(notice.getByText("Philippine time (GMT+8)")).toBeInTheDocument();
+    expect(notice.getByText(/only up to 24 hours before/)).toBeInTheDocument();
+    expect(notice.getByText(/rescheduled once/)).toBeInTheDocument();
+  });
+
+  it("stands out rather than reading as another hint", async () => {
+    await renderPage();
+    const notice = screen.getByRole("note", { name: "Appointment date notice" });
+    expect(notice.className).toMatch(/border-l-warning/);
+    expect(notice.className).toMatch(/bg-warning/);
+    // The load-bearing phrase is not the same weight as the rest of the sentence.
+    expect(notice.querySelector(".font-medium, .font-semibold")).not.toBeNull();
+  });
+
+  it("stays put once a date and time are chosen", async () => {
+    await renderPage();
+    fireEvent.change(picker(), { target: { value: "Oral" } });
+    await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Pick Sep 25" }));
+
+    const slots = () => within(screen.getByRole("group", { name: "Available time slots" }));
+    await waitFor(() => expect(slots().getAllByRole("button").length).toBeGreaterThan(0));
+    fireEvent.click(slots().getByRole("button", { name: "9:00 AM – 9:30 AM" }));
+
+    // The booking reads back at the foot of the form; the notice is still there above it.
+    await screen.findByText(/Oral with Dr. Mike Johnson on/);
+    expect(screen.getByRole("note", { name: "Appointment date notice" })).toBeInTheDocument();
+  });
+});
