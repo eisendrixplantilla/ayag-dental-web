@@ -232,41 +232,62 @@ describe("slots while the form sits open", () => {
   });
 });
 
-describe("what the form says about the date being booked", () => {
-  it("warns, before a date is picked, that the slot isn't held yet", async () => {
-    await renderPage();
-    const notice = within(screen.getByRole("note", { name: "Appointment date notice" }));
+describe("what the form tells you about the date you are picking", () => {
+  const slotGroup = () => screen.getByRole("group", { name: "Available time slots" });
 
-    // The three things a patient can be caught out by.
-    expect(notice.getByText(/not reserved yet/)).toBeInTheDocument();
-    expect(notice.getByText("Pending")).toBeInTheDocument();
-    expect(notice.getByText("Philippine time (GMT+8)")).toBeInTheDocument();
-    expect(notice.getByText(/only up to 24 hours before/)).toBeInTheDocument();
-    expect(notice.getByText(/rescheduled once/)).toBeInTheDocument();
-  });
-
-  it("stands out rather than reading as another hint", async () => {
-    await renderPage();
-    const notice = screen.getByRole("note", { name: "Appointment date notice" });
-    expect(notice.className).toMatch(/border-l-warning/);
-    expect(notice.className).toMatch(/bg-warning/);
-    // The load-bearing phrase is not the same weight as the rest of the sentence.
-    expect(notice.querySelector(".font-medium, .font-semibold")).not.toBeNull();
-  });
-
-  it("stays put once a date and time are chosen", async () => {
+  const pickVisit = async () => {
     await renderPage();
     fireEvent.change(picker(), { target: { value: "Oral" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
     fireEvent.click(await screen.findByRole("button", { name: "Pick Sep 25" }));
+    await waitFor(() => expect(within(slotGroup()).getAllByRole("button").length).toBeGreaterThan(0));
+  };
 
-    const slots = () => within(screen.getByRole("group", { name: "Available time slots" }));
-    await waitFor(() => expect(slots().getAllByRole("button").length).toBeGreaterThan(0));
-    fireEvent.click(slots().getByRole("button", { name: "9:00 AM – 9:30 AM" }));
+  it("spells out the dentist's working hours, and doesn't whisper them", async () => {
+    await renderPage();
+    fireEvent.change(picker(), { target: { value: "Oral" } });
+    await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
 
-    // The booking reads back at the foot of the form; the notice is still there above it.
-    await screen.findByText(/Oral with Dr. Mike Johnson on/);
-    expect(screen.getByRole("note", { name: "Appointment date notice" })).toBeInTheDocument();
+    const label = await screen.findByText("Working hours:");
+    expect(label.className).toMatch(/font-semibold/);
+    // Which days exist on the calendar below, and the hours within them.
+    expect(label.parentElement!.textContent).toMatch(/Sun 9:00 AM–5:00 PM/);
+    // Not hint grey: it reads in the body colour.
+    expect(label.closest("p")!.className).not.toMatch(/text-muted-foreground/);
+  });
+
+  it("says which day the times belong to, and how many are left", async () => {
+    await pickVisit();
+
+    const heading = screen.getByText(/^Times on /);
+    expect(heading.textContent).toBe("Times on Fri, Sep 25");
+    expect(heading.className).toMatch(/font-semibold/);
+    expect(heading.className).toMatch(/text-foreground/);
+
+    // The count is a badge beside it rather than another line of small grey text.
+    const count = screen.getByText(/free$/);
+    expect(count.className).toMatch(/bg-success/);
+  });
+
+  it("reads the whole booking back before Confirm, set apart from the form", async () => {
+    await pickVisit();
+    fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
+
+    const readback = (await screen.findByText("September 25th, 2026")).closest("p")!;
+    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on September 25th, 2026 at 9:00 AM – 9:30 AM.");
+    // Each thing being booked carries weight, and the whole line is set apart.
+    expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|September 25th, 2026|9:00 AM – 9:30 AM/)
+      .every(el => /font-semibold/.test(el.className))).toBe(true);
+    expect(readback.className).toContain("bg-primary/5");
+
+    // Before a time is chosen it is a prompt, not a summary.
+    expect(screen.queryByText(/Pick a service, a dentist/)).toBeNull();
+  });
+
+  it("prompts for what is still missing until a time is chosen", async () => {
+    await renderPage();
+    expect(screen.getByText(/Pick a service, a dentist, a date and a time to continue/)).toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CalendarPlus, Clock3, Loader2, X } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Clock3, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -252,49 +252,25 @@ export default function PatientBook() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground min-h-4 leading-tight line-clamp-2 sm:line-clamp-none"
+              {/* Which days exist at all on the calendar below — worth reading, so it
+                  doesn't sit in hint grey. */}
+              <p className="text-xs min-h-5 leading-tight"
                  title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
                 {!loadingDentists && dentists.length === 0 ? (
-                  <span className="text-destructive">No dentists are available for booking right now.</span>
-                ) : loadingSchedule ? "Loading schedule..."
+                  <span className="font-medium text-destructive">No dentists are available for booking right now.</span>
+                ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
                   : dentistId && schedule && schedule.days.length === 0 ? (
-                    <span className="text-destructive">This dentist has no working schedule configured yet.</span>
-                  ) : schedule && schedule.days.length > 0 ? `Working hours: ${scheduleSummary}` : ""}
+                    <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
+                  ) : schedule && schedule.days.length > 0 ? (
+                    <span className="flex items-start gap-1.5 text-foreground">
+                      <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                      <span className="line-clamp-2 sm:line-clamp-none">
+                        <span className="font-semibold">Working hours:</span>{" "}
+                        <span className="font-medium">{scheduleSummary}</span>
+                      </span>
+                    </span>
+                  ) : ""}
               </p>
-            </div>
-          </div>
-
-          {/* What a patient needs to know before choosing a day: the slot isn't theirs
-              yet, the clock is the clinic's, and moving it later has limits. Loud on
-              purpose — people skim booking forms. */}
-          <div
-            role="note"
-            aria-label="Appointment date notice"
-            className="rounded-md border border-warning/40 border-l-4 border-l-warning bg-warning/10 p-3"
-          >
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
-              <div className="space-y-1 text-xs sm:text-sm leading-snug">
-                <p className="font-semibold text-foreground">Before you pick a date</p>
-                <ul className="space-y-1 text-muted-foreground">
-                  <li>
-                    <span className="font-medium text-foreground">Your date and time are not reserved yet.</span>{" "}
-                    The request stays <span className="font-medium text-warning">Pending</span> until the
-                    clinic approves it, and you will be notified either way.
-                  </li>
-                  <li>
-                    All dates and times are{" "}
-                    <span className="font-medium text-foreground">Philippine time (GMT+8)</span> — the
-                    clinic's local time, not your device's.
-                  </li>
-                  <li>
-                    You may reschedule or cancel{" "}
-                    <span className="font-medium text-foreground">only up to 24 hours before</span> your
-                    appointment, and a booking can be{" "}
-                    <span className="font-medium text-foreground">rescheduled once</span>.
-                  </li>
-                </ul>
-              </div>
             </div>
           </div>
 
@@ -316,12 +292,15 @@ export default function PatientBook() {
             </div>
 
             <div className="space-y-2 min-w-0">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2">
+                {/* The times below mean nothing without the day they are on. */}
+                <Label className={cn("text-sm font-semibold", date ? "text-foreground" : "text-muted-foreground")}>
                   {date ? `Times on ${format(date, "EEE, MMM d")}` : "Available times"}
                 </Label>
                 {dentistId && date && !loadingSlots && slots.length > 0 && (
-                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 whitespace-nowrap">
+                    {slots.length} free
+                  </Badge>
                 )}
               </div>
 
@@ -365,13 +344,22 @@ export default function PatientBook() {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-3">
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              {time
-                ? <span className="font-medium text-foreground">
-                    {serviceLabel} with {dentist} on {date ? format(date, "PPP") : ""} at {selectedLabel}.
-                  </span>
-                : "Pick a service, a dentist, a date and a time to continue."}
-            </p>
+            {/* The last thing read before Confirm: what is actually being booked. */}
+            {time ? (
+              <p className="flex items-start gap-2 min-w-0 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground">
+                <CalendarCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  <span className="font-semibold">{serviceLabel}</span> with{" "}
+                  <span className="font-semibold">{dentist}</span> on{" "}
+                  <span className="font-semibold">{date ? format(date, "PPP") : ""}</span> at{" "}
+                  <span className="font-semibold">{selectedLabel}</span>.
+                </span>
+              </p>
+            ) : (
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Pick a service, a dentist, a date and a time to continue.
+              </p>
+            )}
             <Button
               className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"
               disabled={chosen.length === 0 || !dentistId || !date || !time || submitting}
