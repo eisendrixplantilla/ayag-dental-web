@@ -36,6 +36,10 @@ export interface Service {
   description: string | null;
   duration: number | null;
   price: number | null;
+  /** Set once a service is taken out of the catalogue; records that used it keep its name. */
+  removedAt?: string | null;
+  removedBy?: string | null;
+  removedReason?: string | null;
 }
 
 export interface TreatmentInput {
@@ -97,6 +101,29 @@ export async function createService(input: ServiceInput): Promise<Service> {
   const data = await api<{ service: Service }>("/dental-records?services=true", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+  return data.service;
+}
+
+/** The services no longer offered, newest removal first. */
+export async function getRemovedServices(): Promise<Service[]> {
+  const data = await api<{ services: Service[] }>("/dental-records?services=true&removed=true");
+  return data.services;
+}
+
+/** `reason` is required — the catalogue records why a service stopped being offered. */
+export async function removeService(id: string, reason: string, removedBy?: string): Promise<Service> {
+  const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action: "remove", reason, removedBy }),
+  });
+  return data.service;
+}
+
+export async function restoreService(id: string): Promise<Service> {
+  const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action: "restore" }),
   });
   return data.service;
 }

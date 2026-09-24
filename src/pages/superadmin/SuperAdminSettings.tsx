@@ -5,12 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Settings, Clock, Stethoscope, Printer, Loader2, Plus } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
-import { getServices, updateService, createService, type Service } from "@/lib/api/dentalRecords";
+import {
+  getServices, getRemovedServices, updateService, createService, removeService, restoreService, type Service,
+} from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -23,6 +27,11 @@ export default function SuperAdminSettings() {
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
 
+  const [removed, setRemoved] = useState<Service[]>([]);
+  const [removing, setRemoving] = useState<Service | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [savingRemoval, setSavingRemoval] = useState(false);
+
   const [adding, setAdding] = useState(false);
   const [newService, setNewService] = useState({ name: "", duration: "30", price: "" });
   const [savingNew, setSavingNew] = useState(false);
@@ -30,6 +39,7 @@ export default function SuperAdminSettings() {
   const [info, setInfo] = useState<ClinicInfo>({ name: "", phone: "", email: "", address: "" });
   const [savingInfo, setSavingInfo] = useState(false);
 
+  const { user } = useAuth();
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
@@ -61,10 +71,11 @@ export default function SuperAdminSettings() {
     });
 
   useEffect(() => {
-    Promise.all([getClinicHours(), getServices(), getClinicInfo()])
-      .then(([h, s, i]) => {
+    Promise.all([getClinicHours(), getServices(), getClinicInfo(), getRemovedServices()])
+      .then(([h, s, i, gone]) => {
         setHours(h);
         setServices(s);
+        setRemoved(gone);
         setPriceDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.price != null ? String(svc.price) : ""])));
         setDurationDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.duration != null ? String(svc.duration) : ""])));
         setInfo(i);
@@ -72,6 +83,47 @@ export default function SuperAdminSettings() {
       .catch(() => toast.error("Failed to load settings"))
       .finally(() => setLoading(false));
   }, []);
+
+  const openRemove = (service: Service) => {
+    setRemoveReason("");
+    setRemoving(service);
+  };
+
+  // Removing keeps the row: dental records that used the service still name it, it just
+  // stops being offered for booking.
+  const confirmRemove = async () => {
+    if (!removing) return;
+    const reason = removeReason.trim();
+    if (!reason) {
+      toast.error("Please give a reason for removing this service");
+      return;
+    }
+    setSavingRemoval(true);
+    try {
+      const gone = await removeService(removing.id, reason, user?.name);
+      setServices((prev) => prev.filter((s) => s.id !== removing.id));
+      setRemoved((prev) => [gone, ...prev]);
+      setRemoving(null);
+      toast.success(`${gone.name} removed`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove the service");
+    } finally {
+      setSavingRemoval(false);
+    }
+  };
+
+  const bringBack = async (service: Service) => {
+    try {
+      const back = await restoreService(service.id);
+      setRemoved((prev) => prev.filter((s) => s.id !== service.id));
+      setServices((prev) => [...prev, back].sort((a, b) => a.name.localeCompare(b.name)));
+      setPriceDrafts((prev) => ({ ...prev, [back.id]: back.price != null ? String(back.price) : "" }));
+      setDurationDrafts((prev) => ({ ...prev, [back.id]: back.duration != null ? String(back.duration) : "" }));
+      toast.success(`${back.name} is offered again`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore the service");
+    }
+  };
 
   const openAddService = () => {
     setNewService({ name: "", duration: "30", price: "" });
@@ -182,6 +234,37 @@ export default function SuperAdminSettings() {
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>
+
+      <Dialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)}>
+        <DialogContent className="max-w-md bg-background">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Remove Dental Service</DialogTitle>
+            <DialogDescription>
+              {removing?.name} stops being offered on the booking forms. Dental records that
+              already name it are untouched, and it can be restored later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="remove-reason">Reason for removing</Label>
+            <Textarea
+              id="remove-reason"
+              rows={3}
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              placeholder="e.g. No longer offered — equipment retired."
+            />
+            <p className="text-xs text-muted-foreground">
+              Required. The reason is kept with the service under Removed Services.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRemove} disabled={savingRemoval || !removeReason.trim()}>
+              {savingRemoval && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={adding} onOpenChange={(o) => !o && setAdding(false)}>
         <DialogContent className="max-w-md bg-background">
@@ -318,9 +401,21 @@ export default function SuperAdminSettings() {
                     />
                   </TableCell>
                   <TableCell className="print:hidden">
-                    <Button variant="ghost" size="sm" onClick={() => saveService(s)} disabled={savingServiceId === s.id}>
-                      {savingServiceId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => saveService(s)} disabled={savingServiceId === s.id}>
+                        {savingServiceId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        aria-label={`Remove ${s.name}`}
+                        title="Remove"
+                        onClick={() => openRemove(s)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -331,6 +426,41 @@ export default function SuperAdminSettings() {
               )}
             </TableBody>
           </Table>
+
+          {removed.length > 0 && (
+            <div className="mt-6 border-t pt-4">
+              <p className="font-medium text-sm text-foreground">Removed Services</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                No longer offered for booking. Past records still name them.
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service</TableHead>
+                    <TableHead>Date Removed</TableHead>
+                    <TableHead>Removed By</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead className="print:hidden">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {removed.map((s) => (
+                    <TableRow key={s.id} className="text-muted-foreground">
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>{s.removedAt ?? "—"}</TableCell>
+                      <TableCell>{s.removedBy ?? "—"}</TableCell>
+                      <TableCell className="max-w-[18rem] whitespace-normal break-words">{s.removedReason ?? "—"}</TableCell>
+                      <TableCell className="print:hidden">
+                        <Button variant="ghost" size="sm" aria-label={`Restore ${s.name}`} onClick={() => bringBack(s)}>
+                          <RotateCcw className="w-4 h-4 mr-1" /> Restore
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -5,7 +5,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 // way a new treatment reaches the booking forms, so this covers that path.
 const h = vi.hoisted(() => ({
   services: [] as any[],
+  removed: [] as any[],
   created: [] as any[],
+  removeCalls: [] as { id: string; reason: string; by?: string }[],
   failWith: null as string | null,
 }));
 
@@ -14,6 +16,16 @@ vi.mock("@/lib/api/dentalRecords", async (importOriginal) => {
   return {
     ...actual,
     getServices: vi.fn(async () => h.services),
+    getRemovedServices: vi.fn(async () => h.removed),
+    removeService: vi.fn(async (id: string, reason: string, by?: string) => {
+      h.removeCalls.push({ id, reason, by });
+      const gone = h.services.find((s: any) => s.id === id);
+      return { ...gone, removedAt: "2026-09-24", removedBy: by ?? "Super Admin", removedReason: reason };
+    }),
+    restoreService: vi.fn(async (id: string) => {
+      const back = h.removed.find((s: any) => s.id === id);
+      return { ...back, removedAt: null, removedBy: null, removedReason: null };
+    }),
     updateService: vi.fn(async () => h.services[0]),
     createService: vi.fn(async (input: any) => {
       if (h.failWith) throw new Error(h.failWith);
@@ -51,6 +63,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
   h.services = [{ id: "sv-oral", name: "Oral", description: null, duration: 30, price: 1500 }];
+  h.removed = [];
+  h.removeCalls = [];
   h.created = [];
   h.failWith = null;
   toasts.success.mockClear();
@@ -141,5 +155,66 @@ describe("adding a dental service", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add Service/ }));
     await screen.findByText("Add Dental Service");
     expect(field(/Service Name/)).toHaveValue("");
+  });
+});
+
+describe("removing a dental service", () => {
+  const openRemove = async (name = "Oral") => {
+    render(<SuperAdminSettings />);
+    await screen.findByText(name);
+    fireEvent.click(await screen.findByRole("button", { name: `Remove ${name}` }));
+    await screen.findByText("Remove Dental Service");
+  };
+  const removeButton = () =>
+    screen.getAllByRole("button", { name: /^Remove$/ }).find(b => b.closest("[role=dialog]")) as HTMLButtonElement;
+  const reasonBox = () => within(dialog()).getByLabelText(/Reason for removing/);
+
+  it("asks why, and won't remove until it's answered", async () => {
+    await openRemove();
+
+    expect(removeButton()).toBeDisabled();
+    fireEvent.change(reasonBox(), { target: { value: "   " } });
+    expect(removeButton()).toBeDisabled();
+
+    fireEvent.change(reasonBox(), { target: { value: "Equipment retired" } });
+    await waitFor(() => expect(removeButton()).not.toBeDisabled());
+  });
+
+  it("sends the reason and who removed it, and takes the service off the list", async () => {
+    await openRemove();
+    fireEvent.change(reasonBox(), { target: { value: "  Equipment retired  " } });
+    fireEvent.click(removeButton());
+
+    await waitFor(() => expect(h.removeCalls).toHaveLength(1));
+    expect(h.removeCalls[0]).toEqual({ id: "sv-oral", reason: "Equipment retired", by: "Super Administrator" });
+
+    // Gone from the bookable list, listed underneath with the reason.
+    await waitFor(() => expect(screen.getByText("Removed Services")).toBeInTheDocument());
+    expect(screen.getByText("Equipment retired")).toBeInTheDocument();
+    expect(screen.getByText("Super Administrator")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Oral" })).toBeNull();
+  });
+
+  it("shows what was removed earlier, and puts one back on request", async () => {
+    h.services = [];
+    h.removed = [{
+      id: "sv-tmj", name: "TMJ", description: null, duration: 45, price: 5000,
+      removedAt: "2026-09-20", removedBy: "Super Administrator", removedReason: "Referred out",
+    }];
+    render(<SuperAdminSettings />);
+
+    await screen.findByText("Removed Services");
+    expect(screen.getByText("Referred out")).toBeInTheDocument();
+    expect(screen.getByText("2026-09-20")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore TMJ" }));
+    await waitFor(() => expect(screen.queryByText("Removed Services")).toBeNull());
+    expect(screen.getByRole("button", { name: "Remove TMJ" })).toBeInTheDocument();
+  });
+
+  it("keeps the removed list out of the way when nothing has been removed", async () => {
+    render(<SuperAdminSettings />);
+    await screen.findByText("Oral");
+    expect(screen.queryByText("Removed Services")).toBeNull();
   });
 });

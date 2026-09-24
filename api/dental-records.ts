@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { displayService, legacyNames } from "./_lib/services.js";
+import { manilaDateStr } from "./_lib/date.js";
 
 function toDateStr(v: unknown): string | null {
   if (v == null) return null;
@@ -82,6 +83,22 @@ const RECORD_SELECT = `
   JOIN appointments a ON a.id = dr.appointment_id
 `;
 
+const SERVICE_COLUMNS = `id, service_name AS name, description, duration, price,
+  removed_at, removed_by, removed_reason`;
+
+function mapService(r: any) {
+  return {
+    id: r.id,
+    name: displayService(r.name),
+    description: r.description,
+    duration: r.duration,
+    price: r.price,
+    removedAt: manilaDateStr(r.removed_at),
+    removedBy: r.removed_by,
+    removedReason: r.removed_reason,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = getSessionFromRequest(req);
   if (!session) return res.status(401).json({ error: "Unauthorized" });
@@ -90,8 +107,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     if (req.query.services === "true") {
-      const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services ORDER BY service_name`;
-      return res.status(200).json({ services: rows.map((r) => ({ ...r, name: displayService(r.name) })) });
+      // Removed services are kept out of the catalogue everything else reads from; the
+      // Settings page asks for them separately to show why each one went.
+      const removed = req.query.removed === "true";
+      const rows = removed
+        ? await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NOT NULL ORDER BY removed_at DESC`, [])
+        : await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NULL ORDER BY service_name`, []);
+      return res.status(200).json({ services: (rows as any[]).map(mapService) });
     }
 
     if (id) {
@@ -128,12 +150,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "PATCH" && req.query.services === "true") {
     if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
     if (!id) return res.status(400).json({ error: "Missing id" });
-    const { price, duration } = req.body ?? {};
-    await sql`UPDATE services SET price = COALESCE(${price ?? null}, price), duration = COALESCE(${duration ?? null}, duration) WHERE id = ${id}`;
-    const rows = await sql`SELECT id, service_name AS name, description, duration, price FROM services WHERE id = ${id}`;
-    if (rows[0]) rows[0].name = displayService(rows[0].name);
-    if (!rows[0]) return res.status(404).json({ error: "Service not found" });
-    return res.status(200).json({ service: rows[0] });
+    const { price, duration, action, reason, removedBy } = req.body ?? {};
+
+    if (action === "remove") {
+      // A reason is required: the catalogue has to say why a service stopped being offered.
+      const removedReason = typeof reason === "string" ? reason.trim() : "";
+      if (!removedReason) return res.status(400).json({ error: "A reason is required to remove a service" });
+      await sql`
+        UPDATE services SET removed_at = now(), removed_by = ${removedBy ?? "Super Admin"}, removed_reason = ${removedReason}
+        WHERE id = ${id}
+      `;
+    } else if (action === "restore") {
+      await sql`UPDATE services SET removed_at = NULL, removed_by = NULL, removed_reason = NULL WHERE id = ${id}`;
+    } else {
+      await sql`UPDATE services SET price = COALESCE(${price ?? null}, price), duration = COALESCE(${duration ?? null}, duration) WHERE id = ${id}`;
+    }
+
+    const rows = await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE id = $1`, [id]);
+    const service = (rows as any[])[0];
+    if (!service) return res.status(404).json({ error: "Service not found" });
+    return res.status(200).json({ service: mapService(service) });
   }
 
   if (req.method === "POST" && req.query.services === "true") {
@@ -142,16 +178,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const serviceName = typeof name === "string" ? name.trim() : "";
     if (!serviceName) return res.status(400).json({ error: "Service name is required" });
 
-    // One row per service: the name is what booking forms and records match on.
-    const existing = await sql`SELECT id FROM services WHERE lower(service_name) = ${serviceName.toLowerCase()}`;
-    if (existing.length > 0) return res.status(409).json({ error: "A service with this name already exists" });
-
-    const inserted = await sql`
-      INSERT INTO services (service_name, description, duration, price)
-      VALUES (${serviceName}, ${description ?? null}, ${duration ?? null}, ${price ?? null})
-      RETURNING id, service_name AS name, description, duration, price
+    // One row per service: the name is what booking forms and records match on. A name
+    // that belongs to a removed service is its own case — adding it again would leave two
+    // rows answering to the same name, so the Super Admin is sent to restore it instead.
+    const existing = await sql`
+      SELECT id, removed_at FROM services WHERE lower(service_name) = ${serviceName.toLowerCase()}
     `;
-    return res.status(201).json({ service: { ...inserted[0], name: displayService(inserted[0].name) } });
+    if (existing.length > 0) {
+      return res.status(409).json({
+        error: existing[0].removed_at
+          ? `"${serviceName}" was removed earlier. Restore it under Removed Services instead.`
+          : "A service with this name already exists",
+      });
+    }
+
+    const inserted = await sql.query(
+      `INSERT INTO services (service_name, description, duration, price)
+       VALUES ($1, $2, $3, $4) RETURNING ${SERVICE_COLUMNS}`,
+      [serviceName, description ?? null, duration ?? null, price ?? null],
+    );
+    return res.status(201).json({ service: mapService((inserted as any[])[0]) });
   }
 
   if (session.role === "patient") return res.status(403).json({ error: "Forbidden" });
