@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,19 @@ import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { appointmentRef } from "@/lib/appointmentRef";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status"];
+// One text row per appointment: it drives the filter, the count and the printout alike.
+const aptRow = (apt: Appointment) => [
+  appointmentRef(apt.id),
+  apt.service,
+  apt.dentistName ?? "—",
+  apt.date,
+  formatTimeRange(apt.time, apt.endTime),
+  apt.status,
+];
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-success/10 text-success border-success/20",
@@ -88,6 +101,19 @@ export default function PatientAppointments() {
     .filter((a) => !["pending", "confirmed", "rescheduled"].includes(a.status))
     .sort((a, b) => toDateTime(b).getTime() - toDateTime(a).getTime());
 
+  const [filter, setFilter] = useState(EMPTY_FILTER);
+  // Both tabs show the same columns, so one filter serves them both.
+  const upcomingRows = useMemo(() => upcoming.map(aptRow), [upcoming]);
+  const historyRows = useMemo(() => history.map(aptRow), [history]);
+  const shownUpcoming = useMemo(
+    () => upcoming.filter((_, i) => matchesReportFilter(upcomingRows[i], filter)),
+    [upcoming, upcomingRows, filter],
+  );
+  const shownHistory = useMemo(
+    () => history.filter((_, i) => matchesReportFilter(historyRows[i], filter)),
+    [history, historyRows, filter],
+  );
+
   // Arrived here from a notification bell click.
   const { highlightedKey, registerRow, pendingId } = useNotificationJump(
     useCallback((id: string) => appointments.find(a => a.id === id)?.id, [appointments]),
@@ -132,21 +158,15 @@ export default function PatientAppointments() {
   };
 
   const print = usePrintDocument();
-  const aptRow = (apt: Appointment) => [
-    appointmentRef(apt.id),
-    apt.service,
-    apt.dentistName ?? "—",
-    format(parseISO(apt.date), "MMM d, yyyy"),
-    formatTimeRange(apt.time, apt.endTime),
-    apt.status,
-  ];
-  const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status"];
   const handlePrint = () =>
     print({
       title: "My Appointments",
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(APT_COLUMNS, filter) ?? "" }]
+        : undefined,
       tables: [
-        { heading: "Upcoming", columns: APT_COLUMNS, rows: upcoming.map(aptRow), emptyText: "No upcoming appointments." },
-        { heading: "Past", columns: APT_COLUMNS, rows: history.map(aptRow), emptyText: "No past appointments." },
+        { heading: "Upcoming", columns: APT_COLUMNS, rows: shownUpcoming.map(aptRow), emptyText: "No upcoming appointments." },
+        { heading: "Past", columns: APT_COLUMNS, rows: shownHistory.map(aptRow), emptyText: "No past appointments." },
       ],
     });
 
@@ -193,10 +213,22 @@ export default function PatientAppointments() {
               <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
               <TabsTrigger value="past">Past ({history.length})</TabsTrigger>
             </TabsList>
-            <TabsContent value="upcoming">
+            <TabsContent value="upcoming" className="space-y-4">
+              <TableToolbar
+                columns={APT_COLUMNS}
+                rows={upcomingRows}
+                filter={filter}
+                onChange={setFilter}
+                shown={shownUpcoming.length}
+                noun="appointment(s)"
+              />
               <div className="space-y-3">
-                {upcoming.length === 0 && <p className="text-sm text-muted-foreground">No upcoming appointments.</p>}
-                {upcoming.map((apt) => {
+                {shownUpcoming.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {upcoming.length === 0 ? "No upcoming appointments." : "No appointments match this filter."}
+                  </p>
+                )}
+                {shownUpcoming.map((apt) => {
                   const allowed = hours24(apt);
                   // A patient's move lands back in the pending queue, so the one-time
                   // limit counts the moves themselves rather than the status.
@@ -251,10 +283,21 @@ export default function PatientAppointments() {
                 })}
               </div>
             </TabsContent>
-            <TabsContent value="past">
+            <TabsContent value="past" className="space-y-4">
+              <TableToolbar
+                columns={APT_COLUMNS}
+                rows={historyRows}
+                filter={filter}
+                onChange={setFilter}
+                shown={shownHistory.length}
+                noun="appointment(s)"
+              />
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">This is your appointment history. Completed appointments are view-only.</p>
-                {history.map((apt) => (
+                {shownHistory.length === 0 && history.length > 0 && (
+                  <p className="text-sm text-muted-foreground">No appointments match this filter.</p>
+                )}
+                {shownHistory.map((apt) => (
                   <div
                     key={apt.id}
                     ref={registerRow(apt.id)}

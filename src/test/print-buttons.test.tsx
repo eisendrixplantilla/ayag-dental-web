@@ -188,9 +188,9 @@ describe("a page that isn't one list prints a section per part of it", () => {
 
     expect(doc().title).toBe("My Dental Records");
     expect(doc().tables.map((t: any) => t.heading)).toEqual(["Visit History", "Procedures", "Prescriptions"]);
-    expect(doc().tables[0].rows[0]).toEqual(["Sep 20, 2026", "Restoration", "12", "Dr. Mike Johnson", "Filled"]);
+    expect(doc().tables[0].rows[0]).toEqual(["2026-09-20", "Restoration", "12", "Dr. Mike Johnson", "Filled"]);
     expect(doc().tables[2].rows[0]).toEqual([
-      "Sep 20, 2026", "Amoxicillin", "500mg", "Dr. Mike Johnson", "Twice daily",
+      "2026-09-20", "Amoxicillin", "500mg", "Dr. Mike Johnson", "Twice daily",
     ]);
     // Each section says what is missing in its own words.
     expect(doc().tables[1].emptyText).toBe("No procedures on record.");

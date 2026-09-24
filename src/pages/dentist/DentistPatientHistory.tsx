@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +12,34 @@ import {
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter, type ReportFilter } from "@/lib/reportFilter";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
 import { formatManilaDate } from "@/lib/formatDate";
 import { formatTimeRange } from "@/lib/dentistSchedules";
 import { useAuth } from "@/contexts/AuthContext";
+
+const APT_COLUMNS = ["Date", "Time", "Service", "Type", "Status"];
+const RECORD_COLUMNS = ["Date", "Procedures", "Diagnosis", "Treatment Notes"];
+const PROCEDURE_COLUMNS = ["Date", "Procedure", "Dentist", "Outcome"];
+const RX_COLUMNS = ["Date", "Medication", "Prescribed By"];
+
+/** One section of the history: its own filter over its own rows. The four sections
+ * differ only in what they hold, so they all narrow down the same way. */
+function useSection<T>(items: T[], toRow: (item: T) => string[]) {
+  const [filter, setFilter] = useState(EMPTY_FILTER);
+  const rows = useMemo(() => items.map(toRow), [items, toRow]);
+  const shown = useMemo(
+    () => items.map((item, i) => ({ item, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [items, rows, filter],
+  );
+  return { filter, setFilter, rows, shown, visible: shown.map(s => s.item) };
+}
+
+/** How a section's filter reads on the printed document — nothing, when it isn't set. */
+const printedFilter = (label: string, columns: string[], f: ReportFilter) =>
+  filterIsActive(f) ? [{ label: `${label} filtered by`, value: describeReportFilter(columns, f) ?? "" }] : [];
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -75,6 +98,23 @@ export default function DentistPatientHistory() {
     [records],
   );
 
+  // Each section's text rows drive its filter, its count and its part of the printout
+  // alike, so what is on screen and what is on paper can't drift apart.
+  const aptSection = useSection(appointments, useCallback(
+    (a: Appointment) => [a.date, formatTimeRange(a.time, a.endTime), a.service, a.type, a.status], []));
+  const recordSection = useSection(records, useCallback(
+    (r: DentalRecord) => [
+      r.date,
+      r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+      r.diagnosis,
+      r.treatmentNotes || "—",
+    ], []));
+  const procedureSection = useSection(procedures, useCallback(
+    (p: { date: string; procedure: string; dentist: string; outcome: string }) =>
+      [p.date, p.procedure, p.dentist, p.outcome], []));
+  const rxSection = useSection(prescriptions, useCallback(
+    (p: { date: string; medication: string; dentist: string }) => [p.date, p.medication, p.dentist], []));
+
   // Everything on screen for the chosen patient, as one document.
   const handlePrint = () => {
     if (!selected) return;
@@ -89,45 +129,34 @@ export default function DentistPatientHistory() {
         { label: "Address", value: selected.address ?? "—" },
         { label: "Blood Type", value: selected.bloodType ?? "—" },
         { label: "Allergies", value: selected.allergies ?? "—" },
+        ...printedFilter("Appointments", APT_COLUMNS, aptSection.filter),
+        ...printedFilter("Dental records", RECORD_COLUMNS, recordSection.filter),
+        ...printedFilter("Procedures", PROCEDURE_COLUMNS, procedureSection.filter),
+        ...printedFilter("Prescriptions", RX_COLUMNS, rxSection.filter),
       ],
       tables: [
         {
           heading: "Appointment History",
-          columns: ["Date", "Time", "Service", "Type", "Status"],
-          rows: appointments.map(a => [
-            format(parseISO(a.date), "MMM d, yyyy"),
-            formatTimeRange(a.time, a.endTime),
-            a.service,
-            a.type,
-            a.status,
-          ]),
+          columns: APT_COLUMNS,
+          rows: aptSection.shown.map(s => s.row),
           emptyText: "No appointments on record.",
         },
         {
           heading: "Dental Records",
-          columns: ["Date", "Procedures", "Diagnosis", "Treatment Notes"],
-          rows: records.map(r => [
-            format(parseISO(r.date), "MMM d, yyyy"),
-            r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
-            r.diagnosis,
-            r.treatmentNotes || "—",
-          ]),
+          columns: RECORD_COLUMNS,
+          rows: recordSection.shown.map(s => s.row),
           emptyText: "No dental records yet.",
         },
         {
           heading: "Procedures",
-          columns: ["Date", "Procedure", "Dentist", "Outcome"],
-          rows: procedures.map(p => [
-            format(parseISO(p.date), "MMM d, yyyy"), p.procedure, p.dentist, p.outcome,
-          ]),
+          columns: PROCEDURE_COLUMNS,
+          rows: procedureSection.shown.map(s => s.row),
           emptyText: "No procedures on record.",
         },
         {
           heading: "Prescriptions",
-          columns: ["Date", "Medication", "Prescribed By"],
-          rows: prescriptions.map(p => [
-            format(parseISO(p.date), "MMM d, yyyy"), p.medication, p.dentist,
-          ]),
+          columns: RX_COLUMNS,
+          rows: rxSection.shown.map(s => s.row),
           emptyText: "No prescriptions on record.",
         },
       ],
@@ -243,10 +272,18 @@ export default function DentistPatientHistory() {
           </Card>
 
           <Card className="shadow-card">
-            <CardHeader>
+            <CardHeader className="space-y-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <CalendarDays className="w-5 h-5 text-primary" />Appointment History
               </CardTitle>
+              <TableToolbar
+                columns={APT_COLUMNS}
+                rows={aptSection.rows}
+                filter={aptSection.filter}
+                onChange={aptSection.setFilter}
+                shown={aptSection.visible.length}
+                noun="appointment(s)"
+              />
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
@@ -260,9 +297,11 @@ export default function DentistPatientHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {appointments.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No appointments on record.</TableCell></TableRow>
-                  ) : appointments.map(a => (
+                  {aptSection.visible.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      {appointments.length === 0 ? "No appointments on record." : "No appointments match this filter."}
+                    </TableCell></TableRow>
+                  ) : aptSection.visible.map(a => (
                     <TableRow key={a.id}>
                       <TableCell>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="whitespace-nowrap">{formatTimeRange(a.time, a.endTime)}</TableCell>
@@ -277,10 +316,18 @@ export default function DentistPatientHistory() {
           </Card>
 
           <Card className="shadow-card">
-            <CardHeader>
+            <CardHeader className="space-y-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />Previous Dental Records
               </CardTitle>
+              <TableToolbar
+                columns={RECORD_COLUMNS}
+                rows={recordSection.rows}
+                filter={recordSection.filter}
+                onChange={recordSection.setFilter}
+                shown={recordSection.visible.length}
+                noun="record(s)"
+              />
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
@@ -293,9 +340,11 @@ export default function DentistPatientHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {records.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No dental records yet.</TableCell></TableRow>
-                  ) : records.map(r => (
+                  {recordSection.visible.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      {records.length === 0 ? "No dental records yet." : "No records match this filter."}
+                    </TableCell></TableRow>
+                  ) : recordSection.visible.map(r => (
                     <TableRow key={r.id}>
                       <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
                       <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
@@ -309,10 +358,18 @@ export default function DentistPatientHistory() {
           </Card>
 
           <Card className="shadow-card">
-            <CardHeader>
+            <CardHeader className="space-y-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <Stethoscope className="w-5 h-5 text-primary" />Previous Procedures
               </CardTitle>
+              <TableToolbar
+                columns={PROCEDURE_COLUMNS}
+                rows={procedureSection.rows}
+                filter={procedureSection.filter}
+                onChange={procedureSection.setFilter}
+                shown={procedureSection.visible.length}
+                noun="procedure(s)"
+              />
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
@@ -325,9 +382,11 @@ export default function DentistPatientHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {procedures.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No procedures on record.</TableCell></TableRow>
-                  ) : procedures.map((p, i) => (
+                  {procedureSection.visible.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      {procedures.length === 0 ? "No procedures on record." : "No procedures match this filter."}
+                    </TableCell></TableRow>
+                  ) : procedureSection.visible.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="font-medium">{p.procedure}</TableCell>
@@ -341,10 +400,18 @@ export default function DentistPatientHistory() {
           </Card>
 
           <Card className="shadow-card">
-            <CardHeader>
+            <CardHeader className="space-y-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <Pill className="w-5 h-5 text-primary" />Previous Prescriptions
               </CardTitle>
+              <TableToolbar
+                columns={RX_COLUMNS}
+                rows={rxSection.rows}
+                filter={rxSection.filter}
+                onChange={rxSection.setFilter}
+                shown={rxSection.visible.length}
+                noun="prescription(s)"
+              />
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
@@ -356,9 +423,11 @@ export default function DentistPatientHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {prescriptions.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">No prescriptions on record.</TableCell></TableRow>
-                  ) : prescriptions.map((p, i) => (
+                  {rxSection.visible.length === 0 ? (
+                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                      {prescriptions.length === 0 ? "No prescriptions on record." : "No prescriptions match this filter."}
+                    </TableCell></TableRow>
+                  ) : rxSection.visible.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="font-medium">{p.medication}</TableCell>

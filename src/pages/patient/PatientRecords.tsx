@@ -9,10 +9,21 @@ import { format, parseISO } from "date-fns";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const VISIT_COLUMNS = ["Date", "Procedures", "Tooth", "Dentist", "Notes"];
+const PROCEDURE_COLUMNS = ["Date", "Procedure", "Tooth", "Dentist"];
+const RX_COLUMNS = ["Date", "Medication", "Dosage", "Prescribed By", "Instructions"];
+const TAB_NAMES: Record<string, string> = {
+  visits: "Visit History", procedures: "Procedures", prescriptions: "Prescriptions",
+};
 
 export default function PatientRecords() {
   const [records, setRecords] = useState<DentalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("visits");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
 
   useEffect(() => {
     getDentalRecords()
@@ -49,16 +60,56 @@ export default function PatientRecords() {
     [records],
   );
 
+  // One text row per item, in the same order as the items: it drives the filter, the
+  // count and the printed document alike.
+  const visitRows = useMemo(
+    () => records.map(r => [
+      r.date,
+      r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+      r.toothNumber ?? "Full",
+      r.dentistName ?? "—",
+      r.treatmentNotes || r.diagnosis,
+    ]),
+    [records],
+  );
+  const procedureRows = useMemo(
+    () => procedures.map(p => [p.date, p.procedure, p.tooth, p.dentist]),
+    [procedures],
+  );
+  const rxRows = useMemo(
+    () => prescriptions.map(p => [p.date, p.medication, p.dosage, p.prescribedBy, p.reason]),
+    [prescriptions],
+  );
+
+  // Each tab holds different columns, so the filter belongs to the tab on screen —
+  // the other two stay whole. Switching tabs starts over rather than carrying a
+  // column number across to a column that means something else.
+  const openTab = (next: string) => { setTab(next); setFilter(EMPTY_FILTER); };
+  const narrow = <T,>(key: string, items: T[], rows: string[][]) =>
+    key === tab ? items.filter((_, i) => matchesReportFilter(rows[i], filter)) : items;
+  const shownRecords = narrow("visits", records, visitRows);
+  const shownProcedures = narrow("procedures", procedures, procedureRows);
+  const shownPrescriptions = narrow("prescriptions", prescriptions, rxRows);
+
+  const activeColumns =
+    tab === "procedures" ? PROCEDURE_COLUMNS : tab === "prescriptions" ? RX_COLUMNS : VISIT_COLUMNS;
+
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "My Dental Records",
+      filters: filterIsActive(filter)
+        ? [{
+            label: "Filtered By",
+            value: `${TAB_NAMES[tab]} — ${describeReportFilter(activeColumns, filter) ?? ""}`,
+          }]
+        : undefined,
       tables: [
         {
           heading: "Visit History",
-          columns: ["Date", "Procedures", "Tooth", "Dentist", "Notes"],
-          rows: records.map(r => [
-            format(parseISO(r.date), "MMM d, yyyy"),
+          columns: VISIT_COLUMNS,
+          rows: shownRecords.map(r => [
+            r.date,
             r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
             r.toothNumber ?? "Full",
             r.dentistName ?? "—",
@@ -68,18 +119,14 @@ export default function PatientRecords() {
         },
         {
           heading: "Procedures",
-          columns: ["Date", "Procedure", "Tooth", "Dentist"],
-          rows: procedures.map(p => [
-            format(parseISO(p.date), "MMM d, yyyy"), p.procedure, p.tooth, p.dentist,
-          ]),
+          columns: PROCEDURE_COLUMNS,
+          rows: shownProcedures.map(p => [p.date, p.procedure, p.tooth, p.dentist]),
           emptyText: "No procedures on record.",
         },
         {
           heading: "Prescriptions",
-          columns: ["Date", "Medication", "Dosage", "Prescribed By", "Instructions"],
-          rows: prescriptions.map(p => [
-            format(parseISO(p.date), "MMM d, yyyy"), p.medication, p.dosage, p.prescribedBy, p.reason,
-          ]),
+          columns: RX_COLUMNS,
+          rows: shownPrescriptions.map(p => [p.date, p.medication, p.dosage, p.prescribedBy, p.reason]),
           emptyText: "No prescriptions on record.",
         },
       ],
@@ -109,19 +156,29 @@ export default function PatientRecords() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Tabs defaultValue="visits">
+          <Tabs value={tab} onValueChange={openTab}>
             <TabsList className="mb-4 print:hidden">
               <TabsTrigger value="visits" className="gap-1"><History className="w-4 h-4" /> Visit History</TabsTrigger>
               <TabsTrigger value="procedures" className="gap-1"><FileText className="w-4 h-4" /> Procedures</TabsTrigger>
               <TabsTrigger value="prescriptions" className="gap-1"><Pill className="w-4 h-4" /> Prescriptions</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="visits">
+            <TabsContent value="visits" className="space-y-4">
+              <TableToolbar
+                columns={VISIT_COLUMNS}
+                rows={visitRows}
+                filter={filter}
+                onChange={setFilter}
+                shown={shownRecords.length}
+                noun="record(s)"
+              />
               <div className="space-y-4">
-                {records.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No dental records yet.</p>
+                {shownRecords.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {records.length === 0 ? "No dental records yet." : "No records match this filter."}
+                  </p>
                 )}
-                {records.map((record) => (
+                {shownRecords.map((record) => (
                   <div key={record.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                     <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
                       <FileText className="w-5 h-5 text-primary" />
@@ -145,12 +202,22 @@ export default function PatientRecords() {
               </div>
             </TabsContent>
 
-            <TabsContent value="procedures">
+            <TabsContent value="procedures" className="space-y-4">
+              <TableToolbar
+                columns={PROCEDURE_COLUMNS}
+                rows={procedureRows}
+                filter={filter}
+                onChange={setFilter}
+                shown={shownProcedures.length}
+                noun="procedure(s)"
+              />
               <div className="space-y-3">
-                {procedures.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No procedures on record.</p>
+                {shownProcedures.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {procedures.length === 0 ? "No procedures on record." : "No procedures match this filter."}
+                  </p>
                 )}
-                {procedures.map((proc, i) => (
+                {shownProcedures.map((proc, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                     <div>
                       <p className="font-medium text-foreground">{proc.procedure}</p>
@@ -164,12 +231,22 @@ export default function PatientRecords() {
               </div>
             </TabsContent>
 
-            <TabsContent value="prescriptions">
+            <TabsContent value="prescriptions" className="space-y-4">
+              <TableToolbar
+                columns={RX_COLUMNS}
+                rows={rxRows}
+                filter={filter}
+                onChange={setFilter}
+                shown={shownPrescriptions.length}
+                noun="prescription(s)"
+              />
               <div className="space-y-4">
-                {prescriptions.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No prescriptions on record.</p>
+                {shownPrescriptions.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {prescriptions.length === 0 ? "No prescriptions on record." : "No prescriptions match this filter."}
+                  </p>
                 )}
-                {prescriptions.map((rx, i) => (
+                {shownPrescriptions.map((rx, i) => (
                   <div key={i} className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-start justify-between">
                       <div>
