@@ -1,10 +1,15 @@
 import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The walk-in form runs for real. Replaced: the network, and the three Radix/cmdk
 // widgets jsdom can't drive (Select, Popover, Command).
-const h = vi.hoisted(() => ({ walkIns: [] as any[], deleted: [] as string[] }));
+const h = vi.hoisted(() => ({
+  walkIns: [] as any[],
+  deleted: [] as string[],
+  // No schedule unless a test gives the dentist one.
+  schedule: { days: [] as any[], unavailable: [] as any[] },
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "admin-1", name: "Dr. Sarah Chen", email: "admin@admin.com", role: "admin", verified: true } }),
@@ -24,7 +29,7 @@ vi.mock("@/lib/api/staff", async (importOriginal) => {
   return {
     ...actual,
     getDentistDirectory: vi.fn(async () => [{ id: "dr-mike", name: "Dr. Mike Johnson" }]),
-    getDentistSchedule: vi.fn(async () => ({ days: [], unavailable: [] })),
+    getDentistSchedule: vi.fn(async () => h.schedule),
   };
 });
 
@@ -81,6 +86,14 @@ vi.mock("@/components/ui/command", async () => {
   };
 });
 
+vi.mock("@/components/ui/calendar", async () => {
+  const React = await import("react");
+  return {
+    Calendar: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
+});
+
 import AdminAppointments from "@/pages/admin/AdminAppointments";
 
 beforeAll(() => {
@@ -88,6 +101,7 @@ beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
 afterEach(cleanup);
+beforeEach(() => { h.schedule = { days: [], unavailable: [] }; });
 
 const picker = () => screen.getByLabelText("Add a service") as HTMLSelectElement;
 const options = () => within(picker()).getAllByRole("option").map(o => o.textContent).filter(Boolean);
@@ -217,5 +231,64 @@ describe("what the walk-in list lets you do", () => {
     fireEvent.click(inDialog(/^Cancel$/));
     await waitFor(() => expect(screen.queryByText("Remove this walk-in?")).toBeNull());
     expect(h.deleted).toEqual([]);
+  });
+});
+
+describe("what the walk-in form tells you about the date you are picking", () => {
+  const FULL_WEEK = {
+    days: [0, 1, 2, 3, 4, 5, 6].map(dayOfWeek => ({
+      dayOfWeek, start: "09:00", end: "17:00", lunchStart: null, lunchEnd: null, duration: 30, maxPatients: 20,
+    })),
+    unavailable: [],
+  };
+  const slotGroup = () => screen.getByRole("group", { name: "Available time slots" });
+
+  const pickVisit = async () => {
+    h.schedule = FULL_WEEK;
+    await renderPage();
+    nameWalkIn();
+    await waitFor(() => expect(picker()).not.toBeDisabled());
+    fireEvent.change(picker(), { target: { value: "Oral" } });
+    await waitFor(() => expect(screen.getByLabelText("Assign dentist")).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Assign dentist"), { target: { value: "dr-mike" } });
+    await screen.findByText("Working hours:");
+    fireEvent.click(screen.getByRole("button", { name: "Pick Mar 10" }));
+    await waitFor(() => expect(within(slotGroup()).getAllByRole("button").length).toBeGreaterThan(0));
+  };
+
+  it("spells out the dentist's working hours, and doesn't whisper them", async () => {
+    await pickVisit();
+    const label = screen.getByText("Working hours:");
+    expect(label.className).toMatch(/font-semibold/);
+    expect(label.parentElement!.textContent).toMatch(/Sun 9:00 AM/);
+    expect(label.closest("p")!.className).not.toMatch(/text-muted-foreground/);
+  });
+
+  it("says which day the times belong to, and how many are left", async () => {
+    await pickVisit();
+    const heading = screen.getByText(/^Times on /);
+    expect(heading.textContent).toBe("Times on Wed, Mar 10");
+    expect(heading.className).toMatch(/font-semibold/);
+    expect(heading.className).toMatch(/text-foreground/);
+
+    const count = screen.getByText(/free$/);
+    expect(count.className).toMatch(/bg-success/);
+  });
+
+  it("reads the whole walk-in back before it is added, set apart from the form", async () => {
+    await pickVisit();
+    fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
+
+    const readback = (await screen.findByText("March 10th, 2027")).closest("p")!;
+    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
+    expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|March 10th, 2027|9:00 AM – 9:30 AM/)
+      .every(el => /font-semibold/.test(el.className))).toBe(true);
+    expect(readback.className).toContain("bg-primary/5");
+  });
+
+  it("says walk-ins need no approval until there is a booking to read back", async () => {
+    await renderPage();
+    const note = screen.getByText(/Walk-ins are created by the clinic/);
+    expect(note.textContent).toMatch(/automatically Confirmed — no approval needed/);
   });
 });

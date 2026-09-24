@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
+import { CalendarCheck, CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -368,14 +368,24 @@ export default function AdminAppointments() {
                 <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground min-h-4 leading-tight line-clamp-2 sm:line-clamp-none"
+            {/* Which days exist at all on the calendar below — worth reading, so it
+                doesn't sit in hint grey. */}
+            <p className="text-xs min-h-5 leading-tight"
                title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
               {!loadingDentists && dentists.length === 0 ? (
-                <span className="text-destructive">No dentists are available.</span>
-              ) : loadingSchedule ? "Loading schedule..."
+                <span className="font-medium text-destructive">No dentists are available.</span>
+              ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
                 : dentistId && schedule && schedule.days.length === 0 ? (
-                  <span className="text-destructive">This dentist has no working schedule configured yet.</span>
-                ) : schedule && schedule.days.length > 0 ? `Working hours: ${scheduleSummary}` : ""}
+                  <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
+                ) : schedule && schedule.days.length > 0 ? (
+                  <span className="flex items-start gap-1.5 text-foreground">
+                    <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                    <span className="line-clamp-2 sm:line-clamp-none">
+                      <span className="font-semibold">Working hours:</span>{" "}
+                      <span className="font-medium">{scheduleSummary}</span>
+                    </span>
+                  </span>
+                ) : ""}
             </p>
           </div>
 
@@ -397,12 +407,15 @@ export default function AdminAppointments() {
             </div>
 
             <div className="space-y-2 min-w-0">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2">
+                {/* The times below mean nothing without the day they are on. */}
+                <Label className={cn("text-sm font-semibold", date ? "text-foreground" : "text-muted-foreground")}>
                   {date ? `Times on ${format(date, "EEE, MMM d")}` : "Available times"}
                 </Label>
                 {dentistId && date && !loadingSlots && slots.length > 0 && (
-                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 whitespace-nowrap">
+                    {slots.length} free
+                  </Badge>
                 )}
               </div>
 
@@ -447,11 +460,23 @@ export default function AdminAppointments() {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-3">
-            <p className="text-xs text-muted-foreground">
-              {time
-                ? `${serviceLabel} with ${dentist} on ${date ? format(date, "PPP") : ""} at ${selectedLabel}.`
-                : <>Walk-ins are created by the clinic and are automatically <span className="text-success font-medium">Confirmed</span> — no approval needed.</>}
-            </p>
+            {/* The last thing read before the walk-in is created: what it actually says. */}
+            {time ? (
+              <p className="flex items-start gap-2 min-w-0 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground">
+                <CalendarCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  <span className="font-semibold">{serviceLabel}</span> with{" "}
+                  <span className="font-semibold">{dentist}</span> on{" "}
+                  <span className="font-semibold">{date ? format(date, "PPP") : ""}</span> at{" "}
+                  <span className="font-semibold">{selectedLabel}</span>.
+                </span>
+              </p>
+            ) : (
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Walk-ins are created by the clinic and are automatically{" "}
+                <span className="font-medium text-success">Confirmed</span> — no approval needed.
+              </p>
+            )}
             <Button
               className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"
               disabled={!patientName || chosen.length === 0 || !dentistId || !date || !time || saving}
