@@ -178,13 +178,13 @@ export default function PatientBook() {
 
   return (
     <div className="space-y-4 w-full max-w-5xl">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground">Book Appointment</h1>
           <p className="text-sm text-muted-foreground">Schedule your next dental visit</p>
         </div>
         {chosen.length > 0 && (
-          <Badge variant="outline" className="gap-1.5 bg-secondary/60 whitespace-nowrap">
+          <Badge variant="outline" className="gap-1.5 bg-secondary/60 w-fit whitespace-nowrap">
             <Clock3 className="w-3.5 h-3.5" /> About {formatDuration(visitMinutes)} in the chair
           </Badge>
         )}
@@ -206,7 +206,7 @@ export default function PatientBook() {
                     disabled={remaining.length === 0}
                     onValueChange={(v) => setChosen(prev => [...prev, v])}
                   >
-                    <SelectTrigger className="h-9" aria-label="Add a service">
+                    <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
                       <SelectValue placeholder={
                         remaining.length === 0 ? "All services added"
                           : chosen.length === 0 ? "Choose a service"
@@ -220,15 +220,15 @@ export default function PatientBook() {
                   <span className="text-xs text-muted-foreground">Add as many as you need.</span>
                 ) : (
                   chosen.map(s => (
-                    <Badge key={s} variant="secondary" className="gap-1 py-0.5 pl-2.5 pr-1 font-normal">
-                      {s}
+                    <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
+                      <span className="truncate">{s}</span>
                       <button
                         type="button"
                         aria-label={`Remove ${s}`}
-                        className="rounded-full p-0.5 hover:bg-foreground/10"
+                        className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
                         onClick={() => setChosen(prev => prev.filter(c => c !== s))}
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </Badge>
                   ))
@@ -244,7 +244,7 @@ export default function PatientBook() {
                   disabled={chosen.length === 0 || loadingDentists}
                   onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
                 >
-                  <SelectTrigger className="h-9" aria-label="Choose a dentist">
+                  <SelectTrigger className="h-11 sm:h-9" aria-label="Choose a dentist">
                     <SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -252,7 +252,8 @@ export default function PatientBook() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground min-h-4 leading-tight">
+              <p className="text-xs text-muted-foreground min-h-4 leading-tight line-clamp-2 sm:line-clamp-none"
+                 title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
                 {!loadingDentists && dentists.length === 0 ? (
                   <span className="text-destructive">No dentists are available for booking right now.</span>
                 ) : loadingSchedule ? "Loading schedule..."
@@ -266,7 +267,7 @@ export default function PatientBook() {
           {/* When — the month and the free times side by side, so picking a day and seeing
               what is left is one glance rather than two dropdowns. */}
           <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit", !dentistId && "opacity-60")}>
+            <div className={cn("rounded-md border w-fit mx-auto md:mx-0", !dentistId && "opacity-60")}>
               <Calendar
                 mode="single"
                 selected={date}
@@ -291,7 +292,7 @@ export default function PatientBook() {
               </div>
 
               {!dentistId || !date ? (
-                <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-md">
+                <p className="text-sm text-muted-foreground py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
                   {chosen.length === 0 ? "Choose a service to begin."
                     : !dentistId ? "Choose a dentist to see their calendar."
                     : "Pick a date to see the free times."}
@@ -308,7 +309,7 @@ export default function PatientBook() {
                 <div
                   role="group"
                   aria-label="Available time slots"
-                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:max-h-56 md:overflow-y-auto md:pr-1"
                 >
                   {slots.map(s => (
                     <Button
@@ -317,7 +318,7 @@ export default function PatientBook() {
                       size="sm"
                       variant={time === s.value ? "default" : "outline"}
                       aria-pressed={time === s.value}
-                      className={cn("h-9 justify-center font-normal text-xs whitespace-nowrap",
+                      className={cn("h-11 sm:h-9 px-2 justify-center font-normal text-[11px] sm:text-xs whitespace-nowrap",
                         time === s.value && "gradient-primary text-primary-foreground")}
                       onClick={() => setTime(s.value)}
                     >
@@ -336,7 +337,7 @@ export default function PatientBook() {
                 : <>Requests are submitted as <span className="text-warning font-medium">Pending</span> and need admin approval.</>}
             </p>
             <Button
-              className="gradient-primary text-primary-foreground sm:w-auto shrink-0"
+              className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"
               disabled={chosen.length === 0 || !dentistId || !date || !time || submitting}
               onClick={handleSubmit}
             >
