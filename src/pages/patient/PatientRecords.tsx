@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 export default function PatientRecords() {
   const [records, setRecords] = useState<DentalRecord[]>([]);
@@ -48,6 +49,42 @@ export default function PatientRecords() {
     [records],
   );
 
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "My Dental Records",
+      tables: [
+        {
+          heading: "Visit History",
+          columns: ["Date", "Procedures", "Tooth", "Dentist", "Notes"],
+          rows: records.map(r => [
+            format(parseISO(r.date), "MMM d, yyyy"),
+            r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+            r.toothNumber ?? "Full",
+            r.dentistName ?? "—",
+            r.treatmentNotes || r.diagnosis,
+          ]),
+          emptyText: "No dental records yet.",
+        },
+        {
+          heading: "Procedures",
+          columns: ["Date", "Procedure", "Tooth", "Dentist"],
+          rows: procedures.map(p => [
+            format(parseISO(p.date), "MMM d, yyyy"), p.procedure, p.tooth, p.dentist,
+          ]),
+          emptyText: "No procedures on record.",
+        },
+        {
+          heading: "Prescriptions",
+          columns: ["Date", "Medication", "Dosage", "Prescribed By", "Instructions"],
+          rows: prescriptions.map(p => [
+            format(parseISO(p.date), "MMM d, yyyy"), p.medication, p.dosage, p.prescribedBy, p.reason,
+          ]),
+          emptyText: "No prescriptions on record.",
+        },
+      ],
+    });
+
   return (
     <div className="space-y-6">
       <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
@@ -62,7 +99,7 @@ export default function PatientRecords() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Dental Records</h1>
           <p className="text-muted-foreground">Your complete dental history and records</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

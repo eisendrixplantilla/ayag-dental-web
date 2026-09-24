@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import { getServices, updateService, type Service } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -23,6 +24,36 @@ export default function SuperAdminSettings() {
 
   const [info, setInfo] = useState<ClinicInfo>({ name: "", phone: "", email: "", address: "" });
   const [savingInfo, setSavingInfo] = useState(false);
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "System Settings",
+      filters: [
+        { label: "Clinic", value: info.name || "Ayag Dental Clinic" },
+        { label: "Contact Number", value: info.phone || "—" },
+        { label: "Email Address", value: info.email || "—" },
+        { label: "Address", value: info.address || "—" },
+      ],
+      tables: [
+        {
+          heading: "Clinic Hours",
+          columns: ["Day", "Opens", "Closes"],
+          rows: hours.map(h => [h.day, h.enabled ? h.open : "Closed", h.enabled ? h.close : "Closed"]),
+          emptyText: "No clinic hours set.",
+        },
+        {
+          heading: "Dental Services & Pricing",
+          columns: ["Service", "Duration", "Price (₱)"],
+          rows: services.map(s => [
+            s.name,
+            s.duration != null ? `${s.duration} min` : "—",
+            s.price != null ? Number(s.price).toLocaleString() : "—",
+          ]),
+          emptyText: "No services configured.",
+        },
+      ],
+    });
 
   useEffect(() => {
     Promise.all([getClinicHours(), getServices(), getClinicInfo()])
@@ -103,7 +134,7 @@ export default function SuperAdminSettings() {
           <h1 className="text-2xl font-bold font-heading text-foreground">System Settings</h1>
           <p className="text-muted-foreground">Configure clinic hours, services, and pricing</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

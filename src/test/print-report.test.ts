@@ -100,3 +100,96 @@ describe("what the document says", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Pages that aren't a plain list (a patient's history, a dashboard, settings)
+// print the same document, with a heading per section.
+
+const sectionDoc = (over = {}) => ({
+  title: "Patient History",
+  tables: [
+    {
+      heading: "Appointment History",
+      columns: ["Date", "Service"],
+      rows: [["2026-09-20", "Oral"], ["2026-09-25", "Root Canal"]],
+      emptyText: "No appointments yet.",
+    },
+    {
+      heading: "Dental Records",
+      columns: ["Date", "Diagnosis"],
+      rows: [["2026-09-20", "Caries"]],
+      emptyText: "No dental records yet.",
+    },
+  ],
+  generatedAt: "Sep 24, 2026, 2:35 AM",
+  preparedBy: { name: "Dr. Sarah Chen", role: "Clinic Admin" },
+  ...over,
+});
+
+describe("a document made of several sections", () => {
+  it("keeps the letterhead, the meta and the signature of a report", () => {
+    const html = buildReportHtml(sectionDoc());
+    expect(html).toContain("Ayag Dental Clinic");
+    expect(html).toContain("Dr. Sarah Chen (Clinic Admin)");
+    expect(html).toContain("Sep 24, 2026, 2:35 AM");
+    expect(html).toContain('class="sign"');
+    expect(html).toContain("Page 1 of 1");
+  });
+
+  it("heads each section and counts the lot", () => {
+    const html = buildReportHtml(sectionDoc());
+    expect(html).toContain("Appointment History");
+    expect(html).toContain("Dental Records");
+    expect(html.split("<thead>").length - 1).toBe(2); // a column row per section
+    expect(html).toContain("Total records: 3");
+  });
+
+  it("says what is missing in the section's own words", () => {
+    const html = buildReportHtml(sectionDoc({
+      tables: [
+        { heading: "Appointment History", columns: ["Date"], rows: [], emptyText: "No appointments yet." },
+        { heading: "Dental Records", columns: ["Date"], rows: [], emptyText: "No dental records yet." },
+      ],
+    }));
+    expect(html).toContain("No appointments yet.");
+    expect(html).toContain("No dental records yet.");
+    expect(html).not.toContain("No records found for these filters.");
+  });
+
+  it("numbers each section's rows from one", () => {
+    const html = buildReportHtml(sectionDoc());
+    const [appointments, records] = html.split("<tbody>").slice(1).map(p => p.split("</tbody>")[0]);
+    expect(appointments).toContain('class="num">1<');
+    expect(appointments).toContain('class="num">2<');
+    expect(records).toContain('class="num">1<');
+    expect(records).not.toContain('class="num">2<');
+  });
+
+  it("carries a long section onto the next sheet, saying it continues", () => {
+    const html = buildReportHtml(sectionDoc({
+      tables: [{ heading: "Appointment History", columns: ["Date"], rows: rows(30).map(r => [r[0]]) }],
+    }));
+    expect(sheets(html)).toBe(2);
+    expect(html).toContain("Appointment History (continued)");
+    expect(html).toContain("Page 2 of 2");
+  });
+
+  it("starts a section on a fresh sheet rather than orphaning its heading", () => {
+    const html = buildReportHtml(sectionDoc({
+      tables: [
+        { heading: "Appointment History", columns: ["Date"], rows: rows(18).map(r => [r[0]]) },
+        { heading: "Dental Records", columns: ["Date"], rows: [["2026-09-20"]] },
+      ],
+    }));
+    const [first, second] = html.split('<section class="sheet">').slice(1);
+    expect(first).not.toContain("Dental Records");
+    expect(second).toContain("Dental Records");
+  });
+
+  it("leaves a plain list exactly as it was", () => {
+    const html = buildReportHtml(doc(45));
+    expect(sheets(html)).toBe(3); // still twenty to a sheet, no heading eating into it
+    expect(html).toContain("Records 1–20 of 45");
+    expect(html).not.toContain("<h3>");
+  });
+});

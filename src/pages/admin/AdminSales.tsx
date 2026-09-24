@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatCard from "@/components/StatCard";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { DollarSign, TrendingUp, Receipt, CreditCard, Plus, Printer } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,8 +20,28 @@ const mockSales = [
   { id: "S005", patient: "Lisa Anderson", service: "Filling", amount: 2500, date: "2024-03-14", status: "paid" },
 ];
 
+type Sale = typeof mockSales[number];
+
 export default function AdminSales() {
   const [showRecord, setShowRecord] = useState(false);
+  const print = usePrintDocument();
+
+  // A receipt is the same clinic document as every other printout, with one charge on it.
+  const printReceipt = (s: Sale) =>
+    print({
+      title: "Official Receipt",
+      filters: [
+        { label: "Receipt No.", value: s.id },
+        { label: "Patient", value: s.patient },
+        { label: "Date", value: s.date },
+        { label: "Payment Status", value: s.status === "paid" ? "Paid" : "Pending" },
+      ],
+      columns: ["Description", "Amount (₱)"],
+      rows: [
+        [s.service, s.amount.toLocaleString()],
+        ["Total", s.amount.toLocaleString()],
+      ],
+    });
 
   return (
     <div className="space-y-6">
@@ -104,7 +125,7 @@ export default function AdminSales() {
                     <Badge variant="outline" className={s.status === "paid" ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20"}>{s.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toast.success("Receipt generated")}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Print receipt ${s.id}`} onClick={() => printReceipt(s)}>
                       <Printer className="w-4 h-4" />
                     </Button>
                   </TableCell>

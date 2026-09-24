@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
 import { formatManilaDate } from "@/lib/formatDate";
@@ -33,6 +34,7 @@ export default function DentistPatientHistory() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<DentalRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const print = usePrintDocument();
 
   useEffect(() => {
     Promise.all([getPatients(), getAppointments()])
@@ -73,6 +75,65 @@ export default function DentistPatientHistory() {
     [records],
   );
 
+  // Everything on screen for the chosen patient, as one document.
+  const handlePrint = () => {
+    if (!selected) return;
+    print({
+      title: "Patient History",
+      filters: [
+        { label: "Patient", value: selected.name },
+        { label: "Age", value: selected.age != null ? String(selected.age) : "—" },
+        { label: "Gender", value: selected.gender ?? "—" },
+        { label: "Contact Number", value: selected.phone ?? "—" },
+        { label: "Email Address", value: selected.email },
+        { label: "Address", value: selected.address ?? "—" },
+        { label: "Blood Type", value: selected.bloodType ?? "—" },
+        { label: "Allergies", value: selected.allergies ?? "—" },
+      ],
+      tables: [
+        {
+          heading: "Appointment History",
+          columns: ["Date", "Time", "Service", "Type", "Status"],
+          rows: appointments.map(a => [
+            format(parseISO(a.date), "MMM d, yyyy"),
+            formatTimeRange(a.time, a.endTime),
+            a.service,
+            a.type,
+            a.status,
+          ]),
+          emptyText: "No appointments on record.",
+        },
+        {
+          heading: "Dental Records",
+          columns: ["Date", "Procedures", "Diagnosis", "Treatment Notes"],
+          rows: records.map(r => [
+            format(parseISO(r.date), "MMM d, yyyy"),
+            r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+            r.diagnosis,
+            r.treatmentNotes || "—",
+          ]),
+          emptyText: "No dental records yet.",
+        },
+        {
+          heading: "Procedures",
+          columns: ["Date", "Procedure", "Dentist", "Outcome"],
+          rows: procedures.map(p => [
+            format(parseISO(p.date), "MMM d, yyyy"), p.procedure, p.dentist, p.outcome,
+          ]),
+          emptyText: "No procedures on record.",
+        },
+        {
+          heading: "Prescriptions",
+          columns: ["Date", "Medication", "Prescribed By"],
+          rows: prescriptions.map(p => [
+            format(parseISO(p.date), "MMM d, yyyy"), p.medication, p.dentist,
+          ]),
+          emptyText: "No prescriptions on record.",
+        },
+      ],
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
@@ -94,7 +155,7 @@ export default function DentistPatientHistory() {
         </div>
         <div className="flex items-center gap-2 print:hidden">
           {selected && (
-            <Button onClick={() => window.print()} variant="outline">
+            <Button onClick={handlePrint} variant="outline">
               <Printer className="w-4 h-4 mr-2" /> Print
             </Button>
           )}

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
 import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
+import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
 
 export default function AdminAccounts() {
   const { user } = useAuth();
@@ -41,6 +42,23 @@ export default function AdminAccounts() {
     const matchesTo = !toDate || (a.createdAt ?? "") <= toDate;
     return matchesSearch && matchesFrom && matchesTo;
   });
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Patient Accounts Report",
+      columns: ["Patient Name", "Email Address", "Account Status", "Date Registered"],
+      rows: filtered.map(a => [
+        a.name,
+        a.email,
+        a.status === "active" ? "Active" : "Deactivated",
+        a.createdAt ?? "—",
+      ]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Date Registered", value: printRange(fromDate, toDate) },
+      ],
+    });
 
   const canArchive = (p: Patient) => (p.appointmentsCount ?? 0) === 0 && (p.dentalRecordsCount ?? 0) === 0;
 
@@ -105,7 +123,7 @@ export default function AdminAccounts() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient Accounts</h1>
           <p className="text-muted-foreground">Manage patient login accounts</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

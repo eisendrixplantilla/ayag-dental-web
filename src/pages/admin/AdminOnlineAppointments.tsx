@@ -17,6 +17,7 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { splitServices } from "@/lib/services";
 import { appointmentRef, matchesRef } from "@/lib/appointmentRef";
+import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -87,6 +88,31 @@ export default function AdminOnlineAppointments() {
     const matchesService = serviceFilter === "all" || splitServices(a.service).includes(serviceFilter);
     return matchesSearch && matchesDate && matchesStatus && matchesDentist && matchesService;
   }), [ordered, search, fromDate, toDate, statusFilter, dentistFilter, serviceFilter]);
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Appointment Requests Report",
+      columns: ["Reference", "Patient Name", "Service", "Assigned Dentist", "Date", "Time", "Booked On", "Type", "Status"],
+      rows: filtered.map(a => [
+        appointmentRef(a.id),
+        a.patientName,
+        a.service,
+        a.dentistName ?? "—",
+        a.date,
+        formatTimeRange(a.time, a.endTime),
+        formatManilaStamp(a.createdAt),
+        a.type === "walk-in" ? "Walk-in" : "Online",
+        a.status === "pending" && a.rescheduleCount > 0 ? "reschedule request" : a.status,
+      ]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Appointment Date", value: printRange(fromDate, toDate) },
+        { label: "Status", value: statusFilter === "all" ? "All statuses" : statusFilter },
+        { label: "Dentist", value: dentistFilter === "all" ? "All dentists" : dentistFilter },
+        { label: "Service", value: serviceFilter === "all" ? "All services" : serviceFilter },
+      ],
+    });
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
@@ -159,7 +185,7 @@ export default function AdminOnlineAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Appointments</h1>
           <p className="text-muted-foreground">Review, approve, and manage patient appointments</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

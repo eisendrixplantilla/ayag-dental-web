@@ -11,6 +11,7 @@ import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { toast } from "sonner";
 import { formatManilaDate } from "@/lib/formatDate";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -26,6 +27,52 @@ export default function AdminPatientHistory() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<DentalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const print = usePrintDocument();
+
+  // The whole history as one document: who the patient is, then every visit and record.
+  const handlePrint = () => {
+    if (!patient) return;
+    print({
+      title: "Patient History",
+      filters: [
+        { label: "Patient", value: patient.name },
+        { label: "Age", value: patient.age != null ? String(patient.age) : "—" },
+        { label: "Gender", value: patient.gender ?? "—" },
+        { label: "Contact Number", value: patient.phone ?? "—" },
+        { label: "Email Address", value: patient.email },
+        { label: "Address", value: patient.address ?? "—" },
+        { label: "Blood Type", value: patient.bloodType ?? "—" },
+        { label: "Allergies", value: patient.allergies ?? "—" },
+        { label: "Account Status", value: patient.status },
+      ],
+      tables: [
+        {
+          heading: "Appointment History",
+          columns: ["Date", "Time", "Service", "Dentist", "Type", "Status"],
+          rows: appointments.map(a => [
+            a.date,
+            toLabel(toMinutes(a.time)),
+            a.service,
+            a.dentistName ?? "—",
+            a.type === "walk-in" ? "Walk-in" : "Online",
+            a.status,
+          ]),
+          emptyText: "No appointments yet.",
+        },
+        {
+          heading: "Dental Records",
+          columns: ["Date", "Procedures", "Diagnosis", "Dentist"],
+          rows: records.map(r => [
+            r.date,
+            r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+            r.diagnosis,
+            r.dentistName ?? "—",
+          ]),
+          emptyText: "No dental records yet.",
+        },
+      ],
+    });
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -72,7 +119,7 @@ export default function AdminPatientHistory() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient History</h1>
           <p className="text-muted-foreground">Full clinical history for {patient.name}</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

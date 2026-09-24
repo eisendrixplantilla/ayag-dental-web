@@ -16,7 +16,7 @@ import { getPatients, type Patient } from "@/lib/api/patients";
 import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
-import { printReport } from "@/lib/printReport";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatManilaDateTime } from "@/lib/formatDate";
 
@@ -137,31 +137,28 @@ export default function SuperAdminReports() {
     toast.success("Report preview generated");
   };
 
+  const print = usePrintDocument();
+
   // The rows left after the on-screen filter: what is shown is what prints.
   const visibleRows = useMemo(
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
 
-  // Both buttons print the same document — one to paper, one to a PDF.
-  const sendToPrinter = (what: string) => {
+  // What prints is what the screen shows.
+  const handlePrint = () => {
     if (!report) return;
     const meta = reportMeta[report.type];
-    const ok = printReport({
+    print({
       title: meta.title,
       columns: meta.columns,
       rows: visibleRows,
       generatedAt: report.generatedAt,
-      preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
       filters: filterIsActive(filter)
         ? [{ label: "Filtered By", value: describeReportFilter(meta.columns, filter) ?? "" }]
         : undefined,
     });
-    if (ok) toast.success(`${what} ready`);
-    else toast.error(`Failed to prepare the ${what.toLowerCase()}`);
   };
-
-  const handlePrint = () => sendToPrinter("Print preview");
 
   return (
     <div className="space-y-6">

@@ -18,6 +18,8 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
+import { appointmentRef } from "@/lib/appointmentRef";
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-success/10 text-success border-success/20",
@@ -130,6 +132,25 @@ export default function PatientAppointments() {
     }
   };
 
+  const print = usePrintDocument();
+  const aptRow = (apt: Appointment) => [
+    appointmentRef(apt.id),
+    apt.service,
+    apt.dentistName ?? "—",
+    format(parseISO(apt.date), "MMM d, yyyy"),
+    formatTimeRange(apt.time, apt.endTime),
+    apt.status,
+  ];
+  const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status"];
+  const handlePrint = () =>
+    print({
+      title: "My Appointments",
+      tables: [
+        { heading: "Upcoming", columns: APT_COLUMNS, rows: upcoming.map(aptRow), emptyText: "No upcoming appointments." },
+        { heading: "Past", columns: APT_COLUMNS, rows: history.map(aptRow), emptyText: "No past appointments." },
+      ],
+    });
+
   const confirmCancel = async () => {
     if (!cancelApt) return;
     setSaving(true);
@@ -159,7 +180,7 @@ export default function PatientAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
           <p className="text-muted-foreground">View, reschedule, or cancel appointments</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

@@ -27,6 +27,7 @@ import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppo
 import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const statusColors: Record<string, string> = {
@@ -76,6 +77,21 @@ export default function DentistAppointments() {
   );
 
   const [details, setDetails] = useState<Appointment | null>(null);
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "My Appointments",
+      columns: ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"],
+      rows: mine.map(apt => [
+        apt.patientName,
+        apt.service,
+        format(parseISO(apt.date), "MMM d, yyyy"),
+        formatTimeRange(apt.time, apt.endTime),
+        apt.status,
+      ]),
+      filters: [{ label: "Dentist", value: user?.name ?? "—" }],
+    });
 
   // Arrived here from a notification bell click — scroll to that appointment's row.
   const { highlightedKey, registerRow } = useNotificationJump(
@@ -203,7 +219,7 @@ export default function DentistAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
           <p className="text-muted-foreground">Appointments assigned to you</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

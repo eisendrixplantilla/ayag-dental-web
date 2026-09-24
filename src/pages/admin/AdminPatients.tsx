@@ -15,6 +15,7 @@ import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/a
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 // A walk-in booked for someone with no account has no patients row behind it, so it
 // can only be shown read-only: there's nothing to open, edit or archive.
@@ -116,6 +117,24 @@ export default function AdminPatients() {
     activeFilter.test(r) &&
     (r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Patient Records Report",
+      columns: ["Name", "Age", "Phone", "Email", "Status"],
+      rows: filtered.map(r => [
+        r.name,
+        r.age || "—",
+        r.phone || "—",
+        r.email || "—",
+        r.patient ? r.patient.status : "no account",
+      ]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Records", value: activeFilter.label },
+      ],
+    });
 
   const handleFormChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -226,7 +245,7 @@ export default function AdminPatients() {
           <p className="text-muted-foreground">Manage patient information and history</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={() => window.print()} variant="outline">
+          <Button onClick={handlePrint} variant="outline">
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +73,53 @@ export default function AdminDashboard() {
     [appointments]
   );
 
+  const print = usePrintDocument();
+  // The dashboard's figures as a document: the counts, then the lists behind them.
+  const handlePrint = () =>
+    print({
+      title: "Dashboard Summary",
+      filters: [{ label: "As Of", value: today }],
+      tables: [
+        {
+          heading: "Summary",
+          columns: ["Statistic", "Count"],
+          rows: [
+            ["Today's Appointments", String(stats.today)],
+            ["Pending Appointments", String(stats.pending)],
+            ["Confirmed Appointments", String(stats.confirmed)],
+            ["Completed Appointments", String(stats.completed)],
+            ["Walk-in Appointments Today", String(stats.walkIn)],
+            ["Total Registered Patients", String(patientCount)],
+          ],
+        },
+        {
+          heading: "Upcoming Appointments Today",
+          columns: ["Time", "Patient", "Service", "Dentist", "Status"],
+          rows: upcomingToday.filter(a => a.upcoming).map(a => [
+            toLabel(toMinutes(a.time)),
+            a.patientName,
+            a.service,
+            a.dentistName ?? "Unassigned",
+            a.status,
+          ]),
+          emptyText: "No more appointments scheduled for today.",
+        },
+        {
+          heading: "Recent Appointments",
+          columns: ["Patient", "Service", "Dentist", "Schedule", "Type", "Status"],
+          rows: recent.map(a => [
+            a.patientName,
+            a.service,
+            a.dentistName ?? "—",
+            `${format(parseISO(a.date), "MMM d, yyyy")} • ${toLabel(toMinutes(a.time))}`,
+            a.type,
+            a.status,
+          ]),
+          emptyText: "No appointments yet.",
+        },
+      ],
+    });
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -79,8 +127,8 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, {user?.name}</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print Graph
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print Summary
         </Button>
       </div>
 

@@ -8,6 +8,7 @@ import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getPatients } from "@/lib/api/patients";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 const STATUS_META: Record<AptStatus, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-warning" },
@@ -49,6 +50,37 @@ export default function SuperAdminDashboard() {
 
   const maxStatus = Math.max(1, ...appointmentStatus.map(s => s.value));
 
+  const print = usePrintDocument();
+  // The figures behind the dashboard, as a document.
+  const handlePrint = () =>
+    print({
+      title: "System Overview",
+      tables: [
+        {
+          heading: "Summary",
+          columns: ["Statistic", "Count"],
+          rows: [
+            ["Total Registered Patients", String(patientCount)],
+            ["Total Appointments", String(appointments.length)],
+            ["Total Staff", String(staff.length)],
+            ["Active Dentists", String(activeDentists)],
+          ],
+        },
+        {
+          heading: "Staff Overview",
+          columns: ["Name", "Role", "Status"],
+          rows: staff.map(s => [s.name, s.role, s.status]),
+          emptyText: "No staff accounts yet.",
+        },
+        {
+          heading: "Appointment Status Summary",
+          columns: ["Status", "Appointments"],
+          rows: appointmentStatus.map(s => [s.label, String(s.value)]),
+          emptyText: "No appointments yet.",
+        },
+      ],
+    });
+
   return (
     <div className="space-y-6">
       <div className="hidden print:flex print:items-center print:gap-3 print:pb-4">
@@ -63,8 +95,8 @@ export default function SuperAdminDashboard() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Super Admin Dashboard</h1>
           <p className="text-muted-foreground">System overview and analytics</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print Graph
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
+          <Printer className="w-4 h-4 mr-2" /> Print Summary
         </Button>
       </div>
 

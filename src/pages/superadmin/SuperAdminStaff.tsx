@@ -20,6 +20,7 @@ import {
 } from "@/lib/api/staff";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
 
@@ -78,6 +79,25 @@ export default function SuperAdminStaff() {
     const matchesRole = roleFilter === "all" || s.role === roleFilter;
     return matchesSearch && matchesRole;
   });
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Staff Accounts Report",
+      columns: ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"],
+      rows: filtered.map(s => [
+        s.employeeId ?? "—",
+        s.name,
+        s.email,
+        s.contact ?? "—",
+        roleLabel(s.role),
+        s.status,
+      ]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Role", value: roleFilter === "all" ? "All roles" : roleLabel(roleFilter) },
+      ],
+    });
 
   const openEdit = (s: StaffMember) => {
     setEditing(s);
@@ -248,7 +268,7 @@ export default function SuperAdminStaff() {
           <p className="text-muted-foreground">Manage Admin and Dentist accounts</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button variant="outline" onClick={() => window.print()}>
+          <Button variant="outline" onClick={handlePrint}>
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
           <Button className="gradient-primary text-primary-foreground" onClick={() => navigate("/superadmin/staff/new")}>

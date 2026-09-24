@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { printReport } from "@/lib/printReport";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatManilaDateTime } from "@/lib/formatDate";
 
@@ -136,23 +136,24 @@ export default function AdminReports() {
     toast.success("Report preview generated");
   };
 
+  const print = usePrintDocument();
+
   // The rows left after the on-screen filter: what is shown is what prints.
   const visibleRows = useMemo(
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
 
-  // Both buttons print the same document — one to paper, one to a PDF — so a printed
-  // copy never depends on what the screen happened to look like.
-  const sendToPrinter = (what: string) => {
+  // What prints is what the screen shows, so a printed copy never depends on what the
+  // screen happened to look like.
+  const handlePrint = () => {
     if (!report) return;
     const meta = reportMeta[report.type];
-    const ok = printReport({
+    print({
       title: meta.title,
       columns: meta.columns,
       rows: visibleRows,
       generatedAt: report.generatedAt,
-      preparedBy: { name: user?.name ?? "—", role: roleLabel[user?.role ?? ""] ?? "Staff" },
       filters: [
         { label: "Date Range", value: `${report.filters.start || "All"} to ${report.filters.end || "All"}` },
         { label: "Dentist", value: report.filters.dentist === "all" ? "All dentists" : report.filters.dentist },
@@ -162,11 +163,7 @@ export default function AdminReports() {
           : []),
       ],
     });
-    if (ok) toast.success(`${what} ready`);
-    else toast.error(`Failed to prepare the ${what.toLowerCase()}`);
   };
-
-  const handlePrint = () => sendToPrinter("Print preview");
 
   return (
     <div className="space-y-6">

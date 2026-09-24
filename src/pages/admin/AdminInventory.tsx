@@ -10,6 +10,7 @@ import { Package, Plus, Search, AlertTriangle, Edit, Printer } from "lucide-reac
 import { toast } from "sonner";
 import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 const mockInventory = [
   { id: "I001", name: "Dental Composite Resin", category: "Filling", quantity: 45, minStock: 20, unit: "tubes", status: "ok" },
@@ -37,6 +38,21 @@ export default function AdminInventory() {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const filtered = inventory.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
   const lowStock = inventory.filter(i => i.status === "low").length;
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Inventory Report",
+      columns: ["ID", "Item", "Category", "Quantity", "Min Stock", "Unit", "Status"],
+      rows: filtered.map(i => [
+        i.id, i.name, i.category, String(i.quantity), String(i.minStock), i.unit,
+        i.status === "low" ? "Low stock" : "In stock",
+      ]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Low Stock Items", value: String(lowStock) },
+      ],
+    });
 
   const openEdit = (item: typeof mockInventory[0]) => {
     setEditingItem(item);
@@ -97,7 +113,7 @@ export default function AdminInventory() {
           <p className="text-muted-foreground">Track dental supplies and equipment</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={() => window.print()} variant="outline">
+          <Button onClick={handlePrint} variant="outline">
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>

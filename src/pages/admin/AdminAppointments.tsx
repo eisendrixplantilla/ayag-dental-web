@@ -24,6 +24,7 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
 import { getServices } from "@/lib/api/dentalRecords";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 
 export default function AdminAppointments() {
@@ -171,6 +172,21 @@ export default function AdminAppointments() {
     }
   };
 
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Walk-in Appointments Report",
+      columns: ["Patient", "Service", "Dentist", "Date", "Time", "Status"],
+      rows: walkIns.map(w => [
+        w.patientName,
+        w.service,
+        w.dentistName ?? "—",
+        w.date,
+        formatTimeRange(w.time, w.endTime),
+        w.status,
+      ]),
+    });
+
   const handleRemove = async (id: string) => {
     try {
       await deleteAppointment(id);
@@ -195,7 +211,7 @@ export default function AdminAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Walk-in Appointments</h1>
           <p className="text-muted-foreground">Register and manage walk-in patients</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

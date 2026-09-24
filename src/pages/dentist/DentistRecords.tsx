@@ -24,6 +24,7 @@ import {
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 
 const emptyForm = {
   appointmentId: "",
@@ -55,6 +56,21 @@ export default function DentistRecords() {
   useEffect(() => {
     getAppointments().then(setAppointments).catch(() => {});
   }, []);
+
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Dental Records",
+      columns: ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"],
+      rows: records.map(r => [
+        format(parseISO(r.date), "MMM d, yyyy"),
+        r.patientName ?? "—",
+        r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+        r.toothNumber || "—",
+        r.diagnosis,
+        r.prescriptions.map(p => p.medicine).join(", ") || "—",
+      ]),
+    });
 
   const recordedAppointmentIds = useMemo(() => new Set(records.map(r => r.appointmentId)), [records]);
   const availableAppointments = useMemo(
@@ -186,7 +202,7 @@ export default function DentistRecords() {
           <p className="text-muted-foreground">Create and review dental records from your consultations</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={() => window.print()} variant="outline">
+          <Button onClick={handlePrint} variant="outline">
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
           <Button onClick={openCreate}>

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 import { formatManilaDate } from "@/lib/formatDate";
+import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
 
 type ArchiveRow = {
   id: string;
@@ -86,6 +87,19 @@ export default function SuperAdminArchives() {
     return matchesSearch && matchesType && matchesFrom && matchesTo;
   });
 
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Archived Accounts Report",
+      columns: ["ID", "Full Name", "Account Type", "Date Archived", "Archived By", "Reason"],
+      rows: filtered.map(r => [r.id, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        { label: "Account Type", value: type === "all" ? "All accounts" : type === "staff" ? "Staff accounts" : "Patient accounts" },
+        { label: "Date Archived", value: printRange(fromDate, toDate) },
+      ],
+    });
+
   const confirmRestore = async () => {
     if (!restoring) return;
     try {
@@ -118,7 +132,7 @@ export default function SuperAdminArchives() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Archive</h1>
           <p className="text-muted-foreground">Archived staff and patient accounts — nothing is permanently deleted</p>
         </div>
-        <Button onClick={() => window.print()} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>
