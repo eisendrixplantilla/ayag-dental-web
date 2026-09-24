@@ -24,7 +24,9 @@ import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
-import { getDentistSchedule, generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
+import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -402,29 +404,57 @@ export default function DentistAppointments() {
               <Label>Reason for Rescheduling *</Label>
               <Textarea value={rsReason} onChange={e => setRsReason(e.target.value)} placeholder="e.g. Emergency leave" />
             </div>
+            {/* Same shape as booking: the month, then that day's free times. */}
             <div className="space-y-2">
               <Label>New Appointment Date *</Label>
-              <Input
-                type="date"
-                value={rsDate}
-                min={manilaTodayDateStr()}
-                onChange={e => { setRsDate(e.target.value); setRsSlot(""); }}
-              />
+              <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
+                <Calendar
+                  mode="single"
+                  selected={rsDate ? parseISO(rsDate) : undefined}
+                  onSelect={(d) => { setRsDate(d ? format(d, "yyyy-MM-dd") : ""); setRsSlot(""); }}
+                  className="p-2 pointer-events-auto"
+                  disabled={(d) => {
+                    if (format(d, "yyyy-MM-dd") < manilaTodayDateStr()) return true;
+                    if (!schedule) return true;
+                    return !isDentistAvailableOn(schedule, d);
+                  }}
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Available Time Slot *</Label>
-              <Select value={rsSlot} onValueChange={setRsSlot} disabled={!rsDate || slots.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder={!rsDate ? "Select a date first" : slots.length ? "Select a time slot" : "No slots available"} />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  {slots.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {rsDate && slots.length === 0 && (
-                <p className="text-xs text-destructive">
-                  No available appointment slots for the selected date. Please choose another date.
+              <div className="flex items-baseline justify-between gap-2">
+                <Label>{rsDate ? `Times on ${format(parseISO(rsDate), "EEE, MMM d")} *` : "Available Time Slot *"}</Label>
+                {rsDate && slots.length > 0 && <span className="text-xs text-muted-foreground">{slots.length} free</span>}
+              </div>
+              {!rsDate ? (
+                <p className="text-sm text-muted-foreground py-4 px-3 text-center border border-dashed rounded-md">
+                  Pick a date to see the free times.
                 </p>
+              ) : slots.length === 0 ? (
+                <p className="text-sm text-destructive py-4 px-3 text-center border border-dashed rounded-md">
+                  Fully booked that day — please pick another date.
+                </p>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Available time slots"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1"
+                >
+                  {slots.map((s) => (
+                    <Button
+                      key={s.value}
+                      type="button"
+                      size="sm"
+                      variant={rsSlot === s.value ? "default" : "outline"}
+                      aria-pressed={rsSlot === s.value}
+                      className={cn("h-11 sm:h-9 px-2 justify-center font-normal text-[11px] sm:text-xs whitespace-nowrap",
+                        rsSlot === s.value && "gradient-primary text-primary-foreground")}
+                      onClick={() => setRsSlot(s.value)}
+                    >
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
               )}
             </div>
             <div className="space-y-2">

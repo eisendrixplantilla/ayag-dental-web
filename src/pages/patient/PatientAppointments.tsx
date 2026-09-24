@@ -6,9 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Eye, CalendarIcon, Edit, X, Info, Loader2, Printer } from "lucide-react";
+import { Eye, Edit, X, Info, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -312,58 +311,84 @@ export default function PatientAppointments() {
 
       {/* Reschedule */}
       <Dialog open={!!rescheduleApt} onOpenChange={(o) => !o && setRescheduleApt(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-heading">Reschedule Appointment</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               {rescheduleApt?.service} with {rescheduleApt?.dentistName}. You can reschedule only once,
               and the clinic has to approve the new time before it's confirmed.
             </p>
-            <div>
-              <Label>New Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !newDate && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {newDate ? format(newDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={newDate}
-                    onSelect={(d) => { setNewDate(d); setNewTime(""); }}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
-                    disabled={(d) => {
-                      if (d < manilaTodayAsLocalDate()) return true;
-                      if (!schedule) return true;
-                      return !isDentistAvailableOn(schedule, d);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
+            {/* Same shape as booking: the month, then that day's free times. */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">New Date</Label>
+              <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
+                <Calendar
+                  mode="single"
+                  selected={newDate}
+                  onSelect={(d) => { setNewDate(d); setNewTime(""); }}
+                  className="p-2 pointer-events-auto"
+                  disabled={(d) => {
+                    if (d < manilaTodayAsLocalDate()) return true;
+                    if (!schedule) return true;
+                    return !isDentistAvailableOn(schedule, d);
+                  }}
+                />
+              </div>
             </div>
-            <div>
-              <Label className="font-semibold">Available Time Slot</Label>
-              <Select value={newTime} onValueChange={setNewTime} disabled={!newDate || loadingSlots || slots.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder={!newDate ? "Select a date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {slots.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {newDate && !loadingSlots && slots.length === 0 && (
-                <p className="text-sm text-destructive mt-2">
-                  No available appointment slots for the selected date. Please choose another date.
+
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className="text-xs text-muted-foreground">
+                  {newDate ? `Times on ${format(newDate, "EEE, MMM d")}` : "Available times"}
+                </Label>
+                {newDate && !loadingSlots && slots.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                )}
+              </div>
+              {!newDate ? (
+                <p className="text-sm text-muted-foreground py-4 px-3 text-center border border-dashed rounded-md">
+                  Pick a date to see the free times.
                 </p>
+              ) : loadingSlots ? (
+                <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />Loading times...
+                </p>
+              ) : slots.length === 0 ? (
+                <p className="text-sm text-destructive py-4 px-3 text-center border border-dashed rounded-md">
+                  Fully booked that day — please pick another date.
+                </p>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Available time slots"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1"
+                >
+                  {slots.map((s) => (
+                    <Button
+                      key={s.value}
+                      type="button"
+                      size="sm"
+                      variant={newTime === s.value ? "default" : "outline"}
+                      aria-pressed={newTime === s.value}
+                      className={cn("h-11 sm:h-9 px-2 justify-center font-normal text-[11px] sm:text-xs whitespace-nowrap",
+                        newTime === s.value && "gradient-primary text-primary-foreground")}
+                      onClick={() => setNewTime(s.value)}
+                    >
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
               )}
             </div>
+
             <p className="text-xs text-muted-foreground">
               After rescheduling, your appointment goes back to <span className="text-warning font-medium">Pending</span> and requires admin approval.
             </p>
-            <Button className="w-full gradient-primary text-primary-foreground" disabled={!newDate || !newTime || saving} onClick={confirmReschedule}>
+            <Button
+              className="w-full gradient-primary text-primary-foreground h-11 sm:h-10"
+              disabled={!newDate || !newTime || saving}
+              onClick={confirmReschedule}
+            >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Confirm Reschedule
             </Button>
           </div>

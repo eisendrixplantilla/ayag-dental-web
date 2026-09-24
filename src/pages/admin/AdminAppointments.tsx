@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, CalendarIcon, Loader2, Printer, Search, Check, ChevronsUpDown, X } from "lucide-react";
+import { CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -58,6 +58,8 @@ export default function AdminAppointments() {
   const [slotsVersion, setSlotsVersion] = useState(0);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
+  const serviceLabel = chosen.join(SERVICE_SEPARATOR);
+  const selectedLabel = slots.find((s) => s.value === time)?.label ?? "";
   const remaining = services.filter((s) => !chosen.includes(s));
 
   // Arrived here from a notification bell click — scroll to that walk-in's row.
@@ -206,14 +208,21 @@ export default function AdminAppointments() {
           <p className="text-xs">Walk-in Appointments · Generated {formatManilaDate()}</p>
         </div>
       </div>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold font-heading text-foreground">Walk-in Appointments</h1>
-          <p className="text-muted-foreground">Register and manage walk-in patients</p>
+          <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground">Walk-in Appointments</h1>
+          <p className="text-sm text-muted-foreground">Register and manage walk-in patients</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print
-        </Button>
+        <div className="flex items-center gap-2">
+          {chosen.length > 0 && (
+            <Badge variant="outline" className="gap-1.5 bg-secondary/60 w-fit whitespace-nowrap">
+              <Clock3 className="w-3.5 h-3.5" /> About {formatDuration(visitMinutes)} in the chair
+            </Badge>
+          )}
+          <Button onClick={handlePrint} variant="outline" size="sm" className="print:hidden">
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-card print:hidden">
@@ -222,17 +231,17 @@ export default function AdminAppointments() {
             <Plus className="w-5 h-5 text-primary" /> New Walk-in Appointment
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label>Patient Name</Label>
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Patient Name</Label>
               <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={patientPickerOpen}
-                    className="w-full justify-between font-normal"
+                    className="h-11 sm:h-9 w-full justify-between font-normal"
                   >
                     <span className="flex items-center gap-2 truncate">
                       <Search className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -291,128 +300,153 @@ export default function AdminAppointments() {
                 <p className="text-xs text-muted-foreground mt-1">Guest walk-in — no patient account linked.</p>
               ) : null}
             </div>
-            <div>
-              <Label>Service</Label>
-              {chosen.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {chosen.map(s => (
-                    <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1 text-sm font-normal">
-                      {s}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Service</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-full sm:w-56">
+                  {/* Always shows its placeholder: picking an option adds to the list beside
+                      it rather than replacing a single selection. */}
+                  <Select
+                    value=""
+                    disabled={!patientName || remaining.length === 0}
+                    onValueChange={(v) => setChosen(prev => [...prev, v])}
+                  >
+                    <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
+                      <SelectValue placeholder={
+                        !patientName ? "Enter patient name first"
+                          : remaining.length === 0 ? "All services added"
+                          : chosen.length === 0 ? "Select service"
+                          : "Add another service"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                {chosen.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
+                ) : (
+                  chosen.map(s => (
+                    <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
+                      <span className="truncate">{s}</span>
                       <button
                         type="button"
                         aria-label={`Remove ${s}`}
-                        className="rounded-full p-0.5 hover:bg-foreground/10"
+                        className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
                         onClick={() => setChosen(prev => prev.filter(c => c !== s))}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Assign Dentist</Label>
+            <div className="w-full sm:w-64">
+              <Select
+                value={dentistId}
+                disabled={chosen.length === 0 || loadingDentists}
+                onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
+              >
+                <SelectTrigger className="h-11 sm:h-9" aria-label="Assign dentist"><SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Select dentist"} /></SelectTrigger>
+                <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground min-h-4 leading-tight line-clamp-2 sm:line-clamp-none"
+               title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
+              {!loadingDentists && dentists.length === 0 ? (
+                <span className="text-destructive">No dentists are available.</span>
+              ) : loadingSchedule ? "Loading schedule..."
+                : dentistId && schedule && schedule.days.length === 0 ? (
+                  <span className="text-destructive">This dentist has no working schedule configured yet.</span>
+                ) : schedule && schedule.days.length > 0 ? `Working hours: ${scheduleSummary}` : ""}
+            </p>
+          </div>
+
+          {/* When — the month and the free times side by side, so picking a day and seeing
+              what is left at the desk is one glance rather than two dropdowns. */}
+          <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto md:mx-0", !dentistId && "opacity-60")}>
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(d) => { setDate(d); setTime(""); }}
+                className="p-2 pointer-events-auto"
+                disabled={(d) => {
+                  if (d < manilaTodayAsLocalDate()) return true;
+                  if (!schedule) return true;
+                  return !isDentistAvailableOn(schedule, d);
+                }}
+              />
+            </div>
+
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className="text-xs text-muted-foreground">
+                  {date ? `Times on ${format(date, "EEE, MMM d")}` : "Available times"}
+                </Label>
+                {dentistId && date && !loadingSlots && slots.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                )}
+              </div>
+
+              {!dentistId || !date ? (
+                <p className="text-sm text-muted-foreground py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
+                  {!patientName ? "Enter the patient's name to begin."
+                    : chosen.length === 0 ? "Add a service to begin."
+                    : !dentistId ? "Assign a dentist to see their calendar."
+                    : "Pick a date to see the free times."}
+                </p>
+              ) : loadingSlots ? (
+                <p className="text-sm text-muted-foreground py-4 sm:py-6 text-center border border-dashed rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />Loading times...
+                </p>
+              ) : slots.length === 0 ? (
+                <p className="text-sm text-destructive py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
+                  Fully booked that day — please pick another date.
+                </p>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Available time slots"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:max-h-56 md:overflow-y-auto md:pr-1"
+                >
+                  {slots.map(s => (
+                    <Button
+                      key={s.value}
+                      type="button"
+                      size="sm"
+                      variant={time === s.value ? "default" : "outline"}
+                      aria-pressed={time === s.value}
+                      className={cn("h-11 sm:h-9 px-2 justify-center font-normal text-[11px] sm:text-xs whitespace-nowrap",
+                        time === s.value && "gradient-primary text-primary-foreground")}
+                      onClick={() => setTime(s.value)}
+                    >
+                      {s.label}
+                    </Button>
                   ))}
                 </div>
               )}
-              {/* Always shows its placeholder: picking an option adds to the list above
-                  rather than replacing a single selection. */}
-              <Select
-                value=""
-                disabled={!patientName || remaining.length === 0}
-                onValueChange={(v) => setChosen(prev => [...prev, v])}
-              >
-                <SelectTrigger className="mt-2" aria-label="Add a service">
-                  <SelectValue placeholder={
-                    !patientName ? "Enter patient name first"
-                      : remaining.length === 0 ? "All services added"
-                      : chosen.length === 0 ? "Select service"
-                      : "Add another service"
-                  } />
-                </SelectTrigger>
-                <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                {chosen.length === 0
-                  ? "Add as many services as this visit needs."
-                  : `About ${formatDuration(visitMinutes)} in the chair — only slots with that much free time are offered.`}
-              </p>
             </div>
           </div>
 
-          <div>
-            <Label className="font-semibold">Assign Dentist</Label>
-            <Select
-              value={dentistId}
-              disabled={chosen.length === 0 || loadingDentists}
-              onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-3">
+            <p className="text-xs text-muted-foreground">
+              {time
+                ? `${serviceLabel} with ${dentist} on ${date ? format(date, "PPP") : ""} at ${selectedLabel}.`
+                : <>Walk-ins are created by the clinic and are automatically <span className="text-success font-medium">Confirmed</span> — no approval needed.</>}
+            </p>
+            <Button
+              className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"
+              disabled={!patientName || chosen.length === 0 || !dentistId || !date || !time || saving}
+              onClick={handleAdd}
             >
-              <SelectTrigger aria-label="Assign dentist"><SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Select dentist"} /></SelectTrigger>
-              <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-            </Select>
-            {!loadingDentists && dentists.length === 0 && (
-              <p className="text-xs text-destructive mt-1">No dentists are available.</p>
-            )}
-            {loadingSchedule && <p className="text-xs text-muted-foreground mt-1">Loading schedule...</p>}
-            {!loadingSchedule && schedule && schedule.days.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">Working hours: {scheduleSummary}</p>
-            )}
-            {!loadingSchedule && dentistId && schedule && schedule.days.length === 0 && (
-              <p className="text-xs text-destructive mt-1">This dentist has no working schedule configured yet.</p>
-            )}
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />} Add Walk-in
+            </Button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label>Appointment Date</Label>
-              <Popover>
-                <PopoverTrigger asChild disabled={!dentistId}>
-                  <Button variant="outline" disabled={!dentistId} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>{dentistId ? "Pick a date" : "Select a dentist first"}</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(d) => { setDate(d); setTime(""); }}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
-                    disabled={(d) => {
-                      if (d < manilaTodayAsLocalDate()) return true;
-                      if (!schedule) return true;
-                      return !isDentistAvailableOn(schedule, d);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div>
-              <Label className="font-semibold">Available Time Slot</Label>
-              <Select value={time} onValueChange={setTime} disabled={!dentistId || !date || loadingSlots || slots.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder={!dentistId || !date ? "Select dentist and date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {slots.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {dentistId && date && !loadingSlots && slots.length === 0 && (
-                <p className="text-sm text-destructive mt-2">No available appointment slots for the selected date.</p>
-              )}
-              {dentistId && date && !loadingSlots && slots.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {slots.length} slot{slots.length > 1 ? "s" : ""} available for {dentist}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Walk-in appointments are created by the clinic and are automatically{" "}
-            <span className="text-success font-medium">Confirmed</span> — no approval needed.
-          </p>
-
-          <Button className="w-full gradient-primary text-primary-foreground" disabled={!patientName || chosen.length === 0 || !dentistId || !date || !time || saving} onClick={handleAdd}>
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />} Add Walk-in Appointment
-          </Button>
         </CardContent>
       </Card>
 
