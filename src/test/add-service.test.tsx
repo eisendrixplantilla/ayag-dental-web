@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   removed: [] as any[],
   created: [] as any[],
   removeCalls: [] as { id: string; reason: string; by?: string }[],
+  reordered: [] as string[][],
   failWith: null as string | null,
 }));
 
@@ -20,17 +21,32 @@ vi.mock("@/lib/api/dentalRecords", async (importOriginal) => {
     removeService: vi.fn(async (id: string, reason: string, by?: string) => {
       h.removeCalls.push({ id, reason, by });
       const gone = h.services.find((s: any) => s.id === id);
+      h.services = h.services.filter((s: any) => s.id !== id);
       return { ...gone, removedAt: "2026-09-24", removedBy: by ?? "Super Admin", removedReason: reason };
     }),
     restoreService: vi.fn(async (id: string) => {
       const back = h.removed.find((s: any) => s.id === id);
-      return { ...back, removedAt: null, removedBy: null, removedReason: null };
+      h.removed = h.removed.filter((s: any) => s.id !== id);
+      const restored = { ...back, removedAt: null, removedBy: null, removedReason: null };
+      // Back where it was in the catalogue's own order.
+      h.services = [...h.services, restored].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      return restored;
     }),
     updateService: vi.fn(async () => h.services[0]),
     createService: vi.fn(async (input: any) => {
       if (h.failWith) throw new Error(h.failWith);
       h.created.push(input);
-      return { id: `sv-${h.created.length}`, description: null, ...input };
+      // A new service goes to the end of the catalogue, as the insert does.
+      const created = { id: `sv-${h.created.length}`, description: null, ...input };
+      h.services = [...h.services, created];
+      return created;
+    }),
+    reorderServices: vi.fn(async (order: string[]) => {
+      h.reordered.push(order);
+      h.services = order
+        .map((id) => h.services.find((s: any) => s.id === id))
+        .filter(Boolean);
+      return h.services;
     }),
   };
 });
@@ -56,6 +72,12 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 import SuperAdminSettings from "@/pages/superadmin/SuperAdminSettings";
 
+/** The service names in the order the table has them. */
+const serviceNames = () =>
+  Array.from(document.querySelectorAll("tbody tr"))
+    .map(r => (r as HTMLTableRowElement).cells[1]?.textContent)
+    .filter((n): n is string => !!n && n !== "No services found");
+
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
@@ -66,6 +88,7 @@ beforeEach(() => {
   h.removed = [];
   h.removeCalls = [];
   h.created = [];
+  h.reordered = [];
   h.failWith = null;
   toasts.success.mockClear();
   toasts.error.mockClear();
@@ -107,15 +130,16 @@ describe("adding a dental service", () => {
     expect(screen.queryByText("Add Dental Service")).toBeNull(); // dialog closed
   });
 
-  it("keeps the list in order, so a new service isn't stuck at the bottom", async () => {
+  it("puts a new service at the end of the catalogue, to be dragged where it belongs", async () => {
     await openDialog();
     fireEvent.change(field(/Service Name/), { target: { value: "Braces" } });
     fireEvent.change(field(/Price/), { target: { value: "25000" } });
     submit();
 
+    // The order is the Super Admin's, not the alphabet's, so nothing is inserted
+    // into the middle of it on their behalf.
     await waitFor(() => expect(screen.getByText("Braces")).toBeInTheDocument());
-    const names = Array.from(document.querySelectorAll("tbody tr td:first-child")).map(c => c.textContent);
-    expect(names).toEqual(["Braces", "Oral"]);
+    expect(serviceNames()).toEqual(["Oral", "Braces"]);
   });
 
   it("won't save without a name, minutes or a price", async () => {
@@ -216,5 +240,78 @@ describe("removing a dental service", () => {
     render(<SuperAdminSettings />);
     await screen.findByText("Oral");
     expect(screen.queryByText("Removed Services")).toBeNull();
+  });
+});
+
+describe("arranging the catalogue", () => {
+  const catalogue = () => {
+    h.services = [
+      { id: "sv-a", name: "Braces", description: null, duration: 60, price: 25000, sortOrder: 1 },
+      { id: "sv-b", name: "Cleaning", description: null, duration: 30, price: 1000, sortOrder: 2 },
+      { id: "sv-c", name: "Extraction", description: null, duration: 45, price: 1500, sortOrder: 3 },
+    ];
+  };
+  const handle = (name: string) => screen.getByRole("button", { name: new RegExp(`^Reorder ${name}`) });
+  // jsdom has no drag implementation, so the events are dispatched directly — which is
+  // all the page listens for anyway.
+  const drag = (from: string, onto: string) => {
+    fireEvent.dragStart(handle(from), { dataTransfer: { effectAllowed: "" } });
+    const target = screen.getByText(onto).closest("tr")!;
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+  };
+
+  it("drags a service to the top of the list, and saves that order", async () => {
+    catalogue();
+    render(<SuperAdminSettings />);
+    await screen.findByText("Extraction");
+    expect(serviceNames()).toEqual(["Braces", "Cleaning", "Extraction"]);
+
+    drag("Extraction", "Braces");
+
+    await waitFor(() => expect(serviceNames()).toEqual(["Extraction", "Braces", "Cleaning"]));
+    // The new order is sent as the ids, top to bottom — not as one row's new index.
+    expect(h.reordered).toEqual([["sv-c", "sv-a", "sv-b"]]);
+    expect(toasts.success).toHaveBeenCalledWith("Moved Extraction to position 1");
+  });
+
+  it("moves a row with the arrow keys, for anyone not using a mouse", async () => {
+    catalogue();
+    render(<SuperAdminSettings />);
+    await screen.findByText("Extraction");
+
+    fireEvent.keyDown(handle("Cleaning"), { key: "ArrowUp" });
+    await waitFor(() => expect(serviceNames()).toEqual(["Cleaning", "Braces", "Extraction"]));
+
+    fireEvent.keyDown(handle("Cleaning"), { key: "ArrowDown" });
+    await waitFor(() => expect(serviceNames()).toEqual(["Braces", "Cleaning", "Extraction"]));
+  });
+
+  it("stays put at the ends of the list, and when dropped on itself", async () => {
+    catalogue();
+    render(<SuperAdminSettings />);
+    await screen.findByText("Extraction");
+
+    fireEvent.keyDown(handle("Braces"), { key: "ArrowUp" });      // already first
+    fireEvent.keyDown(handle("Extraction"), { key: "ArrowDown" }); // already last
+    drag("Cleaning", "Cleaning");
+
+    await waitFor(() => expect(serviceNames()).toEqual(["Braces", "Cleaning", "Extraction"]));
+    expect(h.reordered).toEqual([]); // nothing moved, so nothing was saved
+  });
+
+  it("puts the list back when the order can't be saved", async () => {
+    catalogue();
+    render(<SuperAdminSettings />);
+    await screen.findByText("Extraction");
+
+    const { reorderServices } = await import("@/lib/api/dentalRecords");
+    vi.mocked(reorderServices).mockRejectedValueOnce(new Error("Network is down"));
+
+    drag("Extraction", "Braces");
+
+    await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("Network is down"));
+    // What is on screen is never an order the clinic doesn't actually have.
+    expect(serviceNames()).toEqual(["Braces", "Cleaning", "Extraction"]);
   });
 });

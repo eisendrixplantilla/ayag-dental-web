@@ -36,6 +36,8 @@ export interface Service {
   description: string | null;
   duration: number | null;
   price: number | null;
+  /** Where the service sits in the catalogue, as the Super Admin arranged it. */
+  sortOrder?: number | null;
   /** Set once a service is taken out of the catalogue; records that used it keep its name. */
   removedAt?: string | null;
   removedBy?: string | null;
@@ -126,6 +128,16 @@ export async function restoreService(id: string): Promise<Service> {
     body: JSON.stringify({ action: "restore" }),
   });
   return data.service;
+}
+
+/** Saves the catalogue's order, given the service ids in the order they should read.
+ * Returns the list as it now stands, so the page and the database can't disagree. */
+export async function reorderServices(order: string[]): Promise<Service[]> {
+  const data = await api<{ services: Service[] }>("/dental-records?services=true", {
+    method: "PATCH",
+    body: JSON.stringify({ action: "reorder", order }),
+  });
+  return data.services;
 }
 
 export async function updateService(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
