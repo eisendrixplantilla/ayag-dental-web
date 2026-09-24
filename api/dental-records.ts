@@ -136,6 +136,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ service: rows[0] });
   }
 
+  if (req.method === "POST" && req.query.services === "true") {
+    if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+    const { name, duration, price, description } = req.body ?? {};
+    const serviceName = typeof name === "string" ? name.trim() : "";
+    if (!serviceName) return res.status(400).json({ error: "Service name is required" });
+
+    // One row per service: the name is what booking forms and records match on.
+    const existing = await sql`SELECT id FROM services WHERE lower(service_name) = ${serviceName.toLowerCase()}`;
+    if (existing.length > 0) return res.status(409).json({ error: "A service with this name already exists" });
+
+    const inserted = await sql`
+      INSERT INTO services (service_name, description, duration, price)
+      VALUES (${serviceName}, ${description ?? null}, ${duration ?? null}, ${price ?? null})
+      RETURNING id, service_name AS name, description, duration, price
+    `;
+    return res.status(201).json({ service: { ...inserted[0], name: displayService(inserted[0].name) } });
+  }
+
   if (session.role === "patient") return res.status(403).json({ error: "Forbidden" });
 
   if (req.method === "POST") {

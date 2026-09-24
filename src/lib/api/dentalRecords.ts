@@ -86,6 +86,21 @@ export async function getServices(): Promise<Service[]> {
   return data.services;
 }
 
+export interface ServiceInput {
+  name: string;
+  duration?: number;
+  price?: number;
+  description?: string;
+}
+
+export async function createService(input: ServiceInput): Promise<Service> {
+  const data = await api<{ service: Service }>("/dental-records?services=true", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return data.service;
+}
+
 export async function updateService(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
   const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
     method: "PATCH",

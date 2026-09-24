@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Settings, Clock, Stethoscope, Printer, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Settings, Clock, Stethoscope, Printer, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
-import { getServices, updateService, type Service } from "@/lib/api/dentalRecords";
+import { getServices, updateService, createService, type Service } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 
@@ -21,6 +22,10 @@ export default function SuperAdminSettings() {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
+
+  const [adding, setAdding] = useState(false);
+  const [newService, setNewService] = useState({ name: "", duration: "30", price: "" });
+  const [savingNew, setSavingNew] = useState(false);
 
   const [info, setInfo] = useState<ClinicInfo>({ name: "", phone: "", email: "", address: "" });
   const [savingInfo, setSavingInfo] = useState(false);
@@ -67,6 +72,45 @@ export default function SuperAdminSettings() {
       .catch(() => toast.error("Failed to load settings"))
       .finally(() => setLoading(false));
   }, []);
+
+  const openAddService = () => {
+    setNewService({ name: "", duration: "30", price: "" });
+    setAdding(true);
+  };
+
+  // A new service joins the list the booking forms read, so it needs the same two
+  // numbers an existing one does: how long it takes, and what it costs.
+  const addService = async () => {
+    const name = newService.name.trim();
+    const duration = Number(newService.duration);
+    const price = Number(newService.price);
+    if (!name) {
+      toast.error("Enter the service name");
+      return;
+    }
+    if (!newService.duration || !Number.isInteger(duration) || duration <= 0) {
+      toast.error("Enter the minutes this service takes");
+      return;
+    }
+    if (!newService.price || Number.isNaN(price) || price < 0) {
+      toast.error("Enter a valid price");
+      return;
+    }
+
+    setSavingNew(true);
+    try {
+      const created = await createService({ name, duration, price });
+      setServices((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setPriceDrafts((prev) => ({ ...prev, [created.id]: created.price != null ? String(created.price) : "" }));
+      setDurationDrafts((prev) => ({ ...prev, [created.id]: created.duration != null ? String(created.duration) : "" }));
+      setAdding(false);
+      toast.success(`${created.name} added`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add the service");
+    } finally {
+      setSavingNew(false);
+    }
+  };
 
   const setHourField = (day: string, field: "open" | "close", value: string) => {
     setHours((prev) => prev.map((h) => (h.day === day ? { ...h, [field]: value } : h)));
@@ -139,6 +183,60 @@ export default function SuperAdminSettings() {
         </Button>
       </div>
 
+      <Dialog open={adding} onOpenChange={(o) => !o && setAdding(false)}>
+        <DialogContent className="max-w-md bg-background">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Add Dental Service</DialogTitle>
+            <DialogDescription>
+              It becomes bookable straight away — patients and the walk-in desk pick it by name,
+              and the visit reserves the minutes set here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="service-name">Service Name</Label>
+              <Input
+                id="service-name"
+                value={newService.name}
+                onChange={(e) => setNewService((s) => ({ ...s, name: e.target.value }))}
+                placeholder="e.g. Fluoride Treatment"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="service-duration">Duration (minutes)</Label>
+                <Input
+                  id="service-duration"
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={newService.duration}
+                  onChange={(e) => setNewService((s) => ({ ...s, duration: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="service-price">Price (₱)</Label>
+                <Input
+                  id="service-price"
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={newService.price}
+                  onChange={(e) => setNewService((s) => ({ ...s, price: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdding(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={addService} disabled={savingNew}>
+              {savingNew && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Add Service
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card className="shadow-card print:hidden">
         <CardHeader>
           <CardTitle className="font-heading text-lg flex items-center gap-2"><Clock className="w-5 h-5 text-primary" /> Clinic Hours</CardTitle>
@@ -169,11 +267,18 @@ export default function SuperAdminSettings() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2"><Stethoscope className="w-5 h-5 text-primary" /> Dental Services & Pricing</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Duration is what the booking forms reserve: a visit is offered only the time slots
-            long enough for the services chosen. A service can be booked once it has one.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="font-heading text-lg flex items-center gap-2"><Stethoscope className="w-5 h-5 text-primary" /> Dental Services & Pricing</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Duration is what the booking forms reserve: a visit is offered only the time slots
+                long enough for the services chosen. A service can be booked once it has one.
+              </p>
+            </div>
+            <Button className="gradient-primary text-primary-foreground print:hidden" onClick={openAddService}>
+              <Plus className="w-4 h-4 mr-2" /> Add Service
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
