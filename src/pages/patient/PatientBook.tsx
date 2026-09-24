@@ -239,7 +239,7 @@ export default function PatientBook() {
           </div>
 
           {/* Steps 2–4 side by side: dentist, then the date and time they are free. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Dentist</Label>
               <Select
@@ -282,7 +282,7 @@ export default function PatientBook() {
               </Popover>
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+            <div className="space-y-1.5 sm:col-span-2 md:col-span-1">
               <Label className="text-xs text-muted-foreground">Time Slot</Label>
               <Select value={time} onValueChange={setTime} disabled={!dentistId || !date || loadingSlots || slots.length === 0}>
                 <SelectTrigger className="h-9" aria-label="Choose a time slot">

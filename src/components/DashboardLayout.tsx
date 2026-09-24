@@ -158,7 +158,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <NotificationsBell />
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
-            {children}
+            {/* A maximised window shouldn't stretch a form or a table the whole way across:
+                the content column stops at a readable width and centres itself. */}
+            <div className="mx-auto w-full max-w-screen-xl">
+              {children}
+            </div>
           </main>
         </div>
       </div>
