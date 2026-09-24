@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarDays, CheckCircle, XCircle, Eye, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { getAppointments, confirmAppointment, rejectAppointment, describeEmailOutcome, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { getAppointments, confirmAppointment, rejectAppointment, describeEmailOutcome, byNewestBooked, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate, formatManilaStamp } from "@/lib/formatDate";
 import { formatTimeRange } from "@/lib/dentistSchedules";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
@@ -73,7 +73,7 @@ export default function AdminOnlineAppointments() {
 
   // Newest bookings first, so a request that just came in is at the top of the list.
   const ordered = useMemo(
-    () => [...appointments].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    () => [...appointments].sort(byNewestBooked),
     [appointments]
   );
 

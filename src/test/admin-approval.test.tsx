@@ -253,10 +253,11 @@ describe("the appointments list", () => {
   });
 
   it("keeps only the appointments inside the chosen date range", async () => {
+    // Booked in name order; the list itself reads newest booking first.
     h.appts = [
-      apt({ id: "a", patientName: "Allen Estrella", date: "2026-09-20" }),
-      apt({ id: "b", patientName: "Pedro Reyes", date: "2026-09-25" }),
-      apt({ id: "c", patientName: "Maria Santos", date: "2026-10-02" }),
+      apt({ id: "a", patientName: "Allen Estrella", date: "2026-09-20", createdAt: "2026-09-19T00:00:00Z" }),
+      apt({ id: "b", patientName: "Pedro Reyes", date: "2026-09-25", createdAt: "2026-09-21T00:00:00Z" }),
+      apt({ id: "c", patientName: "Maria Santos", date: "2026-10-02", createdAt: "2026-09-23T00:00:00Z" }),
     ];
     await renderPage();
     const names = () => Array.from(document.querySelectorAll("tbody tr"))
@@ -265,14 +266,14 @@ describe("the appointments list", () => {
     filterBy("4"); // Date
     await screen.findByLabelText("From date");
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-24" } });
-    await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "Maria Santos"]));
+    await waitFor(() => expect(names()).toEqual(["Maria Santos", "Pedro Reyes"]));
 
     fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-09-30" } });
     await waitFor(() => expect(names()).toEqual(["Pedro Reyes"]));
 
     // Either end on its own is a valid, open-ended range.
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "" } });
-    await waitFor(() => expect(names()).toEqual(["Allen Estrella", "Pedro Reyes"]));
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "Allen Estrella"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Clear filter/ }));
     await waitFor(() => expect(names()).toHaveLength(3));
@@ -339,5 +340,33 @@ describe("the appointments list", () => {
       "All fields", "Reference", "Patient Name", "Service", "Assigned Dentist",
       "Date", "Time", "Booked On", "Type", "Status",
     ]);
+  });
+});
+
+describe("every appointment list puts the newest booking on top", () => {
+  const names = () => Array.from(document.querySelectorAll("tbody tr"))
+    .map(r => (r as HTMLTableRowElement).cells[1].textContent);
+
+  it("orders by when it was booked, not by the date it is for", async () => {
+    h.appts = [
+      // Booked last week, for next week.
+      apt({ id: "a", patientName: "Allen Estrella", date: "2026-10-02", createdAt: "2026-09-18T09:00:00Z" }),
+      // Booked just now, for a date further off still.
+      apt({ id: "b", patientName: "Pedro Reyes", date: "2027-03-10", createdAt: "2026-09-25T08:00:00Z" }),
+      // Booked yesterday, for tomorrow.
+      apt({ id: "c", patientName: "Maria Santos", date: "2026-09-26", createdAt: "2026-09-24T17:00:00Z" }),
+    ];
+    await renderPage();
+    expect(names()).toEqual(["Pedro Reyes", "Maria Santos", "Allen Estrella"]);
+  });
+
+  it("falls back to the later appointment when two were booked at once", async () => {
+    const together = "2026-09-22T00:00:00Z";
+    h.appts = [
+      apt({ id: "a", patientName: "Allen Estrella", date: "2026-09-20", createdAt: together }),
+      apt({ id: "b", patientName: "Pedro Reyes", date: "2026-10-02", createdAt: together }),
+    ];
+    await renderPage();
+    expect(names()).toEqual(["Pedro Reyes", "Allen Estrella"]);
   });
 });

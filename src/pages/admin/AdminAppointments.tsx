@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
-import { getAppointments, getBookedSlots, createAppointment, deleteAppointment, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, getBookedSlots, createAppointment, deleteAppointment, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
@@ -176,12 +176,15 @@ export default function AdminAppointments() {
     }
   };
 
+  // Newest booking first, so a walk-in just taken at the desk is the top row.
+  const ordered = useMemo(() => [...walkIns].sort(byNewestBooked), [walkIns]);
+
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Walk-in Appointments Report",
       columns: ["Patient", "Service", "Dentist", "Date", "Time", "Status"],
-      rows: walkIns.map(w => [
+      rows: ordered.map(w => [
         w.patientName,
         w.service,
         w.dentistName ?? "—",
@@ -511,7 +514,7 @@ export default function AdminAppointments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {walkIns.map(w => (
+              {ordered.map(w => (
                 <TableRow
                   key={w.id}
                   ref={registerRow(w.id)}
@@ -537,7 +540,7 @@ export default function AdminAppointments() {
                   </TableCell>
                 </TableRow>
               ))}
-              {walkIns.length === 0 && (
+              {ordered.length === 0 && (
                 <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No walk-in appointments yet</TableCell></TableRow>
               )}
             </TableBody>

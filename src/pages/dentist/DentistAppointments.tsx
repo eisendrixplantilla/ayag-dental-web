@@ -23,7 +23,7 @@ import { toast } from "@/hooks/use-toast";
 import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { formatTimeRange, toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,7 @@ export default function DentistAppointments() {
   const mine = useMemo(
     () => appointments
       .filter(a => !user?.name || a.dentistName === user.name)
-      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)),
+      .sort(byNewestBooked),
     [appointments, user],
   );
 

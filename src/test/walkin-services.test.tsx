@@ -292,3 +292,25 @@ describe("what the walk-in form tells you about the date you are picking", () =>
     expect(note.textContent).toMatch(/automatically Confirmed — no approval needed/);
   });
 });
+
+describe("the walk-in list puts the newest booking on top", () => {
+  it("orders by when it was taken at the desk, not by the date it is for", async () => {
+    h.walkIns = [
+      { id: "a", patientName: "Allen Estrella", service: "Oral", dentistName: "Dr. Mike Johnson",
+        date: "2026-10-02", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
+        createdAt: "2026-09-18T09:00:00Z" },
+      { id: "b", patientName: "Pedro Reyes", service: "Oral", dentistName: "Dr. Mike Johnson",
+        date: "2027-03-10", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
+        createdAt: "2026-09-25T08:00:00Z" },
+      { id: "c", patientName: "Maria Santos", service: "Oral", dentistName: "Dr. Mike Johnson",
+        date: "2026-09-26", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
+        createdAt: "2026-09-24T17:00:00Z" },
+    ];
+    await renderPage();
+    await screen.findByText("Pedro Reyes");
+
+    const names = Array.from(document.querySelectorAll("tbody tr"))
+      .map(r => (r as HTMLTableRowElement).cells[0].textContent);
+    expect(names).toEqual(["Pedro Reyes", "Maria Santos", "Allen Estrella"]);
+  });
+});

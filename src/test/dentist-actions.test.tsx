@@ -191,3 +191,19 @@ describe("a rescheduled visit keeps the length it already had", () => {
     expect(slotLabels()).toContain("2:00 PM – 2:45 PM");
   });
 });
+
+describe("the dentist's list puts the newest booking on top", () => {
+  it("orders by when it was booked, not by the date it is for", async () => {
+    h.appts = [
+      apt({ id: "a", patientName: "Allen Estrella", date: "2026-10-02", createdAt: "2026-09-18T09:00:00Z" }),
+      apt({ id: "b", patientName: "Pedro Reyes", date: "2027-03-10", createdAt: "2026-09-25T08:00:00Z" }),
+      apt({ id: "c", patientName: "Maria Santos", date: "2026-09-26", createdAt: "2026-09-24T17:00:00Z" }),
+    ];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    await screen.findByText("Pedro Reyes");
+
+    const names = Array.from(document.querySelectorAll("tbody tr"))
+      .map(r => (r as HTMLTableRowElement).cells[0].textContent);
+    expect(names).toEqual(["Pedro Reyes", "Maria Santos", "Allen Estrella"]);
+  });
+});

@@ -136,6 +136,13 @@ export async function deleteAppointment(id: string): Promise<void> {
 export const confirmAppointment = (id: string) => updateAppointment(id, { status: "confirmed" });
 export const rejectAppointment = (id: string, reason: string) => updateAppointment(id, { status: "rejected", reason });
 export const cancelAppointment = (id: string, reason: string, remarks?: string) => updateAppointment(id, { status: "cancelled", reason, remarks });
+/** Newest booking first: whatever was just added sits at the top of the list, no
+ * matter which date it is for. Two bookings taken in the same moment — or a record
+ * with no timestamp at all — fall back to the later appointment slot. */
+export const byNewestBooked = (a: Appointment, b: Appointment) =>
+  Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? "")
+  || (b.date + b.time).localeCompare(a.date + a.time);
+
 export const rescheduleAppointment = (id: string, data: { date: string; time: string; reason: string; remarks?: string }) =>
   updateAppointment(id, { status: "rescheduled", ...data });
 export const completeAppointment = (id: string) => updateAppointment(id, { status: "completed" });
