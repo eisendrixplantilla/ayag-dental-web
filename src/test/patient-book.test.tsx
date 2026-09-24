@@ -179,8 +179,12 @@ describe("the services on offer", () => {
 });
 
 describe("slots while the form sits open", () => {
-  const slotPicker = () => screen.getByLabelText("Choose a time slot") as HTMLSelectElement;
-  const slotOptions = () => within(slotPicker()).getAllByRole("option").map(o => o.textContent).filter(Boolean);
+  // The times are buttons now, not a dropdown: the free slots are on the page.
+  const slotGroup = () => screen.getByRole("group", { name: "Available time slots" });
+  const slotOptions = () => within(slotGroup()).getAllByRole("button").map(b => b.textContent);
+  const pickSlot = (label: string) => fireEvent.click(within(slotGroup()).getByRole("button", { name: label }));
+  const chosenSlot = () =>
+    within(slotGroup()).queryAllByRole("button", { pressed: true }).map(b => b.textContent);
 
   const pickVisit = async () => {
     await renderPage();
@@ -205,17 +209,25 @@ describe("slots while the form sits open", () => {
     expect(slotOptions()[0]).toBe("10:00 AM – 10:30 AM");
   });
 
+  it("marks the time chosen, so it is obvious which one is held", async () => {
+    await pickVisit();
+    expect(chosenSlot()).toEqual([]);
+
+    pickSlot("9:00 AM – 9:30 AM");
+    await waitFor(() => expect(chosenSlot()).toEqual(["9:00 AM – 9:30 AM"]));
+  });
+
   it("drops a time somebody else takes while this form is open, and says so", async () => {
     await pickVisit();
-    fireEvent.change(slotPicker(), { target: { value: "09:00" } });
-    await waitFor(() => expect(slotPicker().value).toBe("09:00"));
+    pickSlot("9:00 AM – 9:30 AM");
+    await waitFor(() => expect(chosenSlot()).toEqual(["9:00 AM – 9:30 AM"]));
 
     // Another patient books it; coming back to the tab picks that up.
     h.booked = [{ time: "09:00", endTime: "09:30" }];
     fireEvent(window, new Event("focus"));
 
     await waitFor(() => expect(slotOptions()).not.toContain("9:00 AM – 9:30 AM"));
-    expect(slotPicker().value).toBe("");
+    expect(chosenSlot()).toEqual([]);
     expect(toasts.info).toHaveBeenCalledWith("That time has just been taken. Please choose another.");
   });
 });

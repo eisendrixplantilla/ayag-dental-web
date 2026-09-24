@@ -4,13 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Clock3, CalendarIcon, Loader2, X } from "lucide-react";
+import { CalendarPlus, Clock3, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
@@ -178,7 +177,7 @@ export default function PatientBook() {
   }
 
   return (
-    <div className="space-y-4 w-full max-w-4xl">
+    <div className="space-y-4 w-full max-w-5xl">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground">Book Appointment</h1>
@@ -193,32 +192,32 @@ export default function PatientBook() {
 
       <Card className="shadow-card">
         <CardContent className="p-4 sm:p-5 space-y-4">
-          {/* Step 1: Service(s) — the chips sit beside the picker rather than above it,
-              so adding several services doesn't push the rest of the form down. */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Service</Label>
-            <div className="flex flex-col sm:flex-row sm:items-start gap-2">
-              <div className="sm:w-64 shrink-0">
-                {/* Always shows its placeholder: picking an option adds to the list beside
-                    it rather than replacing a single selection. */}
-                <Select
-                  value=""
-                  disabled={remaining.length === 0}
-                  onValueChange={(v) => setChosen(prev => [...prev, v])}
-                >
-                  <SelectTrigger className="h-9" aria-label="Add a service">
-                    <SelectValue placeholder={
-                      remaining.length === 0 ? "All services added"
-                        : chosen.length === 0 ? "Choose a service"
-                        : "Add another service"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 sm:min-h-9 sm:py-1">
+          {/* What and who — one row, with the chosen services as chips beside the picker
+              so adding several doesn't push the rest of the form down. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Service</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-full sm:w-56">
+                  {/* Always shows its placeholder: picking an option adds to the list beside
+                      it rather than replacing a single selection. */}
+                  <Select
+                    value=""
+                    disabled={remaining.length === 0}
+                    onValueChange={(v) => setChosen(prev => [...prev, v])}
+                  >
+                    <SelectTrigger className="h-9" aria-label="Add a service">
+                      <SelectValue placeholder={
+                        remaining.length === 0 ? "All services added"
+                          : chosen.length === 0 ? "Choose a service"
+                          : "Add another service"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
                 {chosen.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">Add as many as you need for this visit.</span>
+                  <span className="text-xs text-muted-foreground">Add as many as you need.</span>
                 ) : (
                   chosen.map(s => (
                     <Badge key={s} variant="secondary" className="gap-1 py-0.5 pl-2.5 pr-1 font-normal">
@@ -236,93 +235,108 @@ export default function PatientBook() {
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Steps 2–4 side by side: dentist, then the date and time they are free. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Dentist</Label>
-              <Select
-                value={dentistId}
-                disabled={chosen.length === 0 || loadingDentists}
-                onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
-              >
-                <SelectTrigger className="h-9" aria-label="Choose a dentist">
-                  <SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Date</Label>
-              <Popover>
-                <PopoverTrigger asChild disabled={!dentistId}>
-                  <Button variant="outline" disabled={!dentistId} className={cn("h-9 w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                    <span className="truncate">{date ? format(date, "PPP") : dentistId ? "Pick a date" : "Select a dentist first"}</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(d) => { setDate(d); setTime(""); }}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
-                    disabled={(d) => {
-                      if (d < manilaTodayAsLocalDate()) return true;
-                      if (!schedule) return true;
-                      return !isDentistAvailableOn(schedule, d);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-1.5 sm:col-span-2 md:col-span-1">
-              <Label className="text-xs text-muted-foreground">Time Slot</Label>
-              <Select value={time} onValueChange={setTime} disabled={!dentistId || !date || loadingSlots || slots.length === 0}>
-                <SelectTrigger className="h-9" aria-label="Choose a time slot">
-                  <SelectValue placeholder={!dentistId || !date ? "Select dentist and date first" : loadingSlots ? "Loading slots..." : slots.length === 0 ? "No slots available" : "Choose a time slot"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {slots.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="w-full sm:w-64">
+                <Select
+                  value={dentistId}
+                  disabled={chosen.length === 0 || loadingDentists}
+                  onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
+                >
+                  <SelectTrigger className="h-9" aria-label="Choose a dentist">
+                    <SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground min-h-4 leading-tight">
+                {!loadingDentists && dentists.length === 0 ? (
+                  <span className="text-destructive">No dentists are available for booking right now.</span>
+                ) : loadingSchedule ? "Loading schedule..."
+                  : dentistId && schedule && schedule.days.length === 0 ? (
+                    <span className="text-destructive">This dentist has no working schedule configured yet.</span>
+                  ) : schedule && schedule.days.length > 0 ? `Working hours: ${scheduleSummary}` : ""}
+              </p>
             </div>
           </div>
 
-          {/* One line for whatever the form currently has to say, so the notes don't
-              stack up and stretch the card. */}
-          <div className="min-h-4 text-xs leading-tight space-y-0.5">
-            {!loadingDentists && dentists.length === 0 && (
-              <p className="text-destructive">No dentists are available for booking right now.</p>
-            )}
-            {loadingSchedule && <p className="text-muted-foreground">Loading schedule...</p>}
-            {!loadingSchedule && schedule && schedule.days.length > 0 && (
-              <p className="text-muted-foreground">Working hours: {scheduleSummary}</p>
-            )}
-            {!loadingSchedule && dentistId && schedule && schedule.days.length === 0 && (
-              <p className="text-destructive">This dentist has no working schedule configured yet.</p>
-            )}
-            {dentistId && date && !loadingSlots && (
-              slots.length === 0
-                ? <p className="text-destructive">No slots left on that date — please pick another.</p>
-                : <p className="text-muted-foreground">
-                    {slots.length} slot{slots.length > 1 ? "s" : ""} available for {dentist}
-                  </p>
-            )}
+          {/* When — the month and the free times side by side, so picking a day and seeing
+              what is left is one glance rather than two dropdowns. */}
+          <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-fit", !dentistId && "opacity-60")}>
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(d) => { setDate(d); setTime(""); }}
+                className="p-2 pointer-events-auto"
+                disabled={(d) => {
+                  if (d < manilaTodayAsLocalDate()) return true;
+                  if (!schedule) return true;
+                  return !isDentistAvailableOn(schedule, d);
+                }}
+              />
+            </div>
+
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className="text-xs text-muted-foreground">
+                  {date ? `Times on ${format(date, "EEE, MMM d")}` : "Available times"}
+                </Label>
+                {dentistId && date && !loadingSlots && slots.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                )}
+              </div>
+
+              {!dentistId || !date ? (
+                <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-md">
+                  {chosen.length === 0 ? "Choose a service to begin."
+                    : !dentistId ? "Choose a dentist to see their calendar."
+                    : "Pick a date to see the free times."}
+                </p>
+              ) : loadingSlots ? (
+                <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />Loading times...
+                </p>
+              ) : slots.length === 0 ? (
+                <p className="text-sm text-destructive py-6 text-center border border-dashed rounded-md">
+                  Fully booked that day — please pick another date.
+                </p>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Available time slots"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1"
+                >
+                  {slots.map(s => (
+                    <Button
+                      key={s.value}
+                      type="button"
+                      size="sm"
+                      variant={time === s.value ? "default" : "outline"}
+                      aria-pressed={time === s.value}
+                      className={cn("h-9 justify-center font-normal text-xs whitespace-nowrap",
+                        time === s.value && "gradient-primary text-primary-foreground")}
+                      onClick={() => setTime(s.value)}
+                    >
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-3">
             <p className="text-xs text-muted-foreground">
-              Requests are submitted as <span className="text-warning font-medium">Pending</span> and need admin approval.
+              {time
+                ? `${serviceLabel} with ${dentist} on ${date ? format(date, "PPP") : ""} at ${selectedLabel}.`
+                : <>Requests are submitted as <span className="text-warning font-medium">Pending</span> and need admin approval.</>}
             </p>
             <Button
-              className="gradient-primary text-primary-foreground sm:w-auto"
+              className="gradient-primary text-primary-foreground sm:w-auto shrink-0"
               disabled={chosen.length === 0 || !dentistId || !date || !time || submitting}
               onClick={handleSubmit}
             >
