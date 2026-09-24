@@ -118,11 +118,11 @@ describe("what the reschedule dialog tells you about the move", () => {
     fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
     const slots = () => within(dialog().getByRole("group", { name: "Available time slots" }));
     await waitFor(() => expect(slots().getAllByRole("button").length).toBeGreaterThan(0));
-    fireEvent.click(slots().getByRole("button", { name: "9:00 AM" }));
+    fireEvent.click(slots().getByRole("button", { name: "9:00 AM – 9:45 AM" }));
 
     const readback = (await dialog().findByText("March 10th, 2027")).closest("p")!;
     expect(readback.textContent).toBe(
-      "Moving Juan Dela Cruz's Root Canal from September 30th, 2026 at 2:00 PM – 2:45 PM to March 10th, 2027 at 9:00 AM.",
+      "Moving Juan Dela Cruz's Root Canal from September 30th, 2026 at 2:00 PM – 2:45 PM to March 10th, 2027 at 9:00 AM – 9:45 AM.",
     );
     expect(readback.className).toContain("bg-primary/5");
     // Where it is going carries more weight than where it came from.
@@ -137,5 +137,57 @@ describe("what the reschedule dialog tells you about the move", () => {
     fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
     await dialog().findByText(/^Times on /);
     expect(dialog().queryByText(/^Moving /)).toBeNull(); // the day alone isn't a move
+  });
+});
+
+describe("a rescheduled visit keeps the length it already had", () => {
+  const FULL_WEEK = {
+    days: [0, 1, 2, 3, 4, 5, 6].map(dayOfWeek => ({
+      dayOfWeek, start: "09:00", end: "17:00", lunchStart: null, lunchEnd: null, duration: 30, maxPatients: 20,
+    })),
+    unavailable: [],
+  };
+  const dialog = () => within(document.querySelector("[role=dialog]") as HTMLElement);
+  const slotLabels = () =>
+    within(dialog().getByRole("group", { name: "Available time slots" }))
+      .getAllByRole("button").map(b => b.textContent);
+
+  // A 45-minute visit: 2:00 PM to 2:45 PM.
+  const open = async (extra: Appointment[] = [], date = "2026-09-30") => {
+    h.schedule = FULL_WEEK;
+    h.appts = [
+      apt({ id: "c", patientName: "Juan Dela Cruz", service: "Root Canal", status: "confirmed",
+            date, time: "14:00", endTime: "14:45" }),
+      ...extra,
+    ];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    fireEvent.click(row.getByRole("button", { name: /Reschedule/ }));
+    await waitFor(() => expect(document.querySelector("[role=dialog]")).not.toBeNull());
+    fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
+    await waitFor(() => expect(slotLabels().length).toBeGreaterThan(0));
+  };
+
+  it("offers only the slots the whole visit fits into, and says when it would end", async () => {
+    await open();
+    expect(slotLabels()[0]).toBe("9:00 AM – 9:45 AM");
+    // The day ends at 5, so a 45-minute visit cannot start at 4:30.
+    expect(slotLabels()).toContain("4:00 PM – 4:45 PM");
+    expect(slotLabels().some(l => l!.startsWith("4:30 PM"))).toBe(false);
+  });
+
+  it("keeps clear of every slot an existing booking covers, not just its start", async () => {
+    await open([apt({ id: "other", patientName: "Ana Reyes", status: "confirmed",
+                      date: "2027-03-10", time: "10:00", endTime: "11:00" })]);
+    // 9:30–10:15 and 10:30–11:15 both run into Ana's hour, so neither is on offer.
+    for (const taken of ["9:30 AM – 10:15 AM", "10:00 AM – 10:45 AM", "10:30 AM – 11:15 AM"]) {
+      expect(slotLabels()).not.toContain(taken);
+    }
+    expect(slotLabels()).toContain("11:00 AM – 11:45 AM");
+  });
+
+  it("does not let the appointment block its own slot when it stays on the same day", async () => {
+    await open([], "2027-03-10"); // already on the day being picked
+    expect(slotLabels()).toContain("2:00 PM – 2:45 PM");
   });
 });

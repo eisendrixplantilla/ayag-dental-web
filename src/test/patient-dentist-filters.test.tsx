@@ -349,11 +349,11 @@ describe("what the reschedule dialog tells a patient about the move", () => {
     fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
     const slots = () => within(dialog().getByRole("group", { name: "Available time slots" }));
     await waitFor(() => expect(slots().getAllByRole("button").length).toBeGreaterThan(0));
-    fireEvent.click(slots().getByRole("button", { name: "9:00 AM" }));
+    fireEvent.click(slots().getByRole("button", { name: "9:00 AM – 9:45 AM" }));
 
     const readback = (await dialog().findByText("March 10th, 2027")).closest("p")!;
     expect(readback.textContent).toBe(
-      "Moving your Root Canal from January 10th, 2027 at 2:00 PM – 2:45 PM to March 10th, 2027 at 9:00 AM.",
+      "Moving your Root Canal from January 10th, 2027 at 2:00 PM – 2:45 PM to March 10th, 2027 at 9:00 AM – 9:45 AM.",
     );
     expect(readback.className).toContain("bg-primary/5");
     // Where it is going carries more weight than where it came from.
@@ -362,6 +362,22 @@ describe("what the reschedule dialog tells a patient about the move", () => {
 
     // The rule that the move needs approving is still said, alongside it.
     expect(dialog().getByText(/goes back to/).textContent).toMatch(/Pending.*requires admin approval/);
+  });
+
+  it("offers only the slots the whole visit fits into, and says when it would end", async () => {
+    await openReschedule();
+    fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
+    const labels = async () => {
+      const group = await dialog().findByRole("group", { name: "Available time slots" });
+      return within(group).getAllByRole("button").map(b => b.textContent);
+    };
+    await waitFor(async () => expect((await labels()).length).toBeGreaterThan(0));
+
+    // The visit runs 2:00–2:45, so it keeps its 45 minutes wherever it lands.
+    expect((await labels())[0]).toBe("9:00 AM – 9:45 AM");
+    // The day ends at 5, so it cannot start at 4:30.
+    expect(await labels()).toContain("4:00 PM – 4:45 PM");
+    expect((await labels()).some(l => l!.startsWith("4:30 PM"))).toBe(false);
   });
 
   it("says nothing about a move until a day and a time are both chosen", async () => {

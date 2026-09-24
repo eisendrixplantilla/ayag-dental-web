@@ -142,13 +142,23 @@ export default function DentistAppointments() {
   const [cxReason, setCxReason] = useState("");
   const [cxRemarks, setCxRemarks] = useState("");
 
+  // A move keeps the visit as long as it already is, which is also what the server
+  // does to end_time — so only the slots the whole visit actually fits into are
+  // offered, and each says when it would finish.
+  const rsVisitMinutes = resched?.endTime
+    ? toMinutes(resched.endTime) - toMinutes(resched.time)
+    : undefined;
+
   const slots = useMemo(() => {
     if (!rsDate || !schedule) return [];
     const bookedForDate = mine
+      // The appointment being moved doesn't hold its own slot against itself.
+      .filter(a => a.id !== resched?.id)
       .filter(a => a.date === rsDate && (a.status === "confirmed" || a.status === "pending" || a.status === "rescheduled"))
-      .map(a => a.time);
-    return generateAvailableSlots(schedule, parseISO(rsDate), bookedForDate);
-  }, [rsDate, schedule, mine]);
+      // How long each existing booking runs, so a long one blocks every slot it covers.
+      .map(a => ({ time: a.time, endTime: a.endTime }));
+    return generateAvailableSlots(schedule, parseISO(rsDate), bookedForDate, rsVisitMinutes);
+  }, [rsDate, schedule, mine, resched, rsVisitMinutes]);
 
   const rsSlotLabel = slots.find(s => s.value === rsSlot)?.label ?? "";
 

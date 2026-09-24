@@ -82,6 +82,13 @@ export default function PatientAppointments() {
     getDentistSchedule(rescheduleApt.dentistId).then(setSchedule).catch(() => setSchedule(null));
   }, [rescheduleApt]);
 
+  // A move keeps the visit as long as it already is, which is also what the server
+  // does to end_time — so only the slots the whole visit actually fits into are
+  // offered, and each says when it would finish.
+  const visitMinutes = rescheduleApt?.endTime
+    ? toMinutes(rescheduleApt.endTime) - toMinutes(rescheduleApt.time)
+    : undefined;
+
   useEffect(() => {
     if (!rescheduleApt?.dentistId || !newDate || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
@@ -89,10 +96,10 @@ export default function PatientAppointments() {
       dentistId: rescheduleApt.dentistId, dentistName: rescheduleApt.dentistName,
       date: toKey(newDate), excludeId: rescheduleApt.id,
     })
-      .then((booked) => setSlots(generateAvailableSlots(schedule, newDate, booked)))
+      .then((booked) => setSlots(generateAvailableSlots(schedule, newDate, booked, visitMinutes)))
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
-  }, [rescheduleApt, newDate, schedule]);
+  }, [rescheduleApt, newDate, schedule, visitMinutes]);
 
   // Which days the calendar in the reschedule dialog will offer at all — rather than
   // leaving the greyed-out dates to explain themselves.
