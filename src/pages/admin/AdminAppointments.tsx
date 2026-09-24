@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3 } from "lucide-react";
+import { CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -19,7 +20,8 @@ import {
   getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
-import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
+import { formatManilaDate, formatManilaStamp, manilaTodayAsLocalDate } from "@/lib/formatDate";
+import { appointmentRef } from "@/lib/appointmentRef";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
@@ -189,13 +191,24 @@ export default function AdminAppointments() {
       ]),
     });
 
-  const handleRemove = async (id: string) => {
+  // Everything about a walk-in, including removing it, lives behind View — the same
+  // one-way-in the online appointments list uses.
+  const [viewing, setViewing] = useState<Appointment | null>(null);
+  const [removing, setRemoving] = useState<Appointment | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmRemove = async () => {
+    if (!removing) return;
+    setDeleting(true);
     try {
-      await deleteAppointment(id);
-      toast.success("Removed");
+      await deleteAppointment(removing.id);
+      toast.success("Walk-in appointment removed");
+      setRemoving(null);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove appointment");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -486,8 +499,15 @@ export default function AdminAppointments() {
                   <TableCell className="whitespace-nowrap">{formatTimeRange(w.time, w.endTime)}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
                   <TableCell className="print:hidden">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(w.id)}>
-                      <Trash2 className="w-4 h-4" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label="View details"
+                      title="View details"
+                      onClick={() => setViewing(w)}
+                    >
+                      <Eye className="w-4 h-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -500,6 +520,66 @@ export default function AdminAppointments() {
           )}
         </CardContent>
       </Card>
+
+      {/* Details, with Remove behind it */}
+      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
+        <DialogContent className="max-w-md bg-background max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Walk-in Appointment</DialogTitle>
+            <DialogDescription>{viewing ? appointmentRef(viewing.id) : ""}</DialogDescription>
+          </DialogHeader>
+          {viewing && (
+            <div className="space-y-2 text-sm">
+              <DetailRow label="Patient" value={viewing.patientName} />
+              {viewing.contact && <DetailRow label="Contact" value={viewing.contact} />}
+              {viewing.email && <DetailRow label="Email" value={viewing.email} />}
+              <DetailRow label="Service" value={viewing.service} />
+              <DetailRow label="Dentist" value={viewing.dentistName ?? "—"} />
+              <DetailRow label="Date" value={viewing.date} />
+              <DetailRow label="Time" value={formatTimeRange(viewing.time, viewing.endTime)} />
+              <DetailRow label="Status" value={viewing.status} />
+              <DetailRow label="Booked On" value={formatManilaStamp(viewing.createdAt)} />
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setViewing(null)}>Close</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { setRemoving(viewing); setViewing(null); }}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Removing is permanent, so it is confirmed rather than done on one click. */}
+      <Dialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)}>
+        <DialogContent className="max-w-md bg-background">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Remove this walk-in?</DialogTitle>
+            <DialogDescription>
+              {removing && `${removing.patientName} — ${removing.service} on ${removing.date} at ${formatTimeRange(removing.time, removing.endTime)}.`}
+              {" "}This deletes the appointment for good and frees the time slot.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRemove} disabled={deleting}>
+              {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 border-b pb-1.5 last:border-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-right break-words">{value}</span>
     </div>
   );
 }

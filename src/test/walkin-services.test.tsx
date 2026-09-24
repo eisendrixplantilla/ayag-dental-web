@@ -4,12 +4,18 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The walk-in form runs for real. Replaced: the network, and the three Radix/cmdk
 // widgets jsdom can't drive (Select, Popover, Command).
+const h = vi.hoisted(() => ({ walkIns: [] as any[], deleted: [] as string[] }));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "admin-1", name: "Dr. Sarah Chen", email: "admin@admin.com", role: "admin", verified: true } }),
-  api: vi.fn(async (path: string) => {
+  api: vi.fn(async (path: string, init: RequestInit = {}) => {
+    if (init.method === "DELETE") {
+      h.deleted.push(new URLSearchParams(path.split("?")[1]).get("id") ?? "");
+      return {};
+    }
     if (path.startsWith("/patients")) return { patients: [] };
     if (path.includes("bookedSlots")) return { times: [] };
-    return { appointments: [] };
+    return { appointments: h.walkIns };
   }),
 }));
 
@@ -131,5 +137,85 @@ describe("walk-in appointments cover more than one service", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Oral" }));
     await waitFor(() => expect(dentist).toBeDisabled());
     expect(options()).toContain("Oral"); // back on offer
+  });
+});
+
+describe("what the walk-in list lets you do", () => {
+  const walkIn = {
+    id: "3f9c2a10-0000-4000-8000-00000000000a",
+    patientId: null,
+    patientName: "Rosa Mendoza",
+    contact: "09171234567",
+    email: null,
+    dentistId: "dr-mike",
+    dentistName: "Dr. Mike Johnson",
+    service: "Oral",
+    date: "2026-09-25",
+    time: "09:00",
+    endTime: "09:30",
+    type: "walk-in",
+    status: "confirmed",
+    reason: null,
+    remarks: null,
+    rescheduleCount: 0,
+    createdBy: "admin",
+    createdAt: "2026-09-24T01:00:00Z",
+  };
+
+  beforeEach(() => {
+    h.walkIns = [walkIn];
+    h.deleted = [];
+  });
+
+  const openView = async () => {
+    render(<MemoryRouter><AdminAppointments /></MemoryRouter>);
+    await screen.findByText("Rosa Mendoza");
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
+    await screen.findByText("Walk-in Appointment");
+  };
+  const inDialog = (name: RegExp) =>
+    screen.getAllByRole("button", { name }).find(b => b.closest("[role=dialog]")) as HTMLElement;
+
+  it("puts everything behind the eye — no delete button loose in the row", async () => {
+    render(<MemoryRouter><AdminAppointments /></MemoryRouter>);
+    await screen.findByText("Rosa Mendoza");
+
+    const row = screen.getByText("Rosa Mendoza").closest("tr")!;
+    const actions = within(row).getAllByRole("button").map(b => b.getAttribute("aria-label"));
+    expect(actions).toEqual(["View details"]);
+  });
+
+  it("shows the appointment's details behind it", async () => {
+    await openView();
+
+    // The row behind the dialog shows the same names, so look inside the dialog.
+    const dialog = within(document.querySelector("[role=dialog]") as HTMLElement);
+    expect(dialog.getByText("APT-3F9C2A")).toBeInTheDocument();
+    expect(dialog.getByText("09171234567")).toBeInTheDocument();
+    expect(dialog.getByText("Dr. Mike Johnson")).toBeInTheDocument();
+    expect(dialog.getByText("9:00 AM – 9:30 AM")).toBeInTheDocument();
+    expect(dialog.getByText(/Sep 24, 2026/)).toBeInTheDocument(); // booked on
+  });
+
+  it("asks before removing, and removes on confirmation", async () => {
+    await openView();
+    fireEvent.click(inDialog(/^Remove$/));
+
+    // The details step hands over to a confirmation rather than deleting on one click.
+    await screen.findByText("Remove this walk-in?");
+    expect(h.deleted).toEqual([]);
+
+    fireEvent.click(inDialog(/^Remove$/));
+    await waitFor(() => expect(h.deleted).toEqual(["3f9c2a10-0000-4000-8000-00000000000a"]));
+  });
+
+  it("leaves the appointment alone if the confirmation is dismissed", async () => {
+    await openView();
+    fireEvent.click(inDialog(/^Remove$/));
+    await screen.findByText("Remove this walk-in?");
+
+    fireEvent.click(inDialog(/^Cancel$/));
+    await waitFor(() => expect(screen.queryByText("Remove this walk-in?")).toBeNull());
+    expect(h.deleted).toEqual([]);
   });
 });
