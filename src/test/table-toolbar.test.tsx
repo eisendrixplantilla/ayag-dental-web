@@ -16,6 +16,19 @@ vi.mock("@/lib/api/staff", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/staff")>();
   return { ...actual, getStaff: vi.fn(async () => h.staff), getDentistSchedule: vi.fn(async () => ({ days: [], unavailable: [] })) };
 });
+vi.mock("@/lib/api/appointments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/appointments")>();
+  return {
+    ...actual,
+    getAppointments: vi.fn(async () => [{
+      id: "a1", patientId: "p1", patientName: "Maria Santos", contact: null, email: null,
+      dentistId: null, dentistName: "Dr. Mike Johnson", service: "Oral", date: "2026-09-20",
+      time: "09:00", endTime: null, type: "walk-in", status: "completed", reason: null, remarks: null,
+      rescheduleCount: 0, createdBy: "admin", createdAt: "2026-09-20T01:00:00Z", updatedAt: "2026-09-20T01:00:00Z",
+    }]),
+  };
+});
+
 vi.mock("@/lib/api/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/patients")>();
   return { ...actual, getPatients: vi.fn(async () => h.patients) };
@@ -179,5 +192,27 @@ describe("the pages filter by column", () => {
     expect(printed.calls[0].filters).toContainEqual({
       label: "Filtered By", value: "Date Registered: from 2026-09-22",
     });
+  });
+});
+
+describe("patient records keeps walk-ins findable", () => {
+  it("shows a Walk-in column, and filters by it the way the old picker did", async () => {
+    const { default: AdminPatients } = await import("@/pages/admin/AdminPatients");
+    render(<MemoryRouter><AdminPatients /></MemoryRouter>);
+    await screen.findByText("Maria Santos");
+
+    // Maria was seen at the desk; Pedro booked online.
+    const cells = (name: string) =>
+      Array.from(screen.getByText(name).closest("tr")!.querySelectorAll("td")).map(c => c.textContent);
+    expect(cells("Maria Santos")).toContain("Yes");
+    expect(cells("Pedro Reyes")).toContain("No");
+
+    chooseField("5"); // Walk-in
+    await waitFor(() => expect(screen.getByLabelText("Filter by Walk-in")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Filter by Walk-in"), { target: { value: "Yes" } });
+
+    await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
+    expect(screen.getByText("Maria Santos")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 patient(s)")).toBeInTheDocument();
   });
 });

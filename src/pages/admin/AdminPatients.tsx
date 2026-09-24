@@ -19,7 +19,7 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
-const COLUMNS = ["Name", "Age", "Phone", "Email", "Status"];
+const COLUMNS = ["Name", "Age", "Phone", "Email", "Status", "Walk-in"];
 
 // A walk-in booked for someone with no account has no patients row behind it, so it
 // can only be shown read-only: there's nothing to open, edit or archive.
@@ -33,17 +33,6 @@ interface PatientRow {
   /** Has at least one walk-in visit — true for every guest, and for account holders booked at the desk. */
   hasWalkIn: boolean;
 }
-
-type RecordFilter = "all" | "account" | "no-account" | "walk-in";
-
-// The categories overlap on purpose: an account holder booked at the desk is both
-// "Has account" and "Walk-in", while every guest is both "No account" and "Walk-in".
-const FILTERS: { value: RecordFilter; label: string; test: (r: PatientRow) => boolean }[] = [
-  { value: "all", label: "All patients", test: () => true },
-  { value: "account", label: "Has account", test: r => r.patient !== null },
-  { value: "no-account", label: "No account", test: r => r.patient === null },
-  { value: "walk-in", label: "Walk-in", test: r => r.hasWalkIn },
-];
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
@@ -122,6 +111,7 @@ export default function AdminPatients() {
       r.phone || "—",
       r.email || "—",
       r.patient ? r.patient.status : "no account",
+      r.hasWalkIn ? "Yes" : "No",
     ]),
     [rows],
   );
@@ -324,6 +314,7 @@ export default function AdminPatients() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Walk-in</TableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -349,6 +340,7 @@ export default function AdminPatients() {
                         <Badge variant="outline" className="text-muted-foreground">no account</Badge>
                       )}
                     </TableCell>
+                    <TableCell>{r.hasWalkIn ? "Yes" : "No"}</TableCell>
                     <TableCell className="print:hidden">
                       {p && (
                         <div className="flex gap-1">
@@ -361,7 +353,7 @@ export default function AdminPatients() {
                 );
               })}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
