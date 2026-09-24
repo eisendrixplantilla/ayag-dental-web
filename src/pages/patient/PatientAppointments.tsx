@@ -7,14 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { Eye, Edit, X, Info, Loader2, Printer } from "lucide-react";
+import { Eye, Edit, X, Info, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
-import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
+import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -93,6 +93,17 @@ export default function PatientAppointments() {
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
   }, [rescheduleApt, newDate, schedule]);
+
+  // Which days the calendar in the reschedule dialog will offer at all — rather than
+  // leaving the greyed-out dates to explain themselves.
+  const scheduleSummary = useMemo(() => {
+    if (!schedule || schedule.days.length === 0) return "";
+    return [...schedule.days]
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map(d => `${DAY_NAMES[d.dayOfWeek].slice(0, 3)} ${toLabel(toMinutes(d.start))}–${toLabel(toMinutes(d.end))}`)
+      .join(", ");
+  }, [schedule]);
+  const newTimeLabel = slots.find(s => s.value === newTime)?.label ?? "";
 
   const upcoming = appointments
     .filter((a) => a.status === "pending" || a.status === "confirmed" || a.status === "rescheduled")
@@ -364,6 +375,17 @@ export default function PatientAppointments() {
             {/* Same shape as booking: the month, then that day's free times. */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">New Date</Label>
+              {scheduleSummary && (
+                <p className="text-xs leading-tight">
+                  <span className="flex items-start gap-1.5 text-foreground">
+                    <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                    <span>
+                      <span className="font-semibold">{rescheduleApt?.dentistName}'s hours:</span>{" "}
+                      <span className="font-medium">{scheduleSummary}</span>
+                    </span>
+                  </span>
+                </p>
+              )}
               <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
                 <Calendar
                   mode="single"
@@ -380,12 +402,15 @@ export default function PatientAppointments() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2">
+                {/* The times below mean nothing without the day they are on. */}
+                <Label className={cn("text-sm font-semibold", newDate ? "text-foreground" : "text-muted-foreground")}>
                   {newDate ? `Times on ${format(newDate, "EEE, MMM d")}` : "Available times"}
                 </Label>
                 {newDate && !loadingSlots && slots.length > 0 && (
-                  <span className="text-xs text-muted-foreground">{slots.length} free</span>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 whitespace-nowrap">
+                    {slots.length} free
+                  </Badge>
                 )}
               </div>
               {!newDate ? (
@@ -427,6 +452,20 @@ export default function PatientAppointments() {
             <p className="text-xs text-muted-foreground">
               After rescheduling, your appointment goes back to <span className="text-warning font-medium">Pending</span> and requires admin approval.
             </p>
+
+            {/* The last thing read before Confirm: where it is going, and where from. */}
+            {rescheduleApt && newDate && newTime && (
+              <p className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground">
+                <CalendarCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  Moving your <span className="font-semibold">{rescheduleApt.service}</span> from{" "}
+                  <span className="font-medium">{format(parseISO(rescheduleApt.date), "PPP")}</span> at{" "}
+                  <span className="font-medium">{formatTimeRange(rescheduleApt.time, rescheduleApt.endTime)}</span> to{" "}
+                  <span className="font-semibold">{format(newDate, "PPP")}</span> at{" "}
+                  <span className="font-semibold">{newTimeLabel}</span>.
+                </span>
+              </p>
+            )}
             <Button
               className="w-full gradient-primary text-primary-foreground h-11 sm:h-10"
               disabled={!newDate || !newTime || saving}

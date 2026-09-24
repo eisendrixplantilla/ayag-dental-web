@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   patients: [] as Patient[],
   role: "patient" as string,
   name: "Maria Santos" as string,
+  // No working days unless a test gives the dentist some.
+  schedule: { days: [] as any[], unavailable: [] as any[] },
 }));
 const printed = vi.hoisted(() => ({ calls: [] as any[] }));
 
@@ -28,6 +30,18 @@ vi.mock("@/lib/api/appointments", async (importOriginal) => {
 vi.mock("@/lib/api/dentalRecords", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/dentalRecords")>();
   return { ...actual, getDentalRecords: vi.fn(async () => h.records) };
+});
+vi.mock("@/lib/api/staff", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/staff")>();
+  return { ...actual, getDentistSchedule: vi.fn(async () => h.schedule) };
+});
+// The calendar can't be driven in jsdom; a button that picks one day can.
+vi.mock("@/components/ui/calendar", async () => {
+  const React = await import("react");
+  return {
+    Calendar: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
 });
 vi.mock("@/lib/api/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/patients")>();
@@ -109,6 +123,7 @@ beforeEach(() => {
   h.appts = [];
   h.records = [];
   h.patients = [];
+  h.schedule = { days: [], unavailable: [] };
 });
 
 describe("a patient narrows their own records", () => {
@@ -284,5 +299,77 @@ describe("a dentist narrows one section of a patient's history", () => {
     expect(doc.filters).toContainEqual({
       label: "Dental records filtered by", value: "Diagnosis: Gum inflammation",
     });
+  });
+});
+
+describe("what the reschedule dialog tells a patient about the move", () => {
+  const FULL_WEEK = {
+    days: [0, 1, 2, 3, 4, 5, 6].map(dayOfWeek => ({
+      dayOfWeek, start: "09:00", end: "17:00", lunchStart: null, lunchEnd: null, duration: 30, maxPatients: 20,
+    })),
+    unavailable: [],
+  };
+  // An open dialog hides the rest of the page from queries, so scope to it.
+  const dialog = () => within(document.querySelector("[role=dialog]") as HTMLElement);
+
+  const openReschedule = async () => {
+    h.schedule = FULL_WEEK;
+    h.appts = [apt({
+      id: "a1", service: "Root Canal", dentistName: "Dr. Mike Johnson",
+      date: "2027-01-10", time: "14:00", endTime: "14:45", status: "confirmed",
+    })];
+    render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /Reschedule/ }));
+    await waitFor(() => expect(document.querySelector("[role=dialog]")).not.toBeNull());
+    await dialog().findByText("Dr. Mike Johnson's hours:");
+  };
+
+  it("says which days the dentist works before the calendar greys the rest out", async () => {
+    await openReschedule();
+    const label = dialog().getByText("Dr. Mike Johnson's hours:");
+    expect(label.className).toMatch(/font-semibold/);
+    expect(label.parentElement!.textContent).toMatch(/Sun 9:00 AM–5:00 PM/);
+  });
+
+  it("says which day the times belong to, and how many are left", async () => {
+    await openReschedule();
+    fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
+
+    const heading = await dialog().findByText(/^Times on /);
+    expect(heading.textContent).toBe("Times on Wed, Mar 10");
+    expect(heading.className).toMatch(/font-semibold/);
+    expect(heading.className).toMatch(/text-foreground/);
+
+    const count = dialog().getByText(/free$/);
+    expect(count.className).toMatch(/bg-success/);
+  });
+
+  it("reads the move back before Confirm — where it is going, and where from", async () => {
+    await openReschedule();
+    fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
+    const slots = () => within(dialog().getByRole("group", { name: "Available time slots" }));
+    await waitFor(() => expect(slots().getAllByRole("button").length).toBeGreaterThan(0));
+    fireEvent.click(slots().getByRole("button", { name: "9:00 AM" }));
+
+    const readback = (await dialog().findByText("March 10th, 2027")).closest("p")!;
+    expect(readback.textContent).toBe(
+      "Moving your Root Canal from January 10th, 2027 at 2:00 PM – 2:45 PM to March 10th, 2027 at 9:00 AM.",
+    );
+    expect(readback.className).toContain("bg-primary/5");
+    // Where it is going carries more weight than where it came from.
+    expect(within(readback).getByText("March 10th, 2027").className).toMatch(/font-semibold/);
+    expect(within(readback).getByText("January 10th, 2027").className).not.toMatch(/font-semibold/);
+
+    // The rule that the move needs approving is still said, alongside it.
+    expect(dialog().getByText(/goes back to/).textContent).toMatch(/Pending.*requires admin approval/);
+  });
+
+  it("says nothing about a move until a day and a time are both chosen", async () => {
+    await openReschedule();
+    expect(dialog().queryByText(/^Moving your/)).toBeNull();
+
+    fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
+    await dialog().findByText(/^Times on /);
+    expect(dialog().queryByText(/^Moving your/)).toBeNull(); // the day alone isn't a move
   });
 });
