@@ -17,7 +17,7 @@ import {
   Printer,
   Loader2,
 } from "lucide-react";
-import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getPatients } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
@@ -68,10 +68,8 @@ export default function AdminDashboard() {
       .map(a => ({ ...a, upcoming: toMinutes(a.time) >= now }));
   }, [appointments]);
 
-  const recent = useMemo(
-    () => [...appointments].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)).slice(0, 6),
-    [appointments]
-  );
+  // "Recent" means recently booked, so a booking just taken is the first row.
+  const recent = useMemo(() => [...appointments].sort(byNewestBooked).slice(0, 6), [appointments]);
 
   const print = usePrintDocument();
   // The dashboard's figures as a document: the counts, then the lists behind them.

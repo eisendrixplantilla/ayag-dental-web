@@ -201,9 +201,12 @@ describe("a patient narrows their own records", () => {
 describe("a patient narrows their own appointments", () => {
   beforeEach(() => {
     h.appts = [
-      apt({ id: "a1", service: "Oral Prophylaxis", date: "2027-01-10", status: "confirmed" }),
-      apt({ id: "a2", service: "Tooth Extraction", date: "2027-02-10", status: "pending" }),
-      apt({ id: "a3", service: "Veeners", date: "2026-01-10", status: "completed" }),
+      apt({ id: "a1", service: "Oral Prophylaxis", date: "2027-01-10", status: "confirmed",
+            createdAt: "2026-09-20T00:00:00Z" }),
+      apt({ id: "a2", service: "Tooth Extraction", date: "2027-02-10", status: "pending",
+            createdAt: "2026-09-22T00:00:00Z" }),
+      apt({ id: "a3", service: "Veeners", date: "2026-01-10", status: "completed",
+            createdAt: "2026-09-24T00:00:00Z" }),
     ];
   });
 
@@ -228,9 +231,10 @@ describe("a patient narrows their own appointments", () => {
     await screen.findByText("Oral Prophylaxis");
     expect(screen.queryByRole("tab")).toBeNull();
 
-    // What is ahead comes first, soonest first, then what is behind.
+    // Newest booking first, whatever date it is for — the Veeners visit is in the
+    // past but was booked most recently.
     const services = () => screen.getAllByText(/^(Oral Prophylaxis|Tooth Extraction|Veeners)$/).map(e => e.textContent);
-    expect(services()).toEqual(["Oral Prophylaxis", "Tooth Extraction", "Veeners"]);
+    expect(services()).toEqual(["Veeners", "Tooth Extraction", "Oral Prophylaxis"]);
 
     fireEvent.change(fields()[0], { target: { value: "6" } }); // When
     const picker = await screen.findByLabelText("Filter by When");
@@ -418,5 +422,23 @@ describe("what the reschedule dialog tells a patient about the move", () => {
     fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
     await dialog().findByText(/^Times on /);
     expect(dialog().queryByText(/^Moving your/)).toBeNull(); // the day alone isn't a move
+  });
+});
+
+describe("a patient's own list puts their newest booking on top", () => {
+  it("shows what was just booked first, whatever date it is for", async () => {
+    h.appts = [
+      // Booked first, and the soonest of the two.
+      apt({ id: "a1", service: "Oral Prophylaxis", date: "2026-09-28", status: "confirmed",
+            createdAt: "2026-09-20T09:00:00Z" }),
+      // Booked last, for a date much further off.
+      apt({ id: "a2", service: "Tooth Extraction", date: "2027-06-01", status: "pending",
+            createdAt: "2026-09-25T10:00:00Z" }),
+    ];
+    render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
+    await screen.findByText("Tooth Extraction");
+
+    const services = screen.getAllByText(/^(Oral Prophylaxis|Tooth Extraction)$/).map(e => e.textContent);
+    expect(services).toEqual(["Tooth Extraction", "Oral Prophylaxis"]);
   });
 });

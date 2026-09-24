@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
-import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
@@ -115,14 +115,10 @@ export default function PatientAppointments() {
   }, [schedule]);
   const newTimeLabel = slots.find(s => s.value === newTime)?.label ?? "";
 
-  // What is still ahead, soonest first, then what is behind, most recent first —
-  // one list, with the split available as a filter rather than as two tabs.
-  const ordered = useMemo(() => [
-    ...appointments.filter(isUpcoming)
-      .sort((a, b) => toDateTime(a).getTime() - toDateTime(b).getTime()),
-    ...appointments.filter((a) => !isUpcoming(a))
-      .sort((a, b) => toDateTime(b).getTime() - toDateTime(a).getTime()),
-  ], [appointments]);
+  // Newest booking on top, the same as every staff list — whatever was booked last
+  // is what the patient is looking for. "When" is a column, so what is still ahead
+  // is a filter away rather than a separate order.
+  const ordered = useMemo(() => [...appointments].sort(byNewestBooked), [appointments]);
 
   const [filter, setFilter] = useState(EMPTY_FILTER);
   const rows = useMemo(() => ordered.map(aptRow), [ordered]);
