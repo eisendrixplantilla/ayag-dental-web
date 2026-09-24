@@ -20,11 +20,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3 } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
-import { formatTimeRange } from "@/lib/dentistSchedules";
+import { formatTimeRange, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, type Appointment } from "@/lib/api/appointments";
-import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, type DentistScheduleData } from "@/lib/api/staff";
+import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
@@ -81,6 +81,16 @@ export default function DentistAppointments() {
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)),
     [appointments, user],
   );
+
+  // Which days the calendar below will offer at all — worth saying, rather than
+  // leaving the greyed-out dates to explain themselves.
+  const scheduleSummary = useMemo(() => {
+    if (!schedule || schedule.days.length === 0) return "";
+    return [...schedule.days]
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map(d => `${DAY_NAMES[d.dayOfWeek].slice(0, 3)} ${toLabel(toMinutes(d.start))}–${toLabel(toMinutes(d.end))}`)
+      .join(", ");
+  }, [schedule]);
 
   const [details, setDetails] = useState<Appointment | null>(null);
   const [filter, setFilter] = useState(EMPTY_FILTER);
@@ -139,6 +149,8 @@ export default function DentistAppointments() {
       .map(a => a.time);
     return generateAvailableSlots(schedule, parseISO(rsDate), bookedForDate);
   }, [rsDate, schedule, mine]);
+
+  const rsSlotLabel = slots.find(s => s.value === rsSlot)?.label ?? "";
 
   const openResched = (apt: Appointment) => {
     setRsReason(""); setRsRemarks(""); setRsDate(""); setRsSlot("");
@@ -438,6 +450,17 @@ export default function DentistAppointments() {
             {/* Same shape as booking: the month, then that day's free times. */}
             <div className="space-y-2">
               <Label>New Appointment Date *</Label>
+              {scheduleSummary && (
+                <p className="text-xs leading-tight">
+                  <span className="flex items-start gap-1.5 text-foreground">
+                    <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                    <span>
+                      <span className="font-semibold">Your working hours:</span>{" "}
+                      <span className="font-medium">{scheduleSummary}</span>
+                    </span>
+                  </span>
+                </p>
+              )}
               <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
                 <Calendar
                   mode="single"
@@ -453,9 +476,16 @@ export default function DentistAppointments() {
               </div>
             </div>
             <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label>{rsDate ? `Times on ${format(parseISO(rsDate), "EEE, MMM d")} *` : "Available Time Slot *"}</Label>
-                {rsDate && slots.length > 0 && <span className="text-xs text-muted-foreground">{slots.length} free</span>}
+              <div className="flex items-center justify-between gap-2">
+                {/* The times below mean nothing without the day they are on. */}
+                <Label className={cn("text-sm font-semibold", rsDate ? "text-foreground" : "text-muted-foreground")}>
+                  {rsDate ? `Times on ${format(parseISO(rsDate), "EEE, MMM d")} *` : "Available Time Slot *"}
+                </Label>
+                {rsDate && slots.length > 0 && (
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 whitespace-nowrap">
+                    {slots.length} free
+                  </Badge>
+                )}
               </div>
               {!rsDate ? (
                 <p className="text-sm text-muted-foreground py-4 px-3 text-center border border-dashed rounded-md">
@@ -492,6 +522,22 @@ export default function DentistAppointments() {
               <Label>Remarks (optional)</Label>
               <Textarea value={rsRemarks} onChange={e => setRsRemarks(e.target.value)} />
             </div>
+
+            {/* The last thing read before Save: where the appointment is being moved
+                from, and to. */}
+            {resched && rsDate && rsSlot && (
+              <p className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground">
+                <CalendarCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  Moving <span className="font-semibold">{resched.patientName}</span>'s{" "}
+                  <span className="font-semibold">{resched.service}</span> from{" "}
+                  <span className="font-medium">{format(parseISO(resched.date), "PPP")}</span> at{" "}
+                  <span className="font-medium">{formatTimeRange(resched.time, resched.endTime)}</span> to{" "}
+                  <span className="font-semibold">{format(parseISO(rsDate), "PPP")}</span> at{" "}
+                  <span className="font-semibold">{rsSlotLabel}</span>.
+                </span>
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResched(null)}>Cancel</Button>
