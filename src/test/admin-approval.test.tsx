@@ -312,9 +312,15 @@ describe("the appointments list", () => {
 
   it("keeps the filters and the table in one card", async () => {
     await renderPage();
-    const card = screen.getByRole("table").closest(".bg-card");
+    const card = screen.getByRole("table").closest(".bg-card") as HTMLElement;
     expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByPlaceholderText(/Search patient name/)).toBeInTheDocument();
-    expect(within(card as HTMLElement).getByRole("button", { name: /Clear filters/ })).toBeInTheDocument();
+    expect(within(card).getByPlaceholderText(/Search patient name/)).toBeInTheDocument();
+    expect(within(card).getByText(/record|appointment/)).toBeInTheDocument(); // the count sits with them
+
+    // Clear only shows up once something is actually filtered.
+    expect(within(card).queryByRole("button", { name: /Clear filters/ })).toBeNull();
+    fireEvent.change(within(card).getByPlaceholderText(/Search patient name/), { target: { value: "maria" } });
+    await waitFor(() =>
+      expect(within(card).getByRole("button", { name: /Clear filters/ })).toBeInTheDocument());
   });
 });

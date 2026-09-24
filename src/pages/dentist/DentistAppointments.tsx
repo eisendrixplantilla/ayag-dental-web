@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const statusColors: Record<string, string> = {
@@ -221,14 +222,21 @@ export default function DentistAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">My Appointments</h1>
           <p className="text-muted-foreground">Appointments assigned to you</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print
-        </Button>
+
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle className="font-heading text-lg">Assigned Appointments</CardTitle>
+          <TableToolbar
+            count={mine.length}
+            noun="appointment(s)"
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? (

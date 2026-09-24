@@ -5,10 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, CheckCircle, XCircle, Eye, Search, Mail, Loader2, Printer } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, Eye, Mail, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getAppointments, confirmAppointment, rejectAppointment, describeEmailOutcome, type Appointment, type AptStatus } from "@/lib/api/appointments";
 import { formatManilaDate, formatManilaStamp } from "@/lib/formatDate";
@@ -18,6 +17,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { splitServices } from "@/lib/services";
 import { appointmentRef, matchesRef } from "@/lib/appointmentRef";
 import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterField, FilterRange, FilterSearch } from "@/components/TableToolbar";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -116,6 +116,10 @@ export default function AdminOnlineAppointments() {
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
+  const filtersActive =
+    !!search || !!fromDate || !!toDate ||
+    statusFilter !== "all" || dentistFilter !== "all" || serviceFilter !== "all";
+
   const clearFilters = () => {
     setSearch(""); setFromDate(""); setToDate("");
     setStatusFilter("all"); setDentistFilter("all"); setServiceFilter("all");
@@ -185,40 +189,33 @@ export default function AdminOnlineAppointments() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Appointments</h1>
           <p className="text-muted-foreground">Review, approve, and manage patient appointments</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print
-        </Button>
+
       </div>
 
       <Card className="shadow-card">
         <CardHeader className="space-y-4">
           <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-primary" /> Appointments ({filtered.length})
+            <CalendarDays className="w-5 h-5 text-primary" /> Appointments
           </CardTitle>
-          <div className="space-y-3 print:hidden">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="relative sm:col-span-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pl-9" placeholder="Search patient name or reference..." value={search} onChange={e => setSearch(e.target.value)} />
-              </div>
-              {/* An open-ended range is fine: leave either end blank for "any". */}
-              <div className="flex items-center gap-2 sm:col-span-2">
-                <Input
-                  type="date"
-                  aria-label="From date"
-                  max={toDate || undefined}
-                  value={fromDate}
-                  onChange={e => setFromDate(e.target.value)}
-                />
-                <span className="text-sm text-muted-foreground shrink-0">to</span>
-                <Input
-                  type="date"
-                  aria-label="To date"
-                  min={fromDate || undefined}
-                  value={toDate}
-                  onChange={e => setToDate(e.target.value)}
-                />
-              </div>
+          <TableToolbar
+            count={filtered.length}
+            total={appointments.length}
+            noun="appointment(s)"
+            onClear={filtersActive ? clearFilters : undefined}
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch
+              placeholder="Search patient name or reference..."
+              value={search}
+              onChange={setSearch}
+            />
+            {/* An open-ended range is fine: leave either end blank for "any". */}
+            <FilterRange label="Appointment date" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+            <FilterField label="Status">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
@@ -228,6 +225,8 @@ export default function AdminOnlineAppointments() {
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
+            </FilterField>
+            <FilterField label="Dentist">
               <Select value={dentistFilter} onValueChange={setDentistFilter}>
                 <SelectTrigger aria-label="Filter by dentist"><SelectValue placeholder="Dentist" /></SelectTrigger>
                 <SelectContent>
@@ -235,6 +234,8 @@ export default function AdminOnlineAppointments() {
                   {dentists.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </FilterField>
+            <FilterField label="Service">
               <Select value={serviceFilter} onValueChange={setServiceFilter}>
                 <SelectTrigger aria-label="Filter by service"><SelectValue placeholder="Service" /></SelectTrigger>
                 <SelectContent>
@@ -242,11 +243,8 @@ export default function AdminOnlineAppointments() {
                   {services.map(sv => <SelectItem key={sv} value={sv}>{sv}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex justify-end">
-              <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
-            </div>
-          </div>
+            </FilterField>
+          </TableToolbar>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? (

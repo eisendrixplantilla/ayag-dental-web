@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
+import { Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
 import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
 import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterRange, FilterSearch } from "@/components/TableToolbar";
 
 export default function AdminAccounts() {
   const { user } = useAuth();
@@ -123,32 +122,25 @@ export default function AdminAccounts() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient Accounts</h1>
           <p className="text-muted-foreground">Manage patient login accounts</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print
-        </Button>
+
       </div>
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" />
-              </div>
-              {(fromDate || toDate) && (
-                <Button variant="ghost" size="sm" onClick={() => { setFromDate(""); setToDate(""); }}>Clear</Button>
-              )}
-            </div>
-          </div>
+          <TableToolbar
+            count={filtered.length}
+            total={accounts.length}
+            noun="account(s)"
+            onClear={search || fromDate || toDate ? () => { setSearch(""); setFromDate(""); setToDate(""); } : undefined}
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch placeholder="Search by name or email..." value={search} onChange={setSearch} />
+            <FilterRange label="Date registered" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+          </TableToolbar>
         </CardHeader>
         <CardContent>
           {loading ? (

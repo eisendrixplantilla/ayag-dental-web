@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Archive, Edit, Search, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
+import { Plus, Archive, Edit, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import {
   getStaff, updateStaff, archiveStaff, type StaffMember,
@@ -21,6 +21,7 @@ import {
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterField, FilterSearch } from "@/components/TableToolbar";
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
 
@@ -268,9 +269,7 @@ export default function SuperAdminStaff() {
           <p className="text-muted-foreground">Manage Admin and Dentist accounts</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="w-4 h-4 mr-2" /> Print
-          </Button>
+
           <Button className="gradient-primary text-primary-foreground" onClick={() => navigate("/superadmin/staff/new")}>
             <Plus className="w-4 h-4 mr-2" />Add Staff
           </Button>
@@ -279,28 +278,34 @@ export default function SuperAdminStaff() {
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
-            <div className="relative min-w-[200px] max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by Employee ID, name, or email..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Role</Label>
+          <TableToolbar
+            count={filtered.length}
+            total={staff.length}
+            noun="account(s)"
+            onClear={search || roleFilter !== "all" ? () => { setSearch(""); setRoleFilter("all"); } : undefined}
+            actions={
+              <Button variant="outline" size="sm" onClick={handlePrint}>
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch
+              placeholder="Search by Employee ID, name, or email..."
+              value={search}
+              onChange={setSearch}
+              className="w-full sm:w-72"
+            />
+            <FilterField label="Role">
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Filter by role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="dentist">Dentist</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          </div>
+            </FilterField>
+          </TableToolbar>
         </CardHeader>
         <CardContent>
           {loading ? (

@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Package, Plus, Search, AlertTriangle, Edit, Printer } from "lucide-react";
+import { Package, Plus, AlertTriangle, Edit, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterSearch } from "@/components/TableToolbar";
 
 const mockInventory = [
   { id: "I001", name: "Dental Composite Resin", category: "Filling", quantity: 45, minStock: 20, unit: "tubes", status: "ok" },
@@ -113,9 +114,7 @@ export default function AdminInventory() {
           <p className="text-muted-foreground">Track dental supplies and equipment</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={handlePrint} variant="outline">
-            <Printer className="w-4 h-4 mr-2" /> Print
-          </Button>
+
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add Item</Button>
@@ -148,10 +147,19 @@ export default function AdminInventory() {
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search inventory..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-          </div>
+          <TableToolbar
+            count={filtered.length}
+            total={inventory.length}
+            noun="item(s)"
+            onClear={search ? () => setSearch("") : undefined}
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch placeholder="Search inventory..." value={search} onChange={setSearch} />
+          </TableToolbar>
         </CardHeader>
         <CardContent>
           <Table>

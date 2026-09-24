@@ -25,6 +25,7 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
 
 const emptyForm = {
   appointmentId: "",
@@ -202,9 +203,7 @@ export default function DentistRecords() {
           <p className="text-muted-foreground">Create and review dental records from your consultations</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={handlePrint} variant="outline">
-            <Printer className="w-4 h-4 mr-2" /> Print
-          </Button>
+
           <Button onClick={openCreate}>
             <FilePlus2 className="w-4 h-4 mr-1" /> New Dental Record
           </Button>
@@ -212,8 +211,17 @@ export default function DentistRecords() {
       </div>
 
       <Card className="shadow-card">
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle className="font-heading text-lg">Saved Dental Records</CardTitle>
+          <TableToolbar
+            count={records.length}
+            noun="record(s)"
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? (

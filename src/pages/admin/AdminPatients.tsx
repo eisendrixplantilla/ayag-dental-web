@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Search, Eye, Edit, Loader2, Printer } from "lucide-react";
+import { Users, Plus, Eye, Edit, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
@@ -16,6 +16,7 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterField, FilterSearch } from "@/components/TableToolbar";
 
 // A walk-in booked for someone with no account has no patients row behind it, so it
 // can only be shown read-only: there's nothing to open, edit or archive.
@@ -245,9 +246,7 @@ export default function AdminPatients() {
           <p className="text-muted-foreground">Manage patient information and history</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <Button onClick={handlePrint} variant="outline">
-            <Printer className="w-4 h-4 mr-2" /> Print
-          </Button>
+
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add Patient</Button>
@@ -294,24 +293,33 @@ export default function AdminPatients() {
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative min-w-[200px] max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search patients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-            </div>
-            <Select value={recordFilter} onValueChange={v => setRecordFilter(v as RecordFilter)}>
-              <SelectTrigger className="sm:w-52" aria-label="Filter patients">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FILTERS.map(f => (
-                  <SelectItem key={f.value} value={f.value}>
-                    {f.label} ({rows.filter(f.test).length})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <TableToolbar
+            count={filtered.length}
+            total={rows.length}
+            noun="patient(s)"
+            onClear={search || recordFilter !== "all" ? () => { setSearch(""); setRecordFilter("all"); } : undefined}
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch placeholder="Search patients..." value={search} onChange={setSearch} />
+            <FilterField label="Records" className="w-full sm:w-52">
+              <Select value={recordFilter} onValueChange={v => setRecordFilter(v as RecordFilter)}>
+                <SelectTrigger aria-label="Filter patients">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FILTERS.map(f => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label} ({rows.filter(f.test).length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </TableToolbar>
         </CardHeader>
         <CardContent>
           {loading ? (

@@ -1,18 +1,17 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArchiveRestore, Eye, Search, Loader2, Printer } from "lucide-react";
+import { ArchiveRestore, Eye, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
+import TableToolbar, { FilterField, FilterRange, FilterSearch } from "@/components/TableToolbar";
 
 type ArchiveRow = {
   id: string;
@@ -132,48 +131,39 @@ export default function SuperAdminArchives() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Archive</h1>
           <p className="text-muted-foreground">Archived staff and patient accounts — nothing is permanently deleted</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
-          <Printer className="w-4 h-4 mr-2" /> Print
-        </Button>
+
       </div>
 
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
-            <div className="relative min-w-[200px] max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by ID, name or email..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Account Type</Label>
+          <TableToolbar
+            count={filtered.length}
+            total={rows.length}
+            noun="account(s)"
+            onClear={
+              search || type !== "all" || fromDate || toDate
+                ? () => { setSearch(""); setType("all"); setFromDate(""); setToDate(""); }
+                : undefined
+            }
+            actions={
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Printer className="w-4 h-4 mr-2" /> Print
+              </Button>
+            }
+          >
+            <FilterSearch placeholder="Search by ID, name or email..." value={search} onChange={setSearch} />
+            <FilterField label="Account type">
               <Select value={type} onValueChange={v => setType(v as typeof type)}>
-                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Filter by account type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="staff">Staff Accounts</SelectItem>
                   <SelectItem value="patient">Patient Accounts</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" />
-              </div>
-              {(fromDate || toDate) && (
-                <Button variant="ghost" size="sm" onClick={() => { setFromDate(""); setToDate(""); }}>Clear</Button>
-              )}
-            </div>
-          </div>
+            </FilterField>
+            <FilterRange label="Date archived" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+          </TableToolbar>
         </CardHeader>
         <CardContent>
           <Table>
