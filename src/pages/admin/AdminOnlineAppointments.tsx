@@ -16,8 +16,13 @@ import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificatio
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { splitServices } from "@/lib/services";
 import { appointmentRef, matchesRef } from "@/lib/appointmentRef";
-import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterField, FilterRange, FilterSearch } from "@/components/TableToolbar";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
+import { ALL_FIELDS, EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = [
+  "Reference", "Patient Name", "Service", "Assigned Dentist", "Date", "Time", "Booked On", "Type", "Status",
+];
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
@@ -37,12 +42,7 @@ export default function AdminOnlineAppointments() {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dentistFilter, setDentistFilter] = useState("all");
-  const [serviceFilter, setServiceFilter] = useState("all");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
 
   // `silent` is for background refreshes: no spinner over the table and no error
   // toast, so polling is invisible unless something actually changed.
@@ -77,53 +77,46 @@ export default function AdminOnlineAppointments() {
     [appointments]
   );
 
-  const filtered = useMemo(() => ordered.filter(a => {
-    const matchesSearch = !search
-      || a.patientName.toLowerCase().includes(search.toLowerCase())
-      || matchesRef(a.id, search);
-    // Dates are "YYYY-MM-DD", so a plain string compare is a date compare.
-    const matchesDate = (!fromDate || a.date >= fromDate) && (!toDate || a.date <= toDate);
-    const matchesStatus = statusFilter === "all" || a.status === statusFilter;
-    const matchesDentist = dentistFilter === "all" || a.dentistName === dentistFilter;
-    const matchesService = serviceFilter === "all" || splitServices(a.service).includes(serviceFilter);
-    return matchesSearch && matchesDate && matchesStatus && matchesDentist && matchesService;
-  }), [ordered, search, fromDate, toDate, statusFilter, dentistFilter, serviceFilter]);
+  // One text row per appointment, in the table's own column order: it drives the
+  // filter, the count and the printed document alike.
+  const rows = useMemo(
+    () => ordered.map(a => [
+      appointmentRef(a.id),
+      a.patientName,
+      a.service,
+      a.dentistName ?? "—",
+      a.date,
+      formatTimeRange(a.time, a.endTime),
+      formatManilaStamp(a.createdAt),
+      a.type === "walk-in" ? "Walk-in" : "Online",
+      a.status === "pending" && a.rescheduleCount > 0 ? "reschedule request" : a.status,
+    ]),
+    [ordered],
+  );
+  const shown = useMemo(
+    () => ordered.map((apt, i) => ({ apt, row: rows[i] })).filter(({ apt, row }) =>
+      // A pasted full appointment id finds its row too, though only the short
+      // reference is on screen.
+      matchesReportFilter(row, filter) ||
+      (filter.field === ALL_FIELDS && !!filter.value.trim() && matchesRef(apt.id, filter.value))),
+    [ordered, rows, filter],
+  );
+  const filtered = shown.map(s => s.apt);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Appointment Requests Report",
-      columns: ["Reference", "Patient Name", "Service", "Assigned Dentist", "Date", "Time", "Booked On", "Type", "Status"],
-      rows: filtered.map(a => [
-        appointmentRef(a.id),
-        a.patientName,
-        a.service,
-        a.dentistName ?? "—",
-        a.date,
-        formatTimeRange(a.time, a.endTime),
-        formatManilaStamp(a.createdAt),
-        a.type === "walk-in" ? "Walk-in" : "Online",
-        a.status === "pending" && a.rescheduleCount > 0 ? "reschedule request" : a.status,
-      ]),
-      filters: [
-        { label: "Search", value: search.trim() || "None" },
-        { label: "Appointment Date", value: printRange(fromDate, toDate) },
-        { label: "Status", value: statusFilter === "all" ? "All statuses" : statusFilter },
-        { label: "Dentist", value: dentistFilter === "all" ? "All dentists" : dentistFilter },
-        { label: "Service", value: serviceFilter === "all" ? "All services" : serviceFilter },
-      ],
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const selectedLive = selected ? appointments.find(a => a.id === selected.id) ?? null : null;
 
-  const filtersActive =
-    !!search || !!fromDate || !!toDate ||
-    statusFilter !== "all" || dentistFilter !== "all" || serviceFilter !== "all";
-
-  const clearFilters = () => {
-    setSearch(""); setFromDate(""); setToDate("");
-    setStatusFilter("all"); setDentistFilter("all"); setServiceFilter("all");
-  };
+  const clearFilters = () => setFilter(EMPTY_FILTER);
 
   // Arrived here from a notification — drop any active filter first, otherwise the
   // row being jumped to might not be on screen at all.
@@ -198,53 +191,19 @@ export default function AdminOnlineAppointments() {
             <CalendarDays className="w-5 h-5 text-primary" /> Appointments
           </CardTitle>
           <TableToolbar
-            count={filtered.length}
-            total={appointments.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="appointment(s)"
-            onClear={filtersActive ? clearFilters : undefined}
+            columnChoices={{ 2: services }}
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch
-              placeholder="Search patient name or reference..."
-              value={search}
-              onChange={setSearch}
-            />
-            {/* An open-ended range is fine: leave either end blank for "any". */}
-            <FilterRange label="Appointment date" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
-            <FilterField label="Status">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterField label="Dentist">
-              <Select value={dentistFilter} onValueChange={setDentistFilter}>
-                <SelectTrigger aria-label="Filter by dentist"><SelectValue placeholder="Dentist" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dentists</SelectItem>
-                  {dentists.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterField label="Service">
-              <Select value={serviceFilter} onValueChange={setServiceFilter}>
-                <SelectTrigger aria-label="Filter by service"><SelectValue placeholder="Service" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Services</SelectItem>
-                  {services.map(sv => <SelectItem key={sv} value={sv}>{sv}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FilterField>
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? (

@@ -103,6 +103,10 @@ beforeEach(() => {
 
 const clickPrint = async (name: RegExp = /Print/) =>
   fireEvent.click(await screen.findByRole("button", { name }));
+const filterBy = (columnIndex: string) =>
+  fireEvent.change(screen.getByLabelText("Filter by field"), { target: { value: columnIndex } });
+const searchAll = (text: string) =>
+  fireEvent.change(screen.getByLabelText("Filter these results"), { target: { value: text } });
 const doc = () => printed.calls[0];
 
 describe("a list page prints the clinic's report document", () => {
@@ -124,20 +128,20 @@ describe("a list page prints the clinic's report document", () => {
     // Who printed it and when are filled in for the page.
     expect(doc().preparedBy).toEqual({ name: "Super Administrator", role: "Super Admin" });
     expect(doc().generatedAt).toBeTruthy();
-    expect(doc().filters).toContainEqual({ label: "Role", value: "All roles" });
+    expect(doc().filters).toBeUndefined(); // nothing was filtered
   });
 
   it("prints only the rows left after filtering, not the whole list", async () => {
     render(<MemoryRouter><SuperAdminStaff /></MemoryRouter>);
     await screen.findByText("Dr. Mike Johnson");
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by Employee ID/), { target: { value: "mike" } });
+    searchAll("mike");
     await waitFor(() => expect(screen.queryByText("Dr. Sarah Chen")).toBeNull());
 
     await clickPrint();
     await waitFor(() => expect(printed.calls).toHaveLength(1));
     expect(doc().rows.map((r: string[]) => r[1])).toEqual(["Dr. Mike Johnson"]);
-    expect(doc().filters).toContainEqual({ label: "Search", value: "mike" });
+    expect(doc().filters).toContainEqual({ label: "Filtered By", value: "mike" });
   });
 
   it("prints the patient accounts an admin sees, with their status spelled out", async () => {
@@ -152,22 +156,25 @@ describe("a list page prints the clinic's report document", () => {
       ["Maria Santos", "maria@example.com", "Active", "2026-09-20"],
       ["Pedro Reyes", "pedro@example.com", "Deactivated", "2026-09-25"],
     ]);
-    expect(doc().filters).toContainEqual({ label: "Date Registered", value: "All dates" });
+    expect(doc().filters).toBeUndefined(); // nothing was filtered
   });
 
   it("carries a date range onto the document", async () => {
     render(<MemoryRouter><AdminAccounts /></MemoryRouter>);
     await screen.findByText("Maria Santos");
 
-    // The From/To boxes are plain date inputs, labelled only visually.
-    const [from] = Array.from(document.querySelectorAll("input[type=date]")) as HTMLInputElement[];
-    fireEvent.change(from, { target: { value: "2026-09-22" } });
+    // Picking the date column turns the value box into a range.
+    filterBy("3"); // Date Registered
+    await waitFor(() => expect(screen.getByLabelText("From date")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-22" } });
     await waitFor(() => expect(screen.queryByText("Maria Santos")).toBeNull());
 
     await clickPrint();
     await waitFor(() => expect(printed.calls).toHaveLength(1));
     expect(doc().rows.map((r: string[]) => r[0])).toEqual(["Pedro Reyes"]);
-    expect(doc().filters).toContainEqual({ label: "Date Registered", value: "From 2026-09-22" });
+    expect(doc().filters).toContainEqual({
+      label: "Filtered By", value: "Date Registered: from 2026-09-22",
+    });
   });
 });
 

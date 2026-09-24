@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,10 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterSearch } from "@/components/TableToolbar";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["ID", "Item", "Category", "Quantity", "Min Stock", "Unit", "Status"];
 
 const mockInventory = [
   { id: "I001", name: "Dental Composite Resin", category: "Filling", quantity: 45, minStock: 20, unit: "tubes", status: "ok" },
@@ -31,26 +34,36 @@ const inventorySchema = z.object({
 });
 
 export default function AdminInventory() {
-  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
   const [showAdd, setShowAdd] = useState(false);
   const [inventory, setInventory] = useState(mockInventory);
   const [editingItem, setEditingItem] = useState<typeof mockInventory[0] | null>(null);
   const [editForm, setEditForm] = useState({ name: "", category: "", quantity: "", minStock: "", unit: "" });
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const filtered = inventory.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const rows = useMemo(
+    () => inventory.map(i => [
+      i.id, i.name, i.category, String(i.quantity), String(i.minStock), i.unit,
+      i.status === "low" ? "Low stock" : "In stock",
+    ]),
+    [inventory],
+  );
+  const shown = useMemo(
+    () => inventory.map((item, i) => ({ item, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [inventory, rows, filter],
+  );
+  const filtered = shown.map(s => s.item);
   const lowStock = inventory.filter(i => i.status === "low").length;
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Inventory Report",
-      columns: ["ID", "Item", "Category", "Quantity", "Min Stock", "Unit", "Status"],
-      rows: filtered.map(i => [
-        i.id, i.name, i.category, String(i.quantity), String(i.minStock), i.unit,
-        i.status === "low" ? "Low stock" : "In stock",
-      ]),
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
       filters: [
-        { label: "Search", value: search.trim() || "None" },
+        ...(filterIsActive(filter)
+          ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+          : []),
         { label: "Low Stock Items", value: String(lowStock) },
       ],
     });
@@ -148,18 +161,18 @@ export default function AdminInventory() {
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
           <TableToolbar
-            count={filtered.length}
-            total={inventory.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="item(s)"
-            onClear={search ? () => setSearch("") : undefined}
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch placeholder="Search inventory..." value={search} onChange={setSearch} />
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent>
           <Table>

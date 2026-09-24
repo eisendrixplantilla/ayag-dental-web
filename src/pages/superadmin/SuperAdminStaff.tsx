@@ -21,7 +21,10 @@ import {
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterField, FilterSearch } from "@/components/TableToolbar";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"];
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
 
@@ -45,8 +48,7 @@ export default function SuperAdminStaff() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
 
   const [viewing, setViewing] = useState<StaffMember | null>(null);
   const [editing, setEditing] = useState<StaffMember | null>(null);
@@ -73,31 +75,27 @@ export default function SuperAdminStaff() {
 
   useEffect(load, []);
 
-  const filtered = staff.filter(s => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !q || (s.employeeId ?? "").toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-    const matchesRole = roleFilter === "all" || s.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  const rows = useMemo(
+    () => staff.map(s => [
+      s.employeeId ?? "—", s.name, s.email, s.contact ?? "—", roleLabel(s.role), s.status,
+    ]),
+    [staff],
+  );
+  const shown = useMemo(
+    () => staff.map((member, i) => ({ member, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [staff, rows, filter],
+  );
+  const filtered = shown.map(s => s.member);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Staff Accounts Report",
-      columns: ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"],
-      rows: filtered.map(s => [
-        s.employeeId ?? "—",
-        s.name,
-        s.email,
-        s.contact ?? "—",
-        roleLabel(s.role),
-        s.status,
-      ]),
-      filters: [
-        { label: "Search", value: search.trim() || "None" },
-        { label: "Role", value: roleFilter === "all" ? "All roles" : roleLabel(roleFilter) },
-      ],
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const openEdit = (s: StaffMember) => {
@@ -279,33 +277,18 @@ export default function SuperAdminStaff() {
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
           <TableToolbar
-            count={filtered.length}
-            total={staff.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="account(s)"
-            onClear={search || roleFilter !== "all" ? () => { setSearch(""); setRoleFilter("all"); } : undefined}
             actions={
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch
-              placeholder="Search by Employee ID, name, or email..."
-              value={search}
-              onChange={setSearch}
-              className="w-full sm:w-72"
-            />
-            <FilterField label="Role">
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger aria-label="Filter by role"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="dentist">Dentist</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent>
           {loading ? (

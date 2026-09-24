@@ -29,21 +29,24 @@ export function filterIsActive(f: ReportFilter): boolean {
   return Boolean(f.value.trim() || f.from || f.to);
 }
 
-export function filterReportRows(rows: string[][], f: ReportFilter): string[][] {
+/** Whether one row survives the filter. A list page filters its own items with this,
+ * passing the same text row it would print. */
+export function matchesReportFilter(row: string[], f: ReportFilter): boolean {
   const col = f.field === ALL_FIELDS ? -1 : Number(f.field);
-  const cell = (r: string[]) => (col < 0 ? r.join(" ") : r[col] ?? "");
 
   if (col >= 0 && (f.from || f.to)) {
-    return rows.filter((r) => {
-      const v = r[col] ?? "";
-      if (!DATE.test(v)) return false;
-      return (!f.from || v >= f.from) && (!f.to || v <= f.to);
-    });
+    const v = row[col] ?? "";
+    if (!DATE.test(v)) return false;
+    return (!f.from || v >= f.from) && (!f.to || v <= f.to);
   }
 
   const q = f.value.trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter((r) => cell(r).toLowerCase().includes(q));
+  if (!q) return true;
+  return (col < 0 ? row.join(" ") : row[col] ?? "").toLowerCase().includes(q);
+}
+
+export function filterReportRows(rows: string[][], f: ReportFilter): string[][] {
+  return rows.filter((r) => matchesReportFilter(r, f));
 }
 
 /** How the filter reads on the printed document, or null when nothing is filtered. */

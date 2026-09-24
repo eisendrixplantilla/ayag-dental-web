@@ -78,6 +78,12 @@ function apt(over: Partial<Appointment>): Appointment {
   };
 }
 
+// The filter bar: pick the column, then say what to look for.
+const filterField = () => screen.getByLabelText("Filter by field") as HTMLSelectElement;
+const filterBy = (columnIndex: string) => fireEvent.change(filterField(), { target: { value: columnIndex } });
+const searchAll = (text: string) =>
+  fireEvent.change(screen.getByLabelText("Filter these results"), { target: { value: text } });
+
 // Scoped to the table: an open dialog shows the patient name too.
 const rowOf = (name: string) =>
   within(document.querySelector("table") as HTMLElement).getByText(name).closest("tr")!;
@@ -207,17 +213,18 @@ describe("the appointments list", () => {
     ];
     await renderPage();
 
-    const select = screen.getByRole("combobox", { name: "Filter by service" });
+    filterBy("2"); // Service
+    const select = await screen.findByLabelText("Filter by Service");
     // Only the services actually booked are offered — no hard-coded menu to drift.
     expect(within(select).getAllByRole("option").map(o => o.textContent))
-      .toEqual(["All Services", "Oral Prophylaxis", "Tooth Extraction"]);
+      .toEqual(["Any service", "Oral Prophylaxis", "Tooth Extraction"]);
 
     fireEvent.change(select, { target: { value: "Tooth Extraction" } });
     await waitFor(() => expect(screen.queryByText("Allen Estrella")).toBeNull());
     expect(screen.getByText("Pedro Reyes")).toBeInTheDocument();
     expect(screen.getAllByRole("row")).toHaveLength(2); // header + the one match
 
-    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Clear filter/ }));
     await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
   });
 
@@ -228,10 +235,11 @@ describe("the appointments list", () => {
     ];
     await renderPage();
 
-    const select = screen.getByRole("combobox", { name: "Filter by service" });
+    filterBy("2"); // Service
+    const select = await screen.findByLabelText("Filter by Service");
     // Split apart: "Oral, Veeners" is two services, not a third option of its own.
     expect(within(select).getAllByRole("option").map(o => o.textContent))
-      .toEqual(["All Services", "Oral", "Restoration", "Veeners"]);
+      .toEqual(["Any service", "Oral", "Restoration", "Veeners"]);
 
     for (const service of ["Oral", "Veeners"]) {
       fireEvent.change(select, { target: { value: service } });
@@ -254,6 +262,8 @@ describe("the appointments list", () => {
     const names = () => Array.from(document.querySelectorAll("tbody tr"))
       .map(r => (r as HTMLTableRowElement).cells[1].textContent);
 
+    filterBy("4"); // Date
+    await screen.findByLabelText("From date");
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-24" } });
     await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "Maria Santos"]));
 
@@ -264,7 +274,7 @@ describe("the appointments list", () => {
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "" } });
     await waitFor(() => expect(names()).toEqual(["Allen Estrella", "Pedro Reyes"]));
 
-    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Clear filter/ }));
     await waitFor(() => expect(names()).toHaveLength(3));
   });
 
@@ -278,15 +288,14 @@ describe("the appointments list", () => {
     expect(within(rowOf("Allen Estrella")).getByText("APT-3F9C2A")).toBeInTheDocument();
     expect(within(rowOf("Pedro Reyes")).getByText("APT-B7D41E")).toBeInTheDocument();
 
-    const search = screen.getByPlaceholderText(/Search patient name or reference/);
-    fireEvent.change(search, { target: { value: "apt-3f9c2a" } });
+    searchAll("apt-3f9c2a");
     await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
     expect(screen.getByText("Allen Estrella")).toBeInTheDocument();
 
     // The bare reference works too, as does the full id somebody pasted in.
-    fireEvent.change(search, { target: { value: "b7d41e" } });
+    searchAll("b7d41e");
     await waitFor(() => expect(screen.getByText("Pedro Reyes")).toBeInTheDocument());
-    fireEvent.change(search, { target: { value: "3f9c2a10-0000-4000-8000-000000000001" } });
+    searchAll("3f9c2a10-0000-4000-8000-000000000001");
     await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
     expect(screen.queryByText("Pedro Reyes")).toBeNull();
   });
@@ -310,17 +319,25 @@ describe("the appointments list", () => {
     }
   });
 
-  it("keeps the filters and the table in one card", async () => {
+  it("keeps the filter bar and the table in one card", async () => {
     await renderPage();
     const card = screen.getByRole("table").closest(".bg-card") as HTMLElement;
     expect(card).not.toBeNull();
-    expect(within(card).getByPlaceholderText(/Search patient name/)).toBeInTheDocument();
-    expect(within(card).getByText(/record|appointment/)).toBeInTheDocument(); // the count sits with them
+    expect(within(card).getByLabelText("Filter by field")).toBeInTheDocument();
+    expect(within(card).getByText(/appointment\(s\)/)).toBeInTheDocument(); // the count sits with them
 
     // Clear only shows up once something is actually filtered.
-    expect(within(card).queryByRole("button", { name: /Clear filters/ })).toBeNull();
-    fireEvent.change(within(card).getByPlaceholderText(/Search patient name/), { target: { value: "maria" } });
+    expect(within(card).queryByRole("button", { name: /Clear filter/ })).toBeNull();
+    searchAll("maria");
     await waitFor(() =>
-      expect(within(card).getByRole("button", { name: /Clear filters/ })).toBeInTheDocument());
+      expect(within(card).getByRole("button", { name: /Clear filter/ })).toBeInTheDocument());
+  });
+
+  it("offers every column of the table to filter by", async () => {
+    await renderPage();
+    expect(within(filterField()).getAllByRole("option").map(o => o.textContent)).toEqual([
+      "All fields", "Reference", "Patient Name", "Service", "Assigned Dentist",
+      "Date", "Time", "Booked On", "Type", "Status",
+    ]);
   });
 });

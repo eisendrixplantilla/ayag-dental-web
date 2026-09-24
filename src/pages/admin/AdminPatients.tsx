@@ -16,7 +16,10 @@ import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterField, FilterSearch } from "@/components/TableToolbar";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["Name", "Age", "Phone", "Email", "Status"];
 
 // A walk-in booked for someone with no account has no patients row behind it, so it
 // can only be shown read-only: there's nothing to open, edit or archive.
@@ -55,8 +58,7 @@ const emptyForm: FormState = { name: "", age: "", phone: "", email: "", address:
 
 export default function AdminPatients() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [recordFilter, setRecordFilter] = useState<RecordFilter>("all");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
   const [showAdd, setShowAdd] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -113,28 +115,31 @@ export default function AdminPatients() {
     return [...accountRows, ...guestRows];
   }, [patients, appointments]);
 
-  const activeFilter = FILTERS.find(f => f.value === recordFilter) ?? FILTERS[0];
-  const filtered = rows.filter(r =>
-    activeFilter.test(r) &&
-    (r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase()))
+  const textRows = useMemo(
+    () => rows.map(r => [
+      r.name,
+      r.age || "—",
+      r.phone || "—",
+      r.email || "—",
+      r.patient ? r.patient.status : "no account",
+    ]),
+    [rows],
   );
+  const shown = useMemo(
+    () => rows.map((row, i) => ({ row, text: textRows[i] })).filter(({ text }) => matchesReportFilter(text, filter)),
+    [rows, textRows, filter],
+  );
+  const filtered = shown.map(s => s.row);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Patient Records Report",
-      columns: ["Name", "Age", "Phone", "Email", "Status"],
-      rows: filtered.map(r => [
-        r.name,
-        r.age || "—",
-        r.phone || "—",
-        r.email || "—",
-        r.patient ? r.patient.status : "no account",
-      ]),
-      filters: [
-        { label: "Search", value: search.trim() || "None" },
-        { label: "Records", value: activeFilter.label },
-      ],
+      columns: COLUMNS,
+      rows: shown.map(s => s.text),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const handleFormChange = (field: string, value: string) => {
@@ -294,32 +299,18 @@ export default function AdminPatients() {
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
           <TableToolbar
-            count={filtered.length}
-            total={rows.length}
+            columns={COLUMNS}
+            rows={textRows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="patient(s)"
-            onClear={search || recordFilter !== "all" ? () => { setSearch(""); setRecordFilter("all"); } : undefined}
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch placeholder="Search patients..." value={search} onChange={setSearch} />
-            <FilterField label="Records" className="w-full sm:w-52">
-              <Select value={recordFilter} onValueChange={v => setRecordFilter(v as RecordFilter)}>
-                <SelectTrigger aria-label="Filter patients">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FILTERS.map(f => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label} ({rows.filter(f.test).length})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterField>
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent>
           {loading ? (

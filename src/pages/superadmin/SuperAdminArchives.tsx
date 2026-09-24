@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,11 @@ import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 import { formatManilaDate } from "@/lib/formatDate";
-import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterField, FilterRange, FilterSearch } from "@/components/TableToolbar";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["ID", "Full Name", "Account Type", "Date Archived", "Archived By", "Reason"];
 
 type ArchiveRow = {
   id: string;
@@ -26,10 +29,7 @@ type ArchiveRow = {
 };
 
 export default function SuperAdminArchives() {
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState<"all" | "staff" | "patient">("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
   const [viewing, setViewing] = useState<ArchiveRow | null>(null);
   const [restoring, setRestoring] = useState<ArchiveRow | null>(null);
   const [rows, setRows] = useState<ArchiveRow[]>([]);
@@ -73,30 +73,25 @@ export default function SuperAdminArchives() {
     load();
   }, [load]);
 
-  const q = search.toLowerCase();
-  const filtered = rows.filter((r) => {
-    const matchesSearch =
-      !q ||
-      r.id.toLowerCase().includes(q) ||
-      r.name.toLowerCase().includes(q) ||
-      r.email.toLowerCase().includes(q);
-    const matchesType = type === "all" || (type === "staff" ? r.type === "Staff" : r.type === "Patient");
-    const matchesFrom = !fromDate || r.archivedAt >= fromDate;
-    const matchesTo = !toDate || r.archivedAt <= toDate;
-    return matchesSearch && matchesType && matchesFrom && matchesTo;
-  });
+  const textRows = useMemo(
+    () => rows.map((r) => [r.id, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
+    [rows],
+  );
+  const shown = useMemo(
+    () => rows.map((row, i) => ({ row, text: textRows[i] })).filter(({ text }) => matchesReportFilter(text, filter)),
+    [rows, textRows, filter],
+  );
+  const filtered = shown.map((s) => s.row);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Archived Accounts Report",
-      columns: ["ID", "Full Name", "Account Type", "Date Archived", "Archived By", "Reason"],
-      rows: filtered.map(r => [r.id, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
-      filters: [
-        { label: "Search", value: search.trim() || "None" },
-        { label: "Account Type", value: type === "all" ? "All accounts" : type === "staff" ? "Staff accounts" : "Patient accounts" },
-        { label: "Date Archived", value: printRange(fromDate, toDate) },
-      ],
+      columns: COLUMNS,
+      rows: shown.map(s => s.text),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const confirmRestore = async () => {
@@ -137,33 +132,18 @@ export default function SuperAdminArchives() {
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
           <TableToolbar
-            count={filtered.length}
-            total={rows.length}
+            columns={COLUMNS}
+            rows={textRows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="account(s)"
-            onClear={
-              search || type !== "all" || fromDate || toDate
-                ? () => { setSearch(""); setType("all"); setFromDate(""); setToDate(""); }
-                : undefined
-            }
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch placeholder="Search by ID, name or email..." value={search} onChange={setSearch} />
-            <FilterField label="Account type">
-              <Select value={type} onValueChange={v => setType(v as typeof type)}>
-                <SelectTrigger aria-label="Filter by account type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="staff">Staff Accounts</SelectItem>
-                  <SelectItem value="patient">Patient Accounts</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterRange label="Date archived" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent>
           <Table>

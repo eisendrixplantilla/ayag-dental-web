@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,16 +9,19 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
 import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
-import { usePrintDocument, printRange } from "@/hooks/usePrintDocument";
-import TableToolbar, { FilterRange, FilterSearch } from "@/components/TableToolbar";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+// What the table shows, and what can be filtered by — one list, so the filter, the
+// table and the printed document always agree.
+const COLUMNS = ["Patient Name", "Email Address", "Account Status", "Date Registered"];
 
 export default function AdminAccounts() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [filter, setFilter] = useState(EMPTY_FILTER);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Patient | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -33,30 +36,30 @@ export default function AdminAccounts() {
 
   useEffect(load, []);
 
-  const filtered = accounts.filter(a => {
-    const matchesSearch =
-      a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.email.toLowerCase().includes(search.toLowerCase());
-    const matchesFrom = !fromDate || (a.createdAt ?? "") >= fromDate;
-    const matchesTo = !toDate || (a.createdAt ?? "") <= toDate;
-    return matchesSearch && matchesFrom && matchesTo;
-  });
+  const rows = useMemo(
+    () => accounts.map(a => [
+      a.name,
+      a.email,
+      a.status === "active" ? "Active" : "Deactivated",
+      a.createdAt ?? "—",
+    ]),
+    [accounts],
+  );
+  const shown = useMemo(
+    () => accounts.map((account, i) => ({ account, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [accounts, rows, filter],
+  );
+  const filtered = shown.map(s => s.account);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Patient Accounts Report",
-      columns: ["Patient Name", "Email Address", "Account Status", "Date Registered"],
-      rows: filtered.map(a => [
-        a.name,
-        a.email,
-        a.status === "active" ? "Active" : "Deactivated",
-        a.createdAt ?? "—",
-      ]),
-      filters: [
-        { label: "Search", value: search.trim() || "None" },
-        { label: "Date Registered", value: printRange(fromDate, toDate) },
-      ],
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const canArchive = (p: Patient) => (p.appointmentsCount ?? 0) === 0 && (p.dentalRecordsCount ?? 0) === 0;
@@ -128,19 +131,18 @@ export default function AdminAccounts() {
       <Card className="shadow-card">
         <CardHeader className="print:hidden">
           <TableToolbar
-            count={filtered.length}
-            total={accounts.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={filtered.length}
             noun="account(s)"
-            onClear={search || fromDate || toDate ? () => { setSearch(""); setFromDate(""); setToDate(""); } : undefined}
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }
-          >
-            <FilterSearch placeholder="Search by name or email..." value={search} onChange={setSearch} />
-            <FilterRange label="Date registered" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
-          </TableToolbar>
+          />
         </CardHeader>
         <CardContent>
           {loading ? (

@@ -26,6 +26,9 @@ import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
 
 const emptyForm = {
   appointmentId: "",
@@ -58,19 +61,34 @@ export default function DentistRecords() {
     getAppointments().then(setAppointments).catch(() => {});
   }, []);
 
+  const [filter, setFilter] = useState(EMPTY_FILTER);
+
+  const rows = useMemo(
+    () => records.map(r => [
+      r.date,
+      r.patientName ?? "—",
+      r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+      r.toothNumber || "—",
+      r.diagnosis,
+      r.prescriptions.map(p => p.medicine).join(", ") || "—",
+    ]),
+    [records],
+  );
+  const shown = useMemo(
+    () => records.map((record, i) => ({ record, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [records, rows, filter],
+  );
+  const visible = shown.map(s => s.record);
+
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Dental Records",
-      columns: ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"],
-      rows: records.map(r => [
-        format(parseISO(r.date), "MMM d, yyyy"),
-        r.patientName ?? "—",
-        r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
-        r.toothNumber || "—",
-        r.diagnosis,
-        r.prescriptions.map(p => p.medicine).join(", ") || "—",
-      ]),
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+        : undefined,
     });
 
   const recordedAppointmentIds = useMemo(() => new Set(records.map(r => r.appointmentId)), [records]);
@@ -214,7 +232,11 @@ export default function DentistRecords() {
         <CardHeader className="space-y-3">
           <CardTitle className="font-heading text-lg">Saved Dental Records</CardTitle>
           <TableToolbar
-            count={records.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={visible.length}
             noun="record(s)"
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
@@ -240,14 +262,14 @@ export default function DentistRecords() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records.length === 0 ? (
+              {visible.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
                     No dental records yet. Save a consultation or create a new record.
                   </TableCell>
                 </TableRow>
               ) : (
-                records.map(r => (
+                visible.map(r => (
                   <TableRow
                     key={r.id}
                     ref={registerRow(r.id)}

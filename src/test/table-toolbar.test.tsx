@@ -1,10 +1,12 @@
 import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Every list's filter bar is the same component, so this checks the bar itself and
-// then that two real pages are wired to it.
+// Every list filters the same way as a generated report: pick a column, then say what
+// to look for. This covers the bar itself and two real pages wired to it.
 const h = vi.hoisted(() => ({ staff: [] as any[], patients: [] as any[] }));
+const printed = vi.hoisted(() => ({ calls: [] as any[] }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "su-1", name: "Super Administrator", email: "super@admin.com", role: "superadmin", verified: true } }),
@@ -18,9 +20,13 @@ vi.mock("@/lib/api/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/patients")>();
   return { ...actual, getPatients: vi.fn(async () => h.patients) };
 });
-vi.mock("@/lib/printReport", () => ({ printReport: () => true, ROWS_PER_PAGE: 20 }));
+vi.mock("@/lib/printReport", () => ({
+  printReport: (doc: any) => { printed.calls.push(doc); return true; },
+  ROWS_PER_PAGE: 20,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
+// Radix's Select can't be driven in jsdom; a native <select> with the same items can.
 vi.mock("@/components/ui/select", async () => {
   const React = await import("react");
   const items = (node: any): any[] =>
@@ -47,7 +53,8 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
-import TableToolbar, { FilterField, FilterRange, FilterSearch } from "@/components/TableToolbar";
+import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, type ReportFilter } from "@/lib/reportFilter";
 import SuperAdminStaff from "@/pages/superadmin/SuperAdminStaff";
 import AdminAccounts from "@/pages/admin/AdminAccounts";
 
@@ -58,6 +65,7 @@ beforeAll(() => {
 afterEach(cleanup);
 
 beforeEach(() => {
+  printed.calls = [];
   h.staff = [
     { id: "s1", employeeId: "EMP-001", name: "Dr. Sarah Chen", email: "admin@admin.com", contact: "0912",
       role: "admin", status: "active", photoUrl: null, createdAt: "2026-01-04" },
@@ -72,72 +80,104 @@ beforeEach(() => {
   ];
 });
 
-describe("the filter bar above a table", () => {
-  it("counts the rows, and says how many of how many once narrowed", () => {
-    const { rerender } = render(<TableToolbar count={36} total={36} />);
-    expect(screen.getByText("36 record(s)")).toBeInTheDocument();
+const COLUMNS = ["Name", "Status", "Date"];
+const ROWS = [
+  ["Maria Santos", "Active", "2026-09-20"],
+  ["Pedro Reyes", "Deactivated", "2026-09-25"],
+];
 
-    rerender(<TableToolbar count={7} total={36} />);
-    expect(screen.getByText("7 of 36 record(s)")).toBeInTheDocument();
+/** Renders the bar with its filter state held for it, as a page does. */
+function Harness({ noun, actions }: { noun?: string; actions?: ReactNode } = {}) {
+  const [filter, setFilter] = useState<ReportFilter>(EMPTY_FILTER);
+  const shown = ROWS.filter((r) =>
+    filter.field === "all"
+      ? r.join(" ").toLowerCase().includes(filter.value.toLowerCase())
+      : true);
+  return (
+    <TableToolbar
+      columns={COLUMNS}
+      rows={ROWS}
+      filter={filter}
+      onChange={setFilter}
+      shown={shown.length}
+      noun={noun}
+      actions={actions}
+    />
+  );
+}
+
+const field = () => screen.getByLabelText("Filter by field") as HTMLSelectElement;
+const chooseField = (index: string) => fireEvent.change(field(), { target: { value: index } });
+
+describe("the filter bar above a table", () => {
+  it("offers every column of the table to filter by", () => {
+    render(<Harness />);
+    expect(within(field()).getAllByRole("option").map(o => o.textContent))
+      .toEqual(["All fields", "Name", "Status", "Date"]);
   });
 
-  it("names what the rows are when the page says so", () => {
-    render(<TableToolbar count={4} total={4} noun="appointment(s)" />);
-    expect(screen.getByText("4 appointment(s)")).toBeInTheDocument();
+  it("counts the rows, and names what they are", () => {
+    render(<Harness noun="account(s)" />);
+    expect(screen.getByText("2 account(s)")).toBeInTheDocument();
   });
 
   it("keeps the page's own buttons beside the count", () => {
-    render(<TableToolbar count={1} actions={<button>Print</button>} />);
+    render(<Harness actions={<button>Print</button>} />);
     expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
   });
 
-  it("offers Clear only when the page passes a way to clear", () => {
-    const clear = vi.fn();
-    const { rerender } = render(<TableToolbar count={1} />);
-    expect(screen.queryByRole("button", { name: /Clear filters/ })).toBeNull();
+  it("asks for a range on a column of dates, and a list on a short column", async () => {
+    render(<Harness />);
 
-    rerender(<TableToolbar count={1} onClear={clear} />);
-    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
-    expect(clear).toHaveBeenCalled();
+    chooseField("2"); // Date
+    await waitFor(() => expect(screen.getByLabelText("From date")).toBeInTheDocument());
+    expect(screen.getByLabelText("To date")).toBeInTheDocument();
+
+    chooseField("1"); // Status — two distinct values
+    await waitFor(() => expect(screen.getByLabelText("Filter by Status")).toBeInTheDocument());
+    expect(within(screen.getByLabelText("Filter by Status")).getAllByRole("option").map(o => o.textContent))
+      .toEqual(["Any status", "Active", "Deactivated"]);
   });
 
-  it("labels each control, and bounds one end of a range by the other", () => {
-    render(
-      <TableToolbar count={0}>
-        <FilterSearch placeholder="Search..." value="" onChange={() => {}} />
-        <FilterField label="Role"><select aria-label="Filter by role" /></FilterField>
-        <FilterRange from="2026-09-01" to="2026-09-30" onFrom={() => {}} onTo={() => {}} />
-      </TableToolbar>,
-    );
+  it("shows Clear only once something is filtered", async () => {
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: /Clear filter/ })).toBeNull();
 
-    expect(screen.getByText("Search")).toBeInTheDocument();
-    expect(screen.getByText("Role")).toBeInTheDocument();
-    expect(screen.getByText("Date range")).toBeInTheDocument();
-    expect(screen.getByLabelText("From date")).toHaveAttribute("max", "2026-09-30");
-    expect(screen.getByLabelText("To date")).toHaveAttribute("min", "2026-09-01");
+    fireEvent.change(screen.getByLabelText("Filter these results"), { target: { value: "maria" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Clear filter/ })).toBeInTheDocument());
   });
 });
 
-describe("the pages use it", () => {
-  it("counts the staff, and narrows the count as the list is filtered", async () => {
+describe("the pages filter by column", () => {
+  it("narrows the staff list by a column, and says how many of how many", async () => {
     render(<MemoryRouter><SuperAdminStaff /></MemoryRouter>);
     await screen.findByText("Dr. Mike Johnson");
     expect(screen.getByText("2 account(s)")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by Employee ID/), { target: { value: "mike" } });
-    await waitFor(() => expect(screen.getByText("1 of 2 account(s)")).toBeInTheDocument());
+    chooseField("4"); // Role
+    await waitFor(() => expect(screen.getByLabelText("Filter by Role")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Filter by Role"), { target: { value: "Dentist" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /Clear filters/ }));
-    await waitFor(() => expect(screen.getByText("2 account(s)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("1 of 2 account(s)")).toBeInTheDocument());
+    expect(screen.queryByText("Dr. Sarah Chen")).toBeNull();
   });
 
-  it("puts the count and Print together above the patient accounts table", async () => {
+  it("filters patient accounts by a date range and prints what is left", async () => {
     render(<MemoryRouter><AdminAccounts /></MemoryRouter>);
     await screen.findByText("Maria Santos");
 
-    const bar = screen.getByText("2 account(s)").closest("div")!.parentElement as HTMLElement;
-    expect(within(bar).getByRole("button", { name: /Print/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("From date")).toBeInTheDocument();
-    expect(screen.getByLabelText("To date")).toBeInTheDocument();
+    chooseField("3"); // Date Registered
+    await waitFor(() => expect(screen.getByLabelText("From date")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-22" } });
+
+    await waitFor(() => expect(screen.queryByText("Maria Santos")).toBeNull());
+    expect(screen.getByText("1 of 2 account(s)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Print/ }));
+    await waitFor(() => expect(printed.calls).toHaveLength(1));
+    expect(printed.calls[0].rows.map((r: string[]) => r[0])).toEqual(["Pedro Reyes"]);
+    expect(printed.calls[0].filters).toContainEqual({
+      label: "Filtered By", value: "Date Registered: from 2026-09-22",
+    });
   });
 });

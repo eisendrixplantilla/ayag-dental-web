@@ -31,6 +31,9 @@ import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+
+const COLUMNS = ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"];
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const statusColors: Record<string, string> = {
@@ -80,20 +83,36 @@ export default function DentistAppointments() {
   );
 
   const [details, setDetails] = useState<Appointment | null>(null);
+  const [filter, setFilter] = useState(EMPTY_FILTER);
+
+  const rows = useMemo(
+    () => mine.map(apt => [
+      apt.patientName,
+      apt.service,
+      apt.date,
+      formatTimeRange(apt.time, apt.endTime),
+      apt.status,
+    ]),
+    [mine],
+  );
+  const shown = useMemo(
+    () => mine.map((apt, i) => ({ apt, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
+    [mine, rows, filter],
+  );
+  const visible = shown.map(s => s.apt);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "My Appointments",
-      columns: ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"],
-      rows: mine.map(apt => [
-        apt.patientName,
-        apt.service,
-        format(parseISO(apt.date), "MMM d, yyyy"),
-        formatTimeRange(apt.time, apt.endTime),
-        apt.status,
-      ]),
-      filters: [{ label: "Dentist", value: user?.name ?? "—" }],
+      columns: COLUMNS,
+      rows: shown.map(s => s.row),
+      filters: [
+        { label: "Dentist", value: user?.name ?? "—" },
+        ...(filterIsActive(filter)
+          ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
+          : []),
+      ],
     });
 
   // Arrived here from a notification bell click — scroll to that appointment's row.
@@ -229,7 +248,11 @@ export default function DentistAppointments() {
         <CardHeader className="space-y-3">
           <CardTitle className="font-heading text-lg">Assigned Appointments</CardTitle>
           <TableToolbar
-            count={mine.length}
+            columns={COLUMNS}
+            rows={rows}
+            filter={filter}
+            onChange={setFilter}
+            shown={visible.length}
             noun="appointment(s)"
             actions={
               <Button onClick={handlePrint} variant="outline" size="sm">
@@ -254,14 +277,14 @@ export default function DentistAppointments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mine.length === 0 && (
+              {visible.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
                     No appointments assigned to you.
                   </TableCell>
                 </TableRow>
               )}
-              {mine.map(apt => (
+              {visible.map(apt => (
                 <TableRow
                   key={apt.id}
                   ref={registerRow(apt.id)}
