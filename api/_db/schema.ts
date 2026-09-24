@@ -100,6 +100,17 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);
 ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_by TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_reason TEXT;
+-- The order the catalogue reads in, set by dragging the rows in Dental Services.
+ALTER TABLE services ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+-- Seeded once from the alphabetical order the list used to have, and numbered after
+-- whatever is already placed so re-running this can't renumber a row twice.
+WITH mx AS (SELECT COALESCE(MAX(sort_order), 0) AS m FROM services),
+missing AS (
+  SELECT id, row_number() OVER (ORDER BY service_name, id) AS n
+  FROM services WHERE sort_order IS NULL
+)
+UPDATE services SET sort_order = mx.m + missing.n
+FROM mx, missing WHERE services.id = missing.id;
 
 CREATE TABLE IF NOT EXISTS clinic_hours (
   day TEXT PRIMARY KEY,
