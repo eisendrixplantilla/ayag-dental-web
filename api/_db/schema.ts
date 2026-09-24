@@ -95,6 +95,11 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS service_name TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS duration INTEGER;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);
+-- Why a service was taken out of the catalogue. The row stays, so records that used it
+-- still name it; it just stops being offered for booking.
+ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_by TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS removed_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS clinic_hours (
   day TEXT PRIMARY KEY,
