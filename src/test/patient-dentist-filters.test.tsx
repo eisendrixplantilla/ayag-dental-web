@@ -207,19 +207,50 @@ describe("a patient narrows their own appointments", () => {
     ];
   });
 
-  it("narrows the upcoming list by a column, and counts what is left", async () => {
+  it("narrows the one list by a column, and counts what is left", async () => {
     render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
     await screen.findByText("Oral Prophylaxis");
     expect(optionsOf(fields()[0]))
-      .toEqual(["All fields", "Reference", "Service", "Dentist", "Date", "Time", "Status"]);
-    expect(screen.getByText("2 appointment(s)")).toBeInTheDocument();
+      .toEqual(["All fields", "Reference", "Service", "Dentist", "Date", "Time", "Status", "When"]);
+    // Everything in one list now: what is ahead and what is behind.
+    expect(screen.getByText("3 appointment(s)")).toBeInTheDocument();
 
     fireEvent.change(fields()[0], { target: { value: "5" } }); // Status
     fireEvent.change(await screen.findByLabelText("Filter by Status"), { target: { value: "pending" } });
 
     await waitFor(() => expect(screen.queryByText("Oral Prophylaxis")).toBeNull());
     expect(screen.getByText("Tooth Extraction")).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 appointment(s)")).toBeInTheDocument();
+    expect(screen.getByText("1 of 3 appointment(s)")).toBeInTheDocument();
+  });
+
+  it("splits what is ahead from what is behind by filter, not by tab", async () => {
+    render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
+    await screen.findByText("Oral Prophylaxis");
+    expect(screen.queryByRole("tab")).toBeNull();
+
+    // What is ahead comes first, soonest first, then what is behind.
+    const services = () => screen.getAllByText(/^(Oral Prophylaxis|Tooth Extraction|Veeners)$/).map(e => e.textContent);
+    expect(services()).toEqual(["Oral Prophylaxis", "Tooth Extraction", "Veeners"]);
+
+    fireEvent.change(fields()[0], { target: { value: "6" } }); // When
+    const picker = await screen.findByLabelText("Filter by When");
+    expect(optionsOf(picker)).toEqual(["Any when", "Past", "Upcoming"]);
+
+    fireEvent.change(picker, { target: { value: "Past" } });
+    await waitFor(() => expect(screen.queryByText("Oral Prophylaxis")).toBeNull());
+    expect(screen.getByText("Veeners")).toBeInTheDocument();
+    expect(screen.getByText("1 of 3 appointment(s)")).toBeInTheDocument();
+    // A visit that has already happened can't be moved or called off.
+    expect(screen.queryByRole("button", { name: /Reschedule/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Cancel Appointment/ })).toBeNull();
+    // And the note about history is said only where it applies.
+    expect(screen.getByText(/This is your appointment history/)).toBeInTheDocument();
+  });
+
+  it("keeps quiet about history while something is still ahead", async () => {
+    render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
+    await screen.findByText("Oral Prophylaxis");
+    expect(screen.queryByText(/This is your appointment history/)).toBeNull();
   });
 
   it("prints the upcoming and past sections as they were narrowed", async () => {
@@ -228,7 +259,7 @@ describe("a patient narrows their own appointments", () => {
 
     fireEvent.change(fields()[0], { target: { value: "1" } }); // Service
     fireEvent.change(await screen.findByLabelText("Filter by Service"), { target: { value: "Tooth Extraction" } });
-    await waitFor(() => expect(screen.getByText("1 of 2 appointment(s)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("1 of 3 appointment(s)")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /Print/ }));
     await waitFor(() => expect(printed.calls).toHaveLength(1));

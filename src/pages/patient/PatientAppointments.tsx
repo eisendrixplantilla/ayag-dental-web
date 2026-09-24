@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,7 +21,11 @@ import { appointmentRef } from "@/lib/appointmentRef";
 import TableToolbar from "@/components/TableToolbar";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
-const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status"];
+const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status", "When"];
+/** Still ahead of the patient — the clinic hasn't finished with it, so it can still
+ * be moved or called off. */
+const LIVE = ["pending", "confirmed", "rescheduled"];
+const isUpcoming = (apt: Appointment) => LIVE.includes(apt.status);
 // One text row per appointment: it drives the filter, the count and the printout alike.
 const aptRow = (apt: Appointment) => [
   appointmentRef(apt.id),
@@ -31,6 +34,7 @@ const aptRow = (apt: Appointment) => [
   apt.date,
   formatTimeRange(apt.time, apt.endTime),
   apt.status,
+  isUpcoming(apt) ? "Upcoming" : "Past",
 ];
 
 const statusColors: Record<string, string> = {
@@ -57,7 +61,6 @@ export default function PatientAppointments() {
   const [newDate, setNewDate] = useState<Date>();
   const [newTime, setNewTime] = useState("");
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState("upcoming");
 
   // `silent` is for background refreshes: no spinner over the table and no error
   // toast, so polling is invisible unless something actually changed.
@@ -112,38 +115,28 @@ export default function PatientAppointments() {
   }, [schedule]);
   const newTimeLabel = slots.find(s => s.value === newTime)?.label ?? "";
 
-  const upcoming = appointments
-    .filter((a) => a.status === "pending" || a.status === "confirmed" || a.status === "rescheduled")
-    .sort((a, b) => toDateTime(a).getTime() - toDateTime(b).getTime());
-  const history = appointments
-    .filter((a) => !["pending", "confirmed", "rescheduled"].includes(a.status))
-    .sort((a, b) => toDateTime(b).getTime() - toDateTime(a).getTime());
+  // What is still ahead, soonest first, then what is behind, most recent first —
+  // one list, with the split available as a filter rather than as two tabs.
+  const ordered = useMemo(() => [
+    ...appointments.filter(isUpcoming)
+      .sort((a, b) => toDateTime(a).getTime() - toDateTime(b).getTime()),
+    ...appointments.filter((a) => !isUpcoming(a))
+      .sort((a, b) => toDateTime(b).getTime() - toDateTime(a).getTime()),
+  ], [appointments]);
 
   const [filter, setFilter] = useState(EMPTY_FILTER);
-  // Both tabs show the same columns, so one filter serves them both.
-  const upcomingRows = useMemo(() => upcoming.map(aptRow), [upcoming]);
-  const historyRows = useMemo(() => history.map(aptRow), [history]);
-  const shownUpcoming = useMemo(
-    () => upcoming.filter((_, i) => matchesReportFilter(upcomingRows[i], filter)),
-    [upcoming, upcomingRows, filter],
+  const rows = useMemo(() => ordered.map(aptRow), [ordered]);
+  const shown = useMemo(
+    () => ordered.filter((_, i) => matchesReportFilter(rows[i], filter)),
+    [ordered, rows, filter],
   );
-  const shownHistory = useMemo(
-    () => history.filter((_, i) => matchesReportFilter(historyRows[i], filter)),
-    [history, historyRows, filter],
-  );
+  const shownUpcoming = shown.filter(isUpcoming);
+  const shownHistory = shown.filter((a) => !isUpcoming(a));
 
   // Arrived here from a notification bell click.
-  const { highlightedKey, registerRow, pendingId } = useNotificationJump(
+  const { highlightedKey, registerRow } = useNotificationJump(
     useCallback((id: string) => appointments.find(a => a.id === id)?.id, [appointments]),
   );
-
-  // The target may sit in the Past tab, which isn't mounted by default — switch to
-  // it once the data has loaded so there's actually a row to scroll to.
-  useEffect(() => {
-    if (!pendingId) return;
-    if (history.some(a => a.id === pendingId)) setTab("past");
-    else if (upcoming.some(a => a.id === pendingId)) setTab("upcoming");
-  }, [pendingId, appointments]);
 
   const hours24 = (apt: Appointment) => toDateTime(apt).getTime() - Date.now() >= 24 * 60 * 60 * 1000;
 
@@ -226,118 +219,83 @@ export default function PatientAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="mb-4 print:hidden">
-              <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
-              <TabsTrigger value="past">Past ({history.length})</TabsTrigger>
-            </TabsList>
-            <TabsContent value="upcoming" className="space-y-4">
-              <TableToolbar
-                columns={APT_COLUMNS}
-                rows={upcomingRows}
-                filter={filter}
-                onChange={setFilter}
-                shown={shownUpcoming.length}
-                noun="appointment(s)"
-              />
-              <div className="space-y-3">
-                {shownUpcoming.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {upcoming.length === 0 ? "No upcoming appointments." : "No appointments match this filter."}
-                  </p>
-                )}
-                {shownUpcoming.map((apt) => {
-                  const allowed = hours24(apt);
-                  // A patient's move lands back in the pending queue, so the one-time
-                  // limit counts the moves themselves rather than the status.
-                  const canReschedule = allowed && apt.rescheduleCount === 0;
-                  return (
-                    <div
-                      key={apt.id}
-                      ref={registerRow(apt.id)}
-                      className={`p-4 rounded-lg bg-muted/50 space-y-2 ${highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : ""}`}
-                    >
-                      <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                          <p className="font-medium text-foreground">{apt.service}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {format(parseISO(apt.date), "PPP")} at {formatTimeRange(apt.time, apt.endTime)} • {apt.dentistName}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                          <div className="flex items-center gap-2 flex-wrap print:hidden">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            {canReschedule && (
-                              <Button variant="outline" size="sm" onClick={() => openReschedule(apt)}>
-                                <Edit className="w-4 h-4 mr-1" /> Reschedule
-                              </Button>
-                            )}
-                            {allowed && (
-                              <Button variant="outline" size="sm" className="text-destructive" onClick={() => setCancelApt(apt)}>
-                                <X className="w-4 h-4 mr-1" /> Cancel Appointment
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {!allowed && (
-                        <p className="text-xs text-warning flex items-center gap-1">
-                          <Info className="w-3 h-3" /> {NOTICE_24H}
-                        </p>
-                      )}
-                      {apt.status === "pending" && apt.rescheduleCount > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          Your new time is waiting for the clinic to approve it.
-                        </p>
-                      )}
-                      {allowed && apt.rescheduleCount > 0 && (
-                        <p className="text-xs text-muted-foreground">You have already used your one-time reschedule for this appointment.</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </TabsContent>
-            <TabsContent value="past" className="space-y-4">
-              <TableToolbar
-                columns={APT_COLUMNS}
-                rows={historyRows}
-                filter={filter}
-                onChange={setFilter}
-                shown={shownHistory.length}
-                noun="appointment(s)"
-              />
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">This is your appointment history. Completed appointments are view-only.</p>
-                {shownHistory.length === 0 && history.length > 0 && (
-                  <p className="text-sm text-muted-foreground">No appointments match this filter.</p>
-                )}
-                {shownHistory.map((apt) => (
+          <div className="space-y-4">
+            <TableToolbar
+              columns={APT_COLUMNS}
+              rows={rows}
+              filter={filter}
+              onChange={setFilter}
+              shown={shown.length}
+              noun="appointment(s)"
+            />
+            <div className="space-y-3">
+              {shown.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {ordered.length === 0 ? "No appointments yet." : "No appointments match this filter."}
+                </p>
+              )}
+              {/* Said where it applies: only once nothing ahead is left on screen. */}
+              {shown.length > 0 && shownUpcoming.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  This is your appointment history. Completed appointments are view-only.
+                </p>
+              )}
+              {shown.map((apt) => {
+                const past = !isUpcoming(apt);
+                const allowed = !past && hours24(apt);
+                // A patient's move lands back in the pending queue, so the one-time
+                // limit counts the moves themselves rather than the status.
+                const canReschedule = allowed && apt.rescheduleCount === 0;
+                return (
                   <div
                     key={apt.id}
                     ref={registerRow(apt.id)}
-                    className={`flex items-center justify-between p-4 rounded-lg bg-muted/50 ${highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : ""}`}
+                    className={`p-4 rounded-lg bg-muted/50 space-y-2 ${highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : ""}`}
                   >
-                    <div>
-                      <p className="font-medium text-foreground">{apt.service}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(parseISO(apt.date), "PPP")} at {formatTimeRange(apt.time, apt.endTime)} • {apt.dentistName}
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="font-medium text-foreground">{apt.service}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(parseISO(apt.date), "PPP")} at {formatTimeRange(apt.time, apt.endTime)} • {apt.dentistName}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
+                        <div className="flex items-center gap-2 flex-wrap print:hidden">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          {canReschedule && (
+                            <Button variant="outline" size="sm" onClick={() => openReschedule(apt)}>
+                              <Edit className="w-4 h-4 mr-1" /> Reschedule
+                            </Button>
+                          )}
+                          {allowed && (
+                            <Button variant="outline" size="sm" className="text-destructive" onClick={() => setCancelApt(apt)}>
+                              <X className="w-4 h-4 mr-1" /> Cancel Appointment
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {!past && !allowed && (
+                      <p className="text-xs text-warning flex items-center gap-1">
+                        <Info className="w-3 h-3" /> {NOTICE_24H}
                       </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 print:hidden" title="View Details" onClick={() => setDetailsApt(apt)}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    )}
+                    {apt.status === "pending" && apt.rescheduleCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Your new time is waiting for the clinic to approve it.
+                      </p>
+                    )}
+                    {allowed && apt.rescheduleCount > 0 && (
+                      <p className="text-xs text-muted-foreground">You have already used your one-time reschedule for this appointment.</p>
+                    )}
                   </div>
-                ))}
-              </div>
-            </TabsContent>
-          </Tabs>
+                );
+              })}
+            </div>
+          </div>
           )}
         </CardContent>
       </Card>
