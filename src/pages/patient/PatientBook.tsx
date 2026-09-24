@@ -267,7 +267,7 @@ export default function PatientBook() {
           {/* When — the month and the free times side by side, so picking a day and seeing
               what is left is one glance rather than two dropdowns. */}
           <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit mx-auto md:mx-0", !dentistId && "opacity-60")}>
+            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto md:mx-0", !dentistId && "opacity-60")}>
               <Calendar
                 mode="single"
                 selected={date}
