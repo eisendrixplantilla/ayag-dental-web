@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { toast } from "sonner";
 import { getDentistSchedule, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
@@ -13,6 +15,7 @@ import {
   Palmtree,
   ShieldAlert,
   Loader2,
+  Printer,
 } from "lucide-react";
 
 function formatTimeRange(start: string, end: string) {
@@ -33,12 +36,55 @@ export default function DentistSchedule() {
   }, [user]);
 
   const days = [...(schedule?.days ?? [])].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+  const leave = schedule?.unavailable ?? [];
+
+  // The whole schedule as one document: the week a day at a time, then the leave
+  // that has been approved against it.
+  const print = usePrintDocument();
+  const handlePrint = () =>
+    print({
+      title: "Clinic Schedule",
+      filters: [
+        { label: "Working Days", value: days.map(d => DAY_NAMES[d.dayOfWeek]).join(", ") || "None" },
+      ],
+      tables: [
+        {
+          heading: "Working Hours",
+          columns: ["Day", "Working Hours", "Lunch Break", "Slot Duration"],
+          rows: days.map(d => [
+            DAY_NAMES[d.dayOfWeek],
+            formatTimeRange(d.start, d.end),
+            d.lunchStart && d.lunchEnd ? formatTimeRange(d.lunchStart, d.lunchEnd) : "None",
+            `${d.duration} min`,
+          ]),
+          emptyText: "No working days assigned.",
+        },
+        {
+          heading: "Leave Schedule",
+          columns: ["Date", "Day", "Reason"],
+          rows: leave.map(u => [
+            u.date,
+            format(parseISO(u.date), "EEEE"),
+            u.reason || "—",
+          ]),
+          emptyText: "No approved leave at the moment.",
+        },
+      ],
+    });
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold font-heading text-foreground">My Schedule</h1>
-        <p className="text-muted-foreground">Your assigned clinic schedule and leave calendar</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-heading text-foreground">My Schedule</h1>
+          <p className="text-muted-foreground">Your assigned clinic schedule and leave calendar</p>
+        </div>
+        {/* Nothing to print until the schedule is there to print. */}
+        {days.length > 0 && (
+          <Button onClick={handlePrint} variant="outline" className="print:hidden">
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -124,11 +170,11 @@ export default function DentistSchedule() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {(schedule?.unavailable.length ?? 0) === 0 ? (
+                {leave.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No approved leave at the moment.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {schedule!.unavailable.map((u) => (
+                    {leave.map((u) => (
                       <li key={u.id} className="text-sm text-foreground flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
                         {format(parseISO(u.date), "MMMM d, yyyy (EEEE)")}{u.reason ? ` — ${u.reason}` : ""}
