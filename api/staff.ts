@@ -22,6 +22,16 @@ function mapStaff(u: any) {
   };
 }
 
+/** The next free EMP-###, so a staff account always carries an Employee ID even when the
+ * Super Admin doesn't type one. Numbering continues from the highest already in use. */
+async function nextEmployeeId(): Promise<string> {
+  const rows = await sql`
+    SELECT COALESCE(MAX(substring(employee_id from 5)::int), 0) AS used
+    FROM users WHERE employee_id ~ '^EMP-[0-9]{1,6}$'
+  `;
+  return `EMP-${String(Number(rows[0]?.used ?? 0) + 1).padStart(3, "0")}`;
+}
+
 function requireSuperAdmin(req: VercelRequest, res: VercelResponse) {
   const session = getSessionFromRequest(req);
   if (!session || session.role !== "superadmin") {
@@ -233,18 +243,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (existingPatient.length > 0 || existingUser.length > 0) {
       return res.status(409).json({ error: "An account with this email already exists" });
     }
-    if (employeeId) {
-      const existingEmpId = await sql`SELECT id FROM users WHERE employee_id = ${employeeId}`;
+    const requestedEmployeeId = typeof employeeId === "string" ? employeeId.trim() : "";
+    if (requestedEmployeeId) {
+      const existingEmpId = await sql`SELECT id FROM users WHERE employee_id = ${requestedEmployeeId}`;
       if (existingEmpId.length > 0) {
         return res.status(409).json({ error: "An account with this Employee ID already exists" });
       }
     }
+    const staffEmployeeId = requestedEmployeeId || (await nextEmployeeId());
 
     const { firstName, lastName } = splitName(name);
     const passwordHash = await bcrypt.hash(password, 10);
     const inserted = await sql`
       INSERT INTO users (employee_id, email, password_hash, first_name, last_name, contact_number, role, verified, status)
-      VALUES (${employeeId ?? null}, ${normalizedEmail}, ${passwordHash}, ${firstName}, ${lastName}, ${contact ?? null}, ${role}, TRUE, 'active')
+      VALUES (${staffEmployeeId}, ${normalizedEmail}, ${passwordHash}, ${firstName}, ${lastName}, ${contact ?? null}, ${role}, TRUE, 'active')
       RETURNING *
     `;
     return res.status(201).json({ staff: mapStaff(inserted[0]) });

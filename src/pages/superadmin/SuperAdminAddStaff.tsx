@@ -91,8 +91,11 @@ export default function SuperAdminAddStaff() {
         <CardContent className="space-y-4">
           <div>
             <Label>Employee ID</Label>
-            <Input value={form.employeeId} onChange={e => set("employeeId", e.target.value)} className="font-mono" placeholder="EMP-007 (optional)" />
-            <p className="text-xs text-muted-foreground mt-1">Must be unique. It cannot be changed after the account is created.</p>
+            <Input value={form.employeeId} onChange={e => set("employeeId", e.target.value)} className="font-mono" placeholder="Leave blank to assign automatically" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Leave this blank and the next ID in sequence (EMP-001, EMP-002, …) is assigned. Must be unique, and it
+              cannot be changed after the account is created.
+            </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><Label>First Name *</Label><Input value={form.firstName} onChange={e => set("firstName", e.target.value)} /></div>

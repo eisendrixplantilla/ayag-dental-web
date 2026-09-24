@@ -15,6 +15,18 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id TEXT UNIQUE;
+-- Every staff account carries an Employee ID. Accounts that predate them (or were created
+-- without one) are given the next free EMP-### here; rows that already have one are left
+-- alone, so this is safe to re-run.
+WITH used AS (
+  SELECT COALESCE(MAX(substring(employee_id from 5)::int), 0) AS n
+  FROM users WHERE employee_id ~ '^EMP-[0-9]{1,6}$'
+), missing AS (
+  SELECT id, row_number() OVER (ORDER BY created_at, id) AS seq
+  FROM users WHERE employee_id IS NULL OR btrim(employee_id) = ''
+)
+UPDATE users SET employee_id = 'EMP-' || lpad((used.n + missing.seq)::text, 3, '0')
+FROM used, missing WHERE users.id = missing.id;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT;
