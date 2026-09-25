@@ -15,6 +15,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
 import { FilePlus2, FileEdit, Eye, Loader2, Plus, X, Printer } from "lucide-react";
 import {
@@ -26,6 +27,8 @@ import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
@@ -79,6 +82,7 @@ export default function DentistRecords() {
     [records, rows, filter],
   );
   const visible = shown.map(s => s.record);
+  const { page, setPage, paged } = usePagination(visible, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -249,7 +253,7 @@ export default function DentistRecords() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -269,18 +273,18 @@ export default function DentistRecords() {
                   </TableCell>
                 </TableRow>
               ) : (
-                visible.map(r => (
+                paged.map(r => (
                   <TableRow
                     key={r.id}
                     ref={registerRow(r.id)}
                     className={highlightedKey === r.id ? HIGHLIGHT_ROW_CLASS : undefined}
                   >
                     <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                    <TableCell className="font-medium">{r.patientName ?? "—"}</TableCell>
-                    <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
+                    <TableCell className={`font-medium ${WRAP_CELL}`}>{r.patientName ?? "—"}</TableCell>
+                    <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                     <TableCell>{r.toothNumber || "—"}</TableCell>
-                    <TableCell>{r.diagnosis}</TableCell>
-                    <TableCell>{r.prescriptions.map(p => p.medicine).join(", ") || "—"}</TableCell>
+                    <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
+                    <TableCell className={WRAP_CELL}>{r.prescriptions.map(p => p.medicine).join(", ") || "—"}</TableCell>
                     <TableCell className="print:hidden">
                       <div className="flex flex-wrap gap-2 justify-end">
                         <Button size="sm" variant="outline" onClick={() => openView(r)}>
@@ -297,6 +301,13 @@ export default function DentistRecords() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={visible.length}
+          pageSize={PAGE_SIZE}
+          noun="record(s)"
+        />
         </CardContent>
       </Card>
 

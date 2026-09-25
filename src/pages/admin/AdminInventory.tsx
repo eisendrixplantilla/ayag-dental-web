@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Package, Plus, AlertTriangle, Edit, Printer } from "lucide-react";
@@ -12,6 +13,8 @@ import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["ID", "Item", "Category", "Quantity", "Min Stock", "Unit", "Status"];
@@ -52,6 +55,7 @@ export default function AdminInventory() {
     [inventory, rows, filter],
   );
   const filtered = shown.map(s => s.item);
+  const { page, setPage, paged } = usePagination(filtered, filter);
   const lowStock = inventory.filter(i => i.status === "low").length;
 
   const print = usePrintDocument();
@@ -175,7 +179,7 @@ export default function AdminInventory() {
           />
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
@@ -188,11 +192,11 @@ export default function AdminInventory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(item => (
+              {paged.map(item => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-sm">{item.id}</TableCell>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{item.category}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{item.name}</TableCell>
+                  <TableCell className={WRAP_CELL}>{item.category}</TableCell>
                   <TableCell>{item.quantity} {item.unit}</TableCell>
                   <TableCell>{item.minStock} {item.unit}</TableCell>
                   <TableCell>
@@ -205,6 +209,13 @@ export default function AdminInventory() {
               ))}
             </TableBody>
           </Table>
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="item(s)"
+        />
         </CardContent>
       </Card>
 

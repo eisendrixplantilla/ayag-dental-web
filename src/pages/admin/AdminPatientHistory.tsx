@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { ArrowLeft, User, CalendarDays, FileText, Loader2, Printer } from "lucide-react";
 import { getPatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
@@ -12,6 +13,8 @@ import { toast } from "sonner";
 import { formatManilaDate } from "@/lib/formatDate";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -26,6 +29,8 @@ export default function AdminPatientHistory() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<DentalRecord[]>([]);
+  const aptPages = usePagination(appointments);
+  const recordPages = usePagination(records);
   const [loading, setLoading] = useState(true);
   const print = usePrintDocument();
 
@@ -164,7 +169,7 @@ export default function AdminPatientHistory() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -176,12 +181,12 @@ export default function AdminPatientHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {appointments.map(a => (
+              {aptPages.paged.map(a => (
                 <TableRow key={a.id}>
                   <TableCell>{a.date}</TableCell>
                   <TableCell>{toLabel(toMinutes(a.time))}</TableCell>
-                  <TableCell>{a.service}</TableCell>
-                  <TableCell>{a.dentistName ?? "—"}</TableCell>
+                  <TableCell className={WRAP_CELL}>{a.service}</TableCell>
+                  <TableCell className={WRAP_CELL}>{a.dentistName ?? "—"}</TableCell>
                   <TableCell>{a.type === "walk-in" ? "Walk-in" : "Online"}</TableCell>
                   <TableCell><Badge variant="outline" className={statusClass(a.status)}>{a.status}</Badge></TableCell>
                 </TableRow>
@@ -191,6 +196,7 @@ export default function AdminPatientHistory() {
               )}
             </TableBody>
           </Table>
+          <TablePagination page={aptPages.page} onPageChange={aptPages.setPage} total={appointments.length} pageSize={PAGE_SIZE} noun="appointment(s)" />
         </CardContent>
       </Card>
 
@@ -201,7 +207,7 @@ export default function AdminPatientHistory() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -211,12 +217,12 @@ export default function AdminPatientHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records.map(r => (
+              {recordPages.paged.map(r => (
                 <TableRow key={r.id}>
                   <TableCell>{r.date}</TableCell>
-                  <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
-                  <TableCell>{r.diagnosis}</TableCell>
-                  <TableCell>{r.dentistName ?? "—"}</TableCell>
+                  <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
+                  <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
+                  <TableCell className={WRAP_CELL}>{r.dentistName ?? "—"}</TableCell>
                 </TableRow>
               ))}
               {records.length === 0 && (
@@ -224,6 +230,7 @@ export default function AdminPatientHistory() {
               )}
             </TableBody>
           </Table>
+          <TablePagination page={recordPages.page} onPageChange={recordPages.setPage} total={records.length} pageSize={PAGE_SIZE} noun="record(s)" />
         </CardContent>
       </Card>
     </div>

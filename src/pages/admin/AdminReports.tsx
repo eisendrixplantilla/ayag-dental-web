@@ -6,9 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Search, Loader2 } from "lucide-react";
 import ReportToolbar from "@/components/ReportToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
@@ -143,6 +146,7 @@ export default function AdminReports() {
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
+  const { page, setPage, paged } = usePagination(visibleRows, filter);
 
   // What prints is what the screen shows, so a printed copy never depends on what the
   // screen happened to look like.
@@ -265,7 +269,7 @@ export default function AdminReports() {
             />
 
             <div className="rounded-lg border overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     {reportMeta[report.type].columns.map((c) => (
@@ -283,10 +287,10 @@ export default function AdminReports() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleRows.map((row, i) => (
+                    paged.map((row, i) => (
                       <TableRow key={i}>
                         {row.map((cell, j) => (
-                          <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusVariant(cell)}` : ""}>
+                          <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusVariant(cell)} ${WRAP_CELL}` : WRAP_CELL}>
                             {cell}
                           </TableCell>
                         ))}
@@ -296,6 +300,13 @@ export default function AdminReports() {
                 </TableBody>
               </Table>
             </div>
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={visibleRows.length}
+          pageSize={PAGE_SIZE}
+          noun="row(s)"
+        />
           </CardContent>
         </Card>
       )}

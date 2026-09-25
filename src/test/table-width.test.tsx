@@ -1,4 +1,4 @@
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/lib/api/appointments";
@@ -73,6 +73,30 @@ describe("the page shell's content width", () => {
     );
     expect(contentColumn(container)?.className).not.toContain("max-w-screen-xl");
     expect(contentColumn(container)?.className).toContain("w-full");
+  });
+});
+
+describe("the Appointments table pages at ten", () => {
+  const rowCount = (c: HTMLElement) => c.querySelectorAll("tbody tr").length;
+
+  it("shows ten of fifteen, then the rest", async () => {
+    h.appts = Array.from({ length: 15 }, (_, i) =>
+      appointment({ id: `0000000${i}-0000-4000-8000-00000000000${i.toString(16)}`, patientName: `Patient ${i + 1}` }));
+    const { container } = render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
+    await waitFor(() => expect(rowCount(container)).toBe(10));
+    expect(screen.getByText("Showing 1–10 of 15 appointment(s)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Next page"));
+    await waitFor(() => expect(rowCount(container)).toBe(5));
+    expect(screen.getByText("Showing 11–15 of 15 appointment(s)")).toBeInTheDocument();
+  });
+
+  it("shows no page bar when ten or fewer fit", async () => {
+    h.appts = Array.from({ length: 10 }, (_, i) =>
+      appointment({ id: `0000000${i}-0000-4000-8000-00000000000${i.toString(16)}` }));
+    const { container } = render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
+    await waitFor(() => expect(rowCount(container)).toBe(10));
+    expect(screen.queryByRole("navigation", { name: "Pagination" })).not.toBeInTheDocument();
   });
 });
 

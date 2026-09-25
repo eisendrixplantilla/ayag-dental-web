@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +12,8 @@ import { getPatients, getPatient, updatePatient, archivePatient, type Patient } 
 import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 // What the table shows, and what can be filtered by — one list, so the filter, the
@@ -50,6 +53,7 @@ export default function AdminAccounts() {
     [accounts, rows, filter],
   );
   const filtered = shown.map(s => s.account);
+  const { page, setPage, paged } = usePagination(filtered, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -148,7 +152,7 @@ export default function AdminAccounts() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Patient Name</TableHead>
@@ -159,10 +163,10 @@ export default function AdminAccounts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(a => (
+              {paged.map(a => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell>{a.email}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{a.name}</TableCell>
+                  <TableCell className={WRAP_CELL}>{a.email}</TableCell>
                   <TableCell>
                     <Badge
                       variant={a.status === "active" ? "default" : "secondary"}
@@ -200,6 +204,13 @@ export default function AdminAccounts() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="account(s)"
+        />
         </CardContent>
       </Card>
 

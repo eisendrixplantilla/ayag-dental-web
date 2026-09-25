@@ -7,9 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import StatCard from "@/components/StatCard";
 import { BarChart3, CalendarDays, FileText, Search, Users, UserCog, Loader2 } from "lucide-react";
 import ReportToolbar from "@/components/ReportToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
@@ -144,6 +147,7 @@ export default function SuperAdminReports() {
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
+  const { page, setPage, paged } = usePagination(visibleRows, filter);
 
   // What prints is what the screen shows.
   const handlePrint = () => {
@@ -247,7 +251,7 @@ export default function SuperAdminReports() {
                 />
 
                 <div className="rounded-lg border overflow-x-auto">
-                  <Table>
+                  <Table className={COMPACT_TABLE}>
                     <TableHeader>
                       <TableRow>
                         {reportMeta[report.type].columns.map(c => <TableHead key={c}>{c}</TableHead>)}
@@ -260,10 +264,10 @@ export default function SuperAdminReports() {
                             {report.rows.length === 0 ? "No records found." : "No records match this filter."}
                           </TableCell>
                         </TableRow>
-                      ) : visibleRows.map((row, i) => (
+                      ) : paged.map((row, i) => (
                         <TableRow key={i}>
                           {row.map((cell, j) => (
-                            <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusClassByLabel(cell)}` : ""}>
+                            <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusClassByLabel(cell)} ${WRAP_CELL}` : WRAP_CELL}>
                               {cell}
                             </TableCell>
                           ))}
@@ -272,6 +276,13 @@ export default function SuperAdminReports() {
                     </TableBody>
                   </Table>
                 </div>
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={visibleRows.length}
+          pageSize={PAGE_SIZE}
+          noun="row(s)"
+        />
               </CardContent>
             </Card>
           )}

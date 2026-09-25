@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +18,8 @@ import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Name", "Age", "Phone", "Email", "Status", "Walk-in"];
@@ -120,6 +123,7 @@ export default function AdminPatients() {
     [rows, textRows, filter],
   );
   const filtered = shown.map(s => s.row);
+  const { page, setPage, paged } = usePagination(filtered, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -306,7 +310,7 @@ export default function AdminPatients() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -319,11 +323,11 @@ export default function AdminPatients() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(r => {
+              {paged.map(r => {
                 const p = r.patient;
                 return (
                   <TableRow key={r.key}>
-                    <TableCell>
+                    <TableCell className={WRAP_CELL}>
                       {p ? (
                         <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{r.name}</button>
                       ) : (
@@ -331,8 +335,8 @@ export default function AdminPatients() {
                       )}
                     </TableCell>
                     <TableCell>{r.age}</TableCell>
-                    <TableCell>{r.phone}</TableCell>
-                    <TableCell>{r.email}</TableCell>
+                    <TableCell className={WRAP_CELL}>{r.phone}</TableCell>
+                    <TableCell className={WRAP_CELL}>{r.email}</TableCell>
                     <TableCell>
                       {p ? (
                         <Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge>
@@ -358,6 +362,13 @@ export default function AdminPatients() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="patient(s)"
+        />
         </CardContent>
       </Card>
 

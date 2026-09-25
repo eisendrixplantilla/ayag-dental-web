@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Archive, Edit, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
@@ -22,6 +23,8 @@ import { formatManilaDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"];
@@ -86,6 +89,7 @@ export default function SuperAdminStaff() {
     [staff, rows, filter],
   );
   const filtered = shown.map(s => s.member);
+  const { page, setPage, paged } = usePagination(filtered, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -294,7 +298,7 @@ export default function SuperAdminStaff() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Employee ID</TableHead>
@@ -311,11 +315,11 @@ export default function SuperAdminStaff() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No staff accounts found</TableCell>
                 </TableRow>
-              ) : filtered.map(s => (
+              ) : paged.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-sm">{s.employeeId ?? "—"}</TableCell>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.email}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{s.name}</TableCell>
+                  <TableCell className={WRAP_CELL}>{s.email}</TableCell>
                   <TableCell>{s.contact ?? "—"}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-secondary text-secondary-foreground">{roleLabel(s.role)}</Badge></TableCell>
                   <TableCell>
@@ -346,6 +350,13 @@ export default function SuperAdminStaff() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="staff member(s)"
+        />
         </CardContent>
       </Card>
 
@@ -451,7 +462,7 @@ export default function SuperAdminStaff() {
           ) : (
           <div className="space-y-5">
             <div className="overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Day</TableHead>
