@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical } from "lucide-react";
@@ -34,6 +37,10 @@ export default function SuperAdminSettings() {
   const [savingOrder, setSavingOrder] = useState(false);
 
   const [removed, setRemoved] = useState<Service[]>([]);
+  // The active catalogue is dragged into order, so it is deliberately not paged --
+  // a row cannot be dragged onto a page that is not on screen. Removed services
+  // have no order to keep, so they page like every other table.
+  const removedPages = usePagination(removed);
   const [removing, setRemoving] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState<Service | null>(null);
   const [savingDelete, setSavingDelete] = useState(false);
@@ -490,7 +497,7 @@ export default function SuperAdminSettings() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10 print:hidden"><span className="sr-only">Reorder</span></TableHead>
@@ -594,7 +601,7 @@ export default function SuperAdminSettings() {
                 No longer offered for booking. Past records still name them — a service a
                 record names can be restored but not deleted.
               </p>
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Service</TableHead>
@@ -605,7 +612,7 @@ export default function SuperAdminSettings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {removed.map((s) => (
+                  {removedPages.paged.map((s) => (
                     <TableRow key={s.id} className="text-muted-foreground">
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell>{s.removedAt ?? "—"}</TableCell>
@@ -632,6 +639,7 @@ export default function SuperAdminSettings() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={removedPages.page} onPageChange={removedPages.setPage} total={removed.length} pageSize={PAGE_SIZE} noun="removed service(s)" />
             </div>
           )}
         </CardContent>

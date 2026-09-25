@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +26,7 @@ const mockSales = [
 type Sale = typeof mockSales[number];
 
 export default function AdminSales() {
+  const { page, setPage, paged } = usePagination(mockSales);
   const [showRecord, setShowRecord] = useState(false);
   const print = usePrintDocument();
 
@@ -101,7 +105,7 @@ export default function AdminSales() {
           <CardTitle className="font-heading text-lg">Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
@@ -114,11 +118,11 @@ export default function AdminSales() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockSales.map(s => (
+              {paged.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-sm">{s.id}</TableCell>
-                  <TableCell className="font-medium">{s.patient}</TableCell>
-                  <TableCell>{s.service}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{s.patient}</TableCell>
+                  <TableCell className={WRAP_CELL}>{s.service}</TableCell>
                   <TableCell className="font-semibold">₱{s.amount.toLocaleString()}</TableCell>
                   <TableCell>{s.date}</TableCell>
                   <TableCell>
@@ -133,6 +137,7 @@ export default function AdminSales() {
               ))}
             </TableBody>
           </Table>
+          <TablePagination page={page} onPageChange={setPage} total={mockSales.length} pageSize={PAGE_SIZE} noun="transaction(s)" />
         </CardContent>
       </Card>
 

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,8 @@ import { splitServices } from "@/lib/services";
 import { appointmentRef, matchesRef } from "@/lib/appointmentRef";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { ALL_FIELDS, EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = [
@@ -102,6 +105,7 @@ export default function AdminOnlineAppointments() {
     [ordered, rows, filter],
   );
   const filtered = shown.map(s => s.apt);
+  const { page, setPage, paged } = usePagination(filtered, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -209,7 +213,7 @@ export default function AdminOnlineAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table className="[&_th]:px-2 [&_td]:px-2 [&_th]:whitespace-normal [&_th]:align-bottom">
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead className="hidden lg:table-cell">Reference</TableHead>
@@ -225,7 +229,7 @@ export default function AdminOnlineAppointments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(apt => (
+              {paged.map(apt => (
                 <TableRow
                   key={apt.id}
                   ref={registerRow(apt.id)}
@@ -262,6 +266,13 @@ export default function AdminOnlineAppointments() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="appointment(s)"
+        />
         </CardContent>
       </Card>
 

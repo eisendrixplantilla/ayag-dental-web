@@ -10,6 +10,8 @@ import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const VISIT_COLUMNS = ["Date", "Procedures", "Tooth", "Dentist", "Notes"];
@@ -90,6 +92,13 @@ export default function PatientRecords() {
   const shownRecords = narrow("visits", records, visitRows);
   const shownProcedures = narrow("procedures", procedures, procedureRows);
   const shownPrescriptions = narrow("prescriptions", prescriptions, rxRows);
+
+  // A page each. The tab is part of the reset key because switching tabs clears the
+  // filter, and a reader should land at the top of the new list, not mid-way down it.
+  const pageKey = tab + JSON.stringify(filter);
+  const visitPages = usePagination(shownRecords, pageKey);
+  const procedurePages = usePagination(shownProcedures, pageKey);
+  const rxPages = usePagination(shownPrescriptions, pageKey);
 
   const activeColumns =
     tab === "procedures" ? PROCEDURE_COLUMNS : tab === "prescriptions" ? RX_COLUMNS : VISIT_COLUMNS;
@@ -178,7 +187,7 @@ export default function PatientRecords() {
                     {records.length === 0 ? "No dental records yet." : "No records match this filter."}
                   </p>
                 )}
-                {shownRecords.map((record) => (
+                {visitPages.paged.map((record) => (
                   <div key={record.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                     <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
                       <FileText className="w-5 h-5 text-primary" />
@@ -200,6 +209,7 @@ export default function PatientRecords() {
                   </div>
                 ))}
               </div>
+              <TablePagination page={visitPages.page} onPageChange={visitPages.setPage} total={shownRecords.length} pageSize={PAGE_SIZE} noun="visit(s)" />
             </TabsContent>
 
             <TabsContent value="procedures" className="space-y-4">
@@ -217,7 +227,7 @@ export default function PatientRecords() {
                     {procedures.length === 0 ? "No procedures on record." : "No procedures match this filter."}
                   </p>
                 )}
-                {shownProcedures.map((proc, i) => (
+                {procedurePages.paged.map((proc, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                     <div>
                       <p className="font-medium text-foreground">{proc.procedure}</p>
@@ -229,6 +239,7 @@ export default function PatientRecords() {
                   </div>
                 ))}
               </div>
+              <TablePagination page={procedurePages.page} onPageChange={procedurePages.setPage} total={shownProcedures.length} pageSize={PAGE_SIZE} noun="procedure(s)" />
             </TabsContent>
 
             <TabsContent value="prescriptions" className="space-y-4">
@@ -246,7 +257,7 @@ export default function PatientRecords() {
                     {prescriptions.length === 0 ? "No prescriptions on record." : "No prescriptions match this filter."}
                   </p>
                 )}
-                {shownPrescriptions.map((rx, i) => (
+                {rxPages.paged.map((rx, i) => (
                   <div key={i} className="p-4 rounded-lg bg-muted/50">
                     <div className="flex items-start justify-between">
                       <div>
@@ -259,6 +270,7 @@ export default function PatientRecords() {
                   </div>
                 ))}
               </div>
+              <TablePagination page={rxPages.page} onPageChange={rxPages.setPage} total={shownPrescriptions.length} pageSize={PAGE_SIZE} noun="prescription(s)" />
             </TabsContent>
           </Tabs>
           )}

@@ -17,9 +17,11 @@ const sheets = (html: string) => html.split('<section class="sheet">').length - 
 const bodyRows = (html: string) => html.split("<tbody>").slice(1).map(part => part.split("</tbody>")[0]);
 
 describe("paginating a report", () => {
-  it("puts twenty records on a page by default", () => {
-    expect(ROWS_PER_PAGE).toBe(20);
-    expect(paginate(rows(45)).map(p => p.length)).toEqual([20, 20, 5]);
+  it("puts eighteen records on a page by default", () => {
+    // Eighteen is what an A4 sheet holds at the document's type size, with the
+    // signature block and rows wrapping to two lines.
+    expect(ROWS_PER_PAGE).toBe(18);
+    expect(paginate(rows(45)).map(p => p.length)).toEqual([18, 18, 9]);
   });
 
   it("takes a different page size when one is asked for", () => {
@@ -31,28 +33,28 @@ describe("paginating a report", () => {
     expect(paginate([])).toEqual([[]]);
   });
 
-  it("prints a sheet per twenty records", () => {
-    expect(sheets(buildReportHtml(doc(20)))).toBe(1);
-    expect(sheets(buildReportHtml(doc(21)))).toBe(2);
+  it("prints a sheet per eighteen records", () => {
+    expect(sheets(buildReportHtml(doc(18)))).toBe(1);
+    expect(sheets(buildReportHtml(doc(19)))).toBe(2);
     expect(sheets(buildReportHtml(doc(45)))).toBe(3);
   });
 
   it("splits the records across those sheets, in order and numbered", () => {
-    const parts = bodyRows(buildReportHtml(doc(22)));
+    const parts = bodyRows(buildReportHtml(doc(20)));
     expect(parts).toHaveLength(2);
     expect(parts[0]).toContain("Patient 1");
-    expect(parts[0]).toContain("Patient 20");
-    expect(parts[0]).not.toContain("Patient 21");
-    expect(parts[1]).toContain("Patient 21");
-    expect(parts[1]).toContain(">22</td>"); // the running record number
+    expect(parts[0]).toContain("Patient 18");
+    expect(parts[0]).not.toContain("Patient 19");
+    expect(parts[1]).toContain("Patient 19");
+    expect(parts[1]).toContain(">20</td>"); // the running record number
   });
 
   it("numbers every page and says which records are on it", () => {
     const html = buildReportHtml(doc(45));
     expect(html).toContain("Page 1 of 3");
     expect(html).toContain("Page 3 of 3");
-    expect(html).toContain("Records 1–20 of 45");
-    expect(html).toContain("Records 41–45 of 45");
+    expect(html).toContain("Records 1–18 of 45");
+    expect(html).toContain("Records 37–45 of 45");
   });
 
   it("repeats the letterhead and column headings on each sheet", () => {
@@ -63,13 +65,23 @@ describe("paginating a report", () => {
 });
 
 describe("what the document says", () => {
-  it("carries the date it was generated and who prepared it", () => {
+  it("carries the date it was generated, and signs for who prepared it", () => {
     const html = buildReportHtml(doc(3));
     expect(html).toContain("Date Generated");
     expect(html).toContain("Sep 24, 2026, 2:35 AM");
-    expect(html).toContain("Prepared By");
-    expect(html).toContain("Dr. Sarah Chen (Clinic Admin)");
-    expect(html).toContain("Total Records");
+    // Named once, in the signature block -- not repeated in the header above the table.
+    expect(html).toContain("Dr. Sarah Chen");
+    expect(html).toContain("Clinic Admin");
+    expect(html).not.toContain("Prepared By:");
+  });
+
+  it("leaves out what is already elsewhere on the sheet", () => {
+    const html = buildReportHtml(doc(3));
+    // The count lives in the footer of every sheet, so the header doesn't repeat it.
+    expect(html).not.toContain("Total Records");
+    expect(html).toContain("of 3");
+    // The strapline under the clinic name said nothing a reader needed.
+    expect(html).not.toContain("Dental Clinic Management System");
   });
 
   it("signs off once, on the last sheet only", () => {
@@ -130,7 +142,7 @@ describe("a document made of several sections", () => {
   it("keeps the letterhead, the meta and the signature of a report", () => {
     const html = buildReportHtml(sectionDoc());
     expect(html).toContain("Ayag Dental Clinic");
-    expect(html).toContain("Dr. Sarah Chen (Clinic Admin)");
+    expect(html).toContain("Dr. Sarah Chen");
     expect(html).toContain("Sep 24, 2026, 2:35 AM");
     expect(html).toContain('class="sign"');
     expect(html).toContain("Page 1 of 1");
@@ -189,7 +201,36 @@ describe("a document made of several sections", () => {
   it("leaves a plain list exactly as it was", () => {
     const html = buildReportHtml(doc(45));
     expect(sheets(html)).toBe(3); // still twenty to a sheet, no heading eating into it
-    expect(html).toContain("Records 1–20 of 45");
+    expect(html).toContain("Records 1–18 of 45");
     expect(html).not.toContain("<h3>");
+  });
+});
+
+describe("how big the document is set", () => {
+  const styles = () => {
+    const html = buildReportHtml(doc(3));
+    return html.slice(html.indexOf("<style>"), html.indexOf("</style>"));
+  };
+
+  it("sets every size in points, the unit a printer works in", () => {
+    // The px sizes this used to carry came out around 7.5pt on paper.
+    const pxSizes = styles().match(/font-size:\s*[\d.]+px/g) ?? [];
+    expect(pxSizes).toEqual([]);
+  });
+
+  it("sets the body and the tables at a readable size", () => {
+    const css = styles();
+    const sizeOf = (selector: string) => {
+      const escaped = selector.replace(/[.]/g, "\\.");
+      const block = new RegExp(escaped + "\\s*\\{[^}]*font-size:\\s*([0-9.]+)pt").exec(css);
+      return block ? Number(block[1]) : 0;
+    };
+    expect(sizeOf("body")).toBeGreaterThanOrEqual(10.5);
+    expect(sizeOf("table")).toBeGreaterThanOrEqual(10);
+    expect(sizeOf("th")).toBeGreaterThanOrEqual(10);
+    expect(sizeOf(".meta")).toBeGreaterThanOrEqual(10);
+    // The title still stands above the body text it heads.
+    expect(sizeOf("h2")).toBeGreaterThan(sizeOf("body"));
+    expect(sizeOf(".clinic")).toBeGreaterThan(sizeOf("h2"));
   });
 });

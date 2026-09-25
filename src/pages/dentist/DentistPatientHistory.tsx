@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import {
   User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown, Loader2, Printer,
 } from "lucide-react";
@@ -13,6 +14,8 @@ import { getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter, type ReportFilter } from "@/lib/reportFilter";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
@@ -34,7 +37,9 @@ function useSection<T>(items: T[], toRow: (item: T) => string[]) {
     () => items.map((item, i) => ({ item, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [items, rows, filter],
   );
-  return { filter, setFilter, rows, shown, visible: shown.map(s => s.item) };
+  const visible = useMemo(() => shown.map(s => s.item), [shown]);
+  const { page, setPage, paged } = usePagination(visible, filter);
+  return { filter, setFilter, rows, shown, visible, paged, page, setPage };
 }
 
 /** How a section's filter reads on the printed document — nothing, when it isn't set. */
@@ -286,7 +291,7 @@ export default function DentistPatientHistory() {
               />
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -301,17 +306,18 @@ export default function DentistPatientHistory() {
                     <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       {appointments.length === 0 ? "No appointments on record." : "No appointments match this filter."}
                     </TableCell></TableRow>
-                  ) : aptSection.visible.map(a => (
+                  ) : aptSection.paged.map(a => (
                     <TableRow key={a.id}>
                       <TableCell>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="whitespace-nowrap">{formatTimeRange(a.time, a.endTime)}</TableCell>
-                      <TableCell>{a.service}</TableCell>
+                      <TableCell className={WRAP_CELL}>{a.service}</TableCell>
                       <TableCell className="capitalize">{a.type}</TableCell>
                       <TableCell><Badge variant="outline" className={statusClass(a.status)}>{a.status}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={aptSection.page} onPageChange={aptSection.setPage} total={aptSection.visible.length} pageSize={PAGE_SIZE} noun="appointment(s)" />
             </CardContent>
           </Card>
 
@@ -330,7 +336,7 @@ export default function DentistPatientHistory() {
               />
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -344,16 +350,17 @@ export default function DentistPatientHistory() {
                     <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       {records.length === 0 ? "No dental records yet." : "No records match this filter."}
                     </TableCell></TableRow>
-                  ) : recordSection.visible.map(r => (
+                  ) : recordSection.paged.map(r => (
                     <TableRow key={r.id}>
                       <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
-                      <TableCell>{r.diagnosis}</TableCell>
-                      <TableCell>{r.treatmentNotes || "—"}</TableCell>
+                      <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
+                      <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
+                      <TableCell className={WRAP_CELL}>{r.treatmentNotes || "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={recordSection.page} onPageChange={recordSection.setPage} total={recordSection.visible.length} pageSize={PAGE_SIZE} noun="record(s)" />
             </CardContent>
           </Card>
 
@@ -372,7 +379,7 @@ export default function DentistPatientHistory() {
               />
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -386,16 +393,17 @@ export default function DentistPatientHistory() {
                     <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       {procedures.length === 0 ? "No procedures on record." : "No procedures match this filter."}
                     </TableCell></TableRow>
-                  ) : procedureSection.visible.map((p, i) => (
+                  ) : procedureSection.paged.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell className="font-medium">{p.procedure}</TableCell>
-                      <TableCell>{p.dentist}</TableCell>
-                      <TableCell>{p.outcome}</TableCell>
+                      <TableCell className={`font-medium ${WRAP_CELL}`}>{p.procedure}</TableCell>
+                      <TableCell className={WRAP_CELL}>{p.dentist}</TableCell>
+                      <TableCell className={WRAP_CELL}>{p.outcome}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={procedureSection.page} onPageChange={procedureSection.setPage} total={procedureSection.visible.length} pageSize={PAGE_SIZE} noun="procedure(s)" />
             </CardContent>
           </Card>
 
@@ -414,7 +422,7 @@ export default function DentistPatientHistory() {
               />
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <Table>
+              <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -427,15 +435,16 @@ export default function DentistPatientHistory() {
                     <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                       {prescriptions.length === 0 ? "No prescriptions on record." : "No prescriptions match this filter."}
                     </TableCell></TableRow>
-                  ) : rxSection.visible.map((p, i) => (
+                  ) : rxSection.paged.map((p, i) => (
                     <TableRow key={i}>
                       <TableCell>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell className="font-medium">{p.medication}</TableCell>
-                      <TableCell>{p.dentist}</TableCell>
+                      <TableCell className={`font-medium ${WRAP_CELL}`}>{p.medication}</TableCell>
+                      <TableCell className={WRAP_CELL}>{p.dentist}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination page={rxSection.page} onPageChange={rxSection.setPage} total={rxSection.visible.length} pageSize={PAGE_SIZE} noun="prescription(s)" />
             </CardContent>
           </Card>
         </>

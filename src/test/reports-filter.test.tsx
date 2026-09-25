@@ -211,7 +211,9 @@ describe("filtering by one field", () => {
     render(<MemoryRouter><AdminReports /></MemoryRouter>);
     fireEvent.change(await screen.findByLabelText("Report type"), { target: { value: "appointment" } });
     fireEvent.click(screen.getByRole("button", { name: /Generate Report/ }));
-    await waitFor(() => expect(dataRows()).toHaveLength(20));
+    // Twenty rows, ten to a page — the field picker still sees all twenty values.
+    await waitFor(() => expect(dataRows()).toHaveLength(10));
+    expect(screen.getByText("Showing 1–10 of 20 row(s)")).toBeInTheDocument();
 
     chooseField("1"); // Patient Name — 20 distinct
     await waitFor(() => expect(screen.getByLabelText("Filter the generated report")).toBeInTheDocument());

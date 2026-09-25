@@ -16,6 +16,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -31,6 +32,8 @@ import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"];
@@ -110,6 +113,7 @@ export default function DentistAppointments() {
     [mine, rows, filter],
   );
   const visible = shown.map(s => s.apt);
+  const { page, setPage, paged } = usePagination(visible, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -287,7 +291,7 @@ export default function DentistAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Patient Name</TableHead>
@@ -306,14 +310,14 @@ export default function DentistAppointments() {
                   </TableCell>
                 </TableRow>
               )}
-              {visible.map(apt => (
+              {paged.map(apt => (
                 <TableRow
                   key={apt.id}
                   ref={registerRow(apt.id)}
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="font-medium">{apt.patientName}</TableCell>
-                  <TableCell>{apt.service}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{apt.patientName}</TableCell>
+                  <TableCell className={WRAP_CELL}>{apt.service}</TableCell>
                   <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
                   <TableCell>
@@ -381,6 +385,13 @@ export default function DentistAppointments() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={visible.length}
+          pageSize={PAGE_SIZE}
+          noun="appointment(s)"
+        />
         </CardContent>
       </Card>
 

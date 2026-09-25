@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE } from "@/lib/tableClass";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarCheck, CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
@@ -27,6 +28,8 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
 import { getServices } from "@/lib/api/dentalRecords";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 
 
 export default function AdminAppointments() {
@@ -178,6 +181,7 @@ export default function AdminAppointments() {
 
   // Newest booking first, so a walk-in just taken at the desk is the top row.
   const ordered = useMemo(() => [...walkIns].sort(byNewestBooked), [walkIns]);
+  const { page, setPage, paged } = usePagination(ordered);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -501,7 +505,7 @@ export default function AdminAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table className="[&_th]:px-2 [&_td]:px-2 [&_th]:whitespace-normal [&_th]:align-bottom">
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>Patient</TableHead>
@@ -514,7 +518,7 @@ export default function AdminAppointments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ordered.map(w => (
+              {paged.map(w => (
                 <TableRow
                   key={w.id}
                   ref={registerRow(w.id)}
@@ -546,6 +550,13 @@ export default function AdminAppointments() {
             </TableBody>
           </Table>
           )}
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={ordered.length}
+          pageSize={PAGE_SIZE}
+          noun="walk-in(s)"
+        />
         </CardContent>
       </Card>
 

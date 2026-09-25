@@ -19,6 +19,8 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { appointmentRef } from "@/lib/appointmentRef";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status", "When"];
@@ -129,10 +131,22 @@ export default function PatientAppointments() {
   const shownUpcoming = shown.filter(isUpcoming);
   const shownHistory = shown.filter((a) => !isUpcoming(a));
 
+  // Only the listing is paged. The printout, the count in the toolbar and the notices
+  // below all keep reading `shown`, so none of them shrink to the page being viewed.
+  const { page, setPage, paged } = usePagination(shown, filter);
+
   // Arrived here from a notification bell click.
-  const { highlightedKey, registerRow } = useNotificationJump(
+  const { highlightedKey, registerRow, pendingId } = useNotificationJump(
     useCallback((id: string) => appointments.find(a => a.id === id)?.id, [appointments]),
   );
+
+  // The appointment the bell points at can sit on any page, and the hook can only
+  // scroll to a row that's actually mounted — so turn to its page first.
+  useEffect(() => {
+    if (!pendingId) return;
+    const i = shown.findIndex(a => a.id === pendingId);
+    if (i >= 0) setPage(Math.floor(i / PAGE_SIZE) + 1);
+  }, [pendingId, shown, setPage]);
 
   const hours24 = (apt: Appointment) => toDateTime(apt).getTime() - Date.now() >= 24 * 60 * 60 * 1000;
 
@@ -236,7 +250,7 @@ export default function PatientAppointments() {
                   This is your appointment history. Completed appointments are view-only.
                 </p>
               )}
-              {shown.map((apt) => {
+              {paged.map((apt) => {
                 const past = !isUpcoming(apt);
                 const allowed = !past && hours24(apt);
                 // A patient's move lands back in the pending queue, so the one-time
@@ -291,6 +305,13 @@ export default function PatientAppointments() {
                 );
               })}
             </div>
+            <TablePagination
+              page={page}
+              onPageChange={setPage}
+              total={shown.length}
+              pageSize={PAGE_SIZE}
+              noun="appointment(s)"
+            />
           </div>
           )}
         </CardContent>

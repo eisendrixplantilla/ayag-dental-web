@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArchiveRestore, Eye, Loader2, Printer } from "lucide-react";
@@ -12,6 +13,8 @@ import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
+import TablePagination from "@/components/TablePagination";
+import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["ID", "Full Name", "Account Type", "Date Archived", "Archived By", "Reason"];
@@ -82,6 +85,7 @@ export default function SuperAdminArchives() {
     [rows, textRows, filter],
   );
   const filtered = shown.map((s) => s.row);
+  const { page, setPage, paged } = usePagination(filtered, filter);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -146,7 +150,7 @@ export default function SuperAdminArchives() {
           />
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
@@ -169,15 +173,15 @@ export default function SuperAdminArchives() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No archived accounts</TableCell>
                 </TableRow>
-              ) : filtered.map(r => (
+              ) : paged.map(r => (
                 <TableRow key={`${r.type}-${r.id}`}>
                   <TableCell className="font-mono text-sm">{r.id}</TableCell>
-                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL}`}>{r.name}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="bg-secondary text-secondary-foreground">{r.type}</Badge>
                   </TableCell>
                   <TableCell>{r.archivedAt}</TableCell>
-                  <TableCell>{r.archivedBy}</TableCell>
+                  <TableCell className={WRAP_CELL}>{r.archivedBy}</TableCell>
                   <TableCell className="max-w-[16rem] whitespace-normal break-words">{r.reason}</TableCell>
                   <TableCell className="print:hidden">
                     <div className="flex flex-wrap gap-1">
@@ -193,6 +197,13 @@ export default function SuperAdminArchives() {
               ))}
             </TableBody>
           </Table>
+        <TablePagination
+          page={page}
+          onPageChange={setPage}
+          total={filtered.length}
+          pageSize={PAGE_SIZE}
+          noun="archived item(s)"
+        />
         </CardContent>
       </Card>
 

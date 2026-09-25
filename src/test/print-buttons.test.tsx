@@ -13,7 +13,7 @@ const printed = vi.hoisted(() => ({ calls: [] as any[] }));
 
 vi.mock("@/lib/printReport", () => ({
   printReport: (doc: any) => { printed.calls.push(doc); return true; },
-  ROWS_PER_PAGE: 20,
+  ROWS_PER_PAGE: 18,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
