@@ -1,8 +1,13 @@
 import { api, type User } from "@/contexts/AuthContext";
 
 export interface Patient extends User {
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
   phone: string | null;
   address: string | null;
+  /** "YYYY-MM-DD", as the patient gave it at registration. */
+  birthdate: string | null;
   age: number | null;
   gender: string | null;
   bloodType: string | null;

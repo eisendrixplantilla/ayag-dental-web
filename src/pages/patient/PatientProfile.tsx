@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getPatient, updatePatient } from "@/lib/api/patients";
+import { getPatient, updatePatient, type Patient } from "@/lib/api/patients";
 import { resizeImageToDataUrl } from "@/lib/resizeImage";
+import { patientRef, ageFromBirthdate, formatBirthdate } from "@/lib/patientRef";
+import { statusLabel } from "@/lib/roleLabel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,12 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Cake,
+  Users,
+  Droplet,
+  TriangleAlert,
+  CalendarDays,
+  BadgeCheck,
 } from "lucide-react";
 
 const profileSchema = z.object({
@@ -46,6 +54,10 @@ export default function PatientProfile() {
   const { user, changePassword } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // The whole `patients` row, so the page shows what the clinic holds rather than the
+  // name and email cached in this browser at sign-in — those go stale the moment the
+  // front desk corrects a record.
+  const [record, setRecord] = useState<Patient | null>(null);
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
@@ -61,6 +73,7 @@ export default function PatientProfile() {
     if (!user) return;
     getPatient(user.id)
       .then((p) => {
+        setRecord(p);
         setPhone(p.phone ?? "");
         setAddress(p.address ?? "");
         setPhoto(p.photoUrl ?? null);
@@ -78,7 +91,7 @@ export default function PatientProfile() {
     }
     setSavingProfile(true);
     try {
-      await updatePatient(user.id, { phone, address });
+      setRecord(await updatePatient(user.id, { phone, address }));
       toast.success("Profile updated", {
         description: "Your contact information has been saved.",
       });
@@ -119,6 +132,7 @@ export default function PatientProfile() {
     try {
       const dataUrl = await resizeImageToDataUrl(file);
       const updated = await updatePatient(user.id, { photo: dataUrl });
+      setRecord(updated);
       setPhoto(updated.photoUrl ?? dataUrl);
       toast.success("Profile picture updated");
     } catch (err) {
@@ -127,6 +141,15 @@ export default function PatientProfile() {
       setUploadingPhoto(false);
     }
   };
+
+  // The table keeps both: a birthdate from online registration, and a plain age for rows
+  // the front desk typed in. Show the birthdate when there is one, and the age it implies.
+  const age = ageFromBirthdate(record?.birthdate) ?? record?.age ?? null;
+  const birthdateText = record?.birthdate
+    ? `${formatBirthdate(record.birthdate)}${age !== null ? ` (${age} years old)` : ""}`
+    : age !== null
+      ? `${age} years old`
+      : null;
 
   return (
     <div className="space-y-6">
@@ -167,22 +190,38 @@ export default function PatientProfile() {
             </div>
             <div className="flex-1 space-y-3">
               <div>
-                <h2 className="text-xl font-semibold font-heading text-foreground">{user?.name}</h2>
-                <Badge variant="outline" className="bg-secondary text-secondary-foreground mt-1">Patient</Badge>
+                <h2 className="text-xl font-semibold font-heading text-foreground">
+                  {record?.name ?? user?.name}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <Badge variant="outline" className="bg-secondary text-secondary-foreground">Patient</Badge>
+                  {record && (
+                    <Badge
+                      variant="outline"
+                      className={record.status === "active"
+                        ? "bg-success/10 text-success border-success/20"
+                        : "bg-muted text-muted-foreground"}
+                    >
+                      <BadgeCheck className="w-3 h-3 mr-1" /> {statusLabel(record.status)}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2 text-sm">
                   <IdCard className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Patient ID</p>
-                    <p className="font-medium text-foreground">PT-{user?.id?.padStart(4, "0")}</p>
+                    <p className="font-medium text-foreground">
+                      {record ? patientRef(record.id) : "—"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Mail className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Account Email</p>
-                    <p className="font-medium text-foreground">{user?.email}</p>
+                    <p className="font-medium text-foreground">{record?.email ?? user?.email}</p>
                   </div>
                 </div>
               </div>
@@ -191,6 +230,36 @@ export default function PatientProfile() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Everything the clinic holds on file for this patient, read-only here. */}
+      <Card className="shadow-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="font-heading text-base flex items-center gap-2">
+            <UserIcon className="w-4 h-4 text-primary" /> Personal Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingProfile ? (
+            <p className="text-sm text-muted-foreground">Loading your details...</p>
+          ) : (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Detail icon={Cake} label="Date of Birth" value={birthdateText} />
+              <Detail icon={Users} label="Sex" value={record?.gender} />
+              <Detail icon={Droplet} label="Blood Type" value={record?.bloodType} />
+              <Detail icon={TriangleAlert} label="Allergies" value={record?.allergies} empty="None on file" />
+              <Detail icon={CalendarDays} label="Patient Since" value={record?.createdAt} />
+              <Detail
+                icon={BadgeCheck}
+                label="Records on File"
+                value={record ? `${record.appointmentsCount ?? 0} appointments · ${record.dentalRecordsCount ?? 0} dental records` : null}
+              />
+            </dl>
+          )}
+          <p className="text-xs text-muted-foreground mt-4">
+            These come from your clinic record. Ask the front desk to correct anything that looks wrong.
+          </p>
         </CardContent>
       </Card>
 
@@ -275,6 +344,33 @@ export default function PatientProfile() {
             </Button>
           </CardContent>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/** One read-only field from the patient's clinic record. A field the clinic hasn't filled
+ * in reads as "Not on file" rather than sitting blank, so it's clear nothing is missing
+ * from the page itself. */
+function Detail({
+  icon: Icon,
+  label,
+  value,
+  empty = "Not on file",
+}: {
+  icon: typeof Cake;
+  label: string;
+  value: string | null | undefined;
+  empty?: string;
+}) {
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <dt className="text-xs text-muted-foreground">{label}</dt>
+        <dd className={value ? "font-medium text-foreground break-words" : "text-muted-foreground"}>
+          {value || empty}
+        </dd>
       </div>
     </div>
   );

@@ -11,10 +11,15 @@ function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsC
     id: p.id,
     email: p.email,
     name: joinName(p.first_name, p.middle_name, p.last_name),
+    firstName: p.first_name,
+    middleName: p.middle_name,
+    lastName: p.last_name,
     role: "patient",
     verified: p.verified,
     phone: p.contact_number,
     address: p.address,
+    // Collected at registration and stored ever since, but until now nothing read it back.
+    birthdate: manilaDateStr(p.birthdate),
     age: p.age,
     gender: p.sex,
     bloodType: p.blood_type,
@@ -51,7 +56,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
 
   if (req.method === "GET") {
-    if (!requireSession(req, res)) return;
+    const session = requireSession(req, res);
+    if (!session) return;
+    // A patient row carries an address, allergies and a blood type. Staff read any of them;
+    // a patient reads their own and nobody else's. Only the Profile page asks as a patient.
+    const isClinician = session.role === "admin" || session.role === "superadmin" || session.role === "dentist";
+    if (!isClinician && session.sub !== id) return res.status(403).json({ error: "Forbidden" });
 
     if (id) {
       const rows = await sql`SELECT * FROM patients WHERE id = ${id}`;
