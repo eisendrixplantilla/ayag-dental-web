@@ -212,7 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       FROM treatments t
       JOIN dental_records dr ON dr.id = t.record_id
       JOIN appointments a ON a.id = dr.appointment_id
-      LEFT JOIN patients p ON p.patient_id = a.patient_id
+      LEFT JOIN patients p ON p.id = a.patient_id
       WHERE t.service_id = ${id}
       ORDER BY dr.date DESC
     `;
