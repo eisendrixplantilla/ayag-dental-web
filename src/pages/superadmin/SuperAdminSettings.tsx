@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import {
   getServices, getRemovedServices, updateService, createService, removeService, restoreService,
-  reorderServices, type Service,
+  reorderServices, deleteService, type Service,
 } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -35,6 +35,8 @@ export default function SuperAdminSettings() {
 
   const [removed, setRemoved] = useState<Service[]>([]);
   const [removing, setRemoving] = useState<Service | null>(null);
+  const [deleting, setDeleting] = useState<Service | null>(null);
+  const [savingDelete, setSavingDelete] = useState(false);
   const [removeReason, setRemoveReason] = useState("");
   const [savingRemoval, setSavingRemoval] = useState(false);
 
@@ -128,6 +130,23 @@ export default function SuperAdminSettings() {
       toast.success(`${back.name} is offered again`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to restore the service");
+    }
+  };
+
+  /** Out of the catalogue for good. The server refuses if a dental record still names
+   * the service, so a record can't lose a line it once said. */
+  const deleteForGood = async () => {
+    if (!deleting) return;
+    setSavingDelete(true);
+    try {
+      await deleteService(deleting.id);
+      setRemoved((prev) => prev.filter((s) => s.id !== deleting.id));
+      toast.success(`${deleting.name} deleted`);
+      setDeleting(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete the service");
+    } finally {
+      setSavingDelete(false);
     }
   };
 
@@ -305,6 +324,25 @@ export default function SuperAdminSettings() {
             <Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button>
             <Button variant="destructive" onClick={confirmRemove} disabled={savingRemoval || !removeReason.trim()}>
               {savingRemoval && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete for good */}
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Delete Service</DialogTitle>
+            <DialogDescription>
+              {deleting?.name} will be gone from the catalogue for good. This can't be undone —
+              if you only want to stop offering it, Restore it and remove it again instead.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteForGood} disabled={savingDelete}>
+              {savingDelete && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Delete for good
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -511,7 +549,8 @@ export default function SuperAdminSettings() {
             <div className="mt-6 border-t pt-4">
               <p className="font-medium text-sm text-foreground">Removed Services</p>
               <p className="text-xs text-muted-foreground mb-3">
-                No longer offered for booking. Past records still name them.
+                No longer offered for booking. Past records still name them — a service a
+                record names can be restored but not deleted.
               </p>
               <Table>
                 <TableHeader>
@@ -531,9 +570,21 @@ export default function SuperAdminSettings() {
                       <TableCell>{s.removedBy ?? "—"}</TableCell>
                       <TableCell className="max-w-[18rem] whitespace-normal break-words">{s.removedReason ?? "—"}</TableCell>
                       <TableCell className="print:hidden">
-                        <Button variant="ghost" size="sm" aria-label={`Restore ${s.name}`} onClick={() => bringBack(s)}>
-                          <RotateCcw className="w-4 h-4 mr-1" /> Restore
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" aria-label={`Restore ${s.name}`} onClick={() => bringBack(s)}>
+                            <RotateCcw className="w-4 h-4 mr-1" /> Restore
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            aria-label={`Delete ${s.name} permanently`}
+                            title="Delete permanently"
+                            onClick={() => setDeleting(s)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

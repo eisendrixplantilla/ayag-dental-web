@@ -190,6 +190,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ service: mapService(service) });
   }
 
+  // Taking a service out of the catalogue for good. Only one already removed, and
+  // only one nothing points at: a service named by a treatment is part of what that
+  // record says happened, and deleting it would quietly rewrite the record.
+  if (req.method === "DELETE" && req.query.services === "true") {
+    if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+    if (!id) return res.status(400).json({ error: "Missing id" });
+
+    const found = await sql`SELECT service_name, removed_at FROM services WHERE id = ${id}`;
+    const service = found[0];
+    if (!service) return res.status(404).json({ error: "Service not found" });
+    if (!service.removed_at) {
+      return res.status(409).json({ error: "Remove the service first — only a removed service can be deleted for good." });
+    }
+
+    const used = await sql`SELECT count(*)::int AS n FROM treatments WHERE service_id = ${id}`;
+    if (used[0].n > 0) {
+      return res.status(409).json({
+        error: `"${displayService(service.service_name)}" is named by ${used[0].n} dental record treatment${used[0].n === 1 ? "" : "s"}. Deleting it would change what those records say, so it stays in Removed Services.`,
+      });
+    }
+
+    await sql`DELETE FROM services WHERE id = ${id}`;
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method === "POST" && req.query.services === "true") {
     if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
     const { name, duration, price, description } = req.body ?? {};

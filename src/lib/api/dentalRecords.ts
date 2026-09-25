@@ -140,6 +140,12 @@ export async function reorderServices(order: string[]): Promise<Service[]> {
   return data.services;
 }
 
+/** Takes a removed service out of the catalogue for good. Refused by the server if a
+ * dental record still names it. */
+export async function deleteService(id: string): Promise<void> {
+  await api(`/dental-records?services=true&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function updateService(id: string, patch: { price?: number; duration?: number }): Promise<Service> {
   const data = await api<{ service: Service }>(`/dental-records?services=true&id=${encodeURIComponent(id)}`, {
     method: "PATCH",

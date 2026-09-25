@@ -219,8 +219,8 @@ describe("a service that was renamed", () => {
     h.rows = [row({ service: "Venners" })];
     const res = await patch("apt-1", { status: "confirmed" });
 
-    expect(res.body.appointment.service).toBe("Veeners");
-    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ service: "Veeners" }));
+    expect(res.body.appointment.service).toBe("Veneers");
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ service: "Veneers" }));
     expect(h.rows[0].service).toBe("Venners"); // the row itself is left as it was
   });
 

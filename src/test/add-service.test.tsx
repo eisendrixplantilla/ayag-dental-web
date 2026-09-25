@@ -41,6 +41,11 @@ vi.mock("@/lib/api/dentalRecords", async (importOriginal) => {
       h.services = [...h.services, created];
       return created;
     }),
+    deleteService: vi.fn(async (id: string) => {
+      const target = h.removed.find((s: any) => s.id === id);
+      if (target?.usedByRecords) throw new Error(`"${target.name}" is named by 1 dental record treatment.`);
+      h.removed = h.removed.filter((s: any) => s.id !== id);
+    }),
     reorderServices: vi.fn(async (order: string[]) => {
       h.reordered.push(order);
       h.services = order
@@ -336,5 +341,55 @@ describe("the reorder handle keeps the focus it is given", () => {
 
     await waitFor(() => expect(h.reordered).toEqual([["sv-b", "sv-a"]]));
     expect(document.activeElement).toBe(handle);
+  });
+});
+
+describe("taking a removed service out of the catalogue for good", () => {
+  const openDelete = async (name: string) => {
+    render(<SuperAdminSettings />);
+    await screen.findByText("Removed Services");
+    fireEvent.click(screen.getByRole("button", { name: `Delete ${name} permanently` }));
+    return within(document.querySelector("[role=dialog]") as HTMLElement);
+  };
+
+  it("asks first, and says the removal is the gentler option", async () => {
+    h.services = [];
+    h.removed = [{ id: "sv-junk", name: "dsdsds", removedAt: "2026-09-24", removedBy: "Super Administrator", removedReason: "Test" }];
+    const dialog = await openDelete("dsdsds");
+
+    expect(dialog.getByText(/gone from the catalogue for good/)).toBeInTheDocument();
+    expect(dialog.getByText(/Restore it and remove it again instead/)).toBeInTheDocument();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.getByText("dsdsds")).toBeInTheDocument());
+  });
+
+  it("deletes it on confirmation, and drops it off the list", async () => {
+    h.services = [];
+    h.removed = [
+      { id: "sv-junk", name: "dsdsds", removedAt: "2026-09-24", removedBy: "Super Administrator", removedReason: "Test" },
+      { id: "sv-other", name: "TMJ", removedAt: "2026-09-24", removedBy: "Super Administrator", removedReason: "Referred out" },
+    ];
+    const dialog = await openDelete("dsdsds");
+    fireEvent.click(dialog.getByRole("button", { name: /Delete for good/ }));
+
+    await waitFor(() => expect(screen.queryByText("dsdsds")).toBeNull());
+    expect(screen.getByText("TMJ")).toBeInTheDocument();
+    expect(toasts.success).toHaveBeenCalledWith("dsdsds deleted");
+  });
+
+  it("keeps one a dental record still names, and says why", async () => {
+    h.services = [];
+    h.removed = [{
+      id: "sv-used", name: "dsdsds", removedAt: "2026-09-24", removedBy: "Super Administrator",
+      removedReason: "Test", usedByRecords: true,
+    }];
+    const dialog = await openDelete("dsdsds");
+    fireEvent.click(dialog.getByRole("button", { name: /Delete for good/ }));
+
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith('"dsdsds" is named by 1 dental record treatment.'));
+    // Still there: a record can't lose a line it once said.
+    expect(screen.getByText("dsdsds")).toBeInTheDocument();
   });
 });

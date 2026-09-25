@@ -132,8 +132,8 @@ describe("walk-in appointments cover more than one service", () => {
     await waitFor(() => expect(chips()).toEqual(["Remove Oral"]));
     expect(options()).not.toContain("Oral");
 
-    fireEvent.change(picker(), { target: { value: "Veeners" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veeners"]));
+    fireEvent.change(picker(), { target: { value: "Veneers" } });
+    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veneers"]));
     expect(options()).toContain("Restoration"); // the rest are still on offer
   });
 

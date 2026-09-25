@@ -11,7 +11,7 @@ export function splitServices(service: string | null | undefined): string[] {
 /** What the booking forms offer when the clinic's own list can't be loaded. Normally the
  * list comes from Dental Services & Pricing, where the superadmin maintains it. */
 export const FALLBACK_SERVICES = [
-  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veeners",
+  "Orthodontics (Braces)", "EXO (Bunot)", "Restoration", "Oral", "Veneers",
   "Denture (Pustiso)", "Implant", "Surgery", "TMJ", "Root Canal",
   "Teeth Whitening", "Fixed Bridge",
 ];

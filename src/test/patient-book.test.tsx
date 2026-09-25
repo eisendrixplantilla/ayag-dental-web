@@ -115,20 +115,20 @@ describe("booking more than one service", () => {
     await waitFor(() => expect(chips()).toEqual(["Remove Oral"]));
     expect(options()).not.toContain("Oral");
 
-    fireEvent.change(picker(), { target: { value: "Veeners" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veeners"]));
-    expect(options()).not.toContain("Veeners");
+    fireEvent.change(picker(), { target: { value: "Veneers" } });
+    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veneers"]));
+    expect(options()).not.toContain("Veneers");
     expect(options()).toContain("Restoration"); // the rest are still on offer
   });
 
   it("takes a service back off the visit", async () => {
     await renderPage();
     fireEvent.change(picker(), { target: { value: "Oral" } });
-    fireEvent.change(picker(), { target: { value: "Veeners" } });
+    fireEvent.change(picker(), { target: { value: "Veneers" } });
     await waitFor(() => expect(chips()).toHaveLength(2));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Oral" }));
-    await waitFor(() => expect(chips()).toEqual(["Remove Veeners"]));
+    await waitFor(() => expect(chips()).toEqual(["Remove Veneers"]));
     expect(options()).toContain("Oral"); // back on offer
   });
 
