@@ -84,7 +84,7 @@ const RECORD_SELECT = `
 `;
 
 const SERVICE_COLUMNS = `id, service_name AS name, description, duration, price,
-  removed_at, removed_by, removed_reason`;
+  removed_at, removed_by, removed_reason, sort_order`;
 
 function mapService(r: any) {
   return {
@@ -96,6 +96,7 @@ function mapService(r: any) {
     removedAt: manilaDateStr(r.removed_at),
     removedBy: r.removed_by,
     removedReason: r.removed_reason,
+    sortOrder: r.sort_order,
   };
 }
 
@@ -112,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const removed = req.query.removed === "true";
       const rows = removed
         ? await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NOT NULL ORDER BY removed_at DESC`, [])
-        : await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NULL ORDER BY service_name`, []);
+        : await sql.query(`SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NULL ORDER BY sort_order NULLS LAST, service_name`, []);
       return res.status(200).json({ services: (rows as any[]).map(mapService) });
     }
 
@@ -149,6 +150,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "PATCH" && req.query.services === "true") {
     if (session.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+
+    if (req.body?.action === "reorder") {
+      const order = Array.isArray(req.body?.order) ? req.body.order.filter((v: unknown) => typeof v === "string") : [];
+      if (order.length === 0) return res.status(400).json({ error: "An order is required" });
+      // One statement, so the list can never be left half-renumbered.
+      await sql.query(
+        `UPDATE services SET sort_order = o.pos
+         FROM (SELECT * FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, pos)) o
+         WHERE services.id = o.id`,
+        [order],
+      );
+      const rows = await sql.query(
+        `SELECT ${SERVICE_COLUMNS} FROM services WHERE removed_at IS NULL ORDER BY sort_order NULLS LAST, service_name`, [],
+      );
+      return res.status(200).json({ services: (rows as any[]).map(mapService) });
+    }
+
     if (!id) return res.status(400).json({ error: "Missing id" });
     const { price, duration, action, reason, removedBy } = req.body ?? {};
 
@@ -193,8 +211,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const inserted = await sql.query(
-      `INSERT INTO services (service_name, description, duration, price)
-       VALUES ($1, $2, $3, $4) RETURNING ${SERVICE_COLUMNS}`,
+      `INSERT INTO services (service_name, description, duration, price, sort_order)
+       VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM services)) RETURNING ${SERVICE_COLUMNS}`,
       [serviceName, description ?? null, duration ?? null, price ?? null],
     );
     return res.status(201).json({ service: mapService((inserted as any[])[0]) });

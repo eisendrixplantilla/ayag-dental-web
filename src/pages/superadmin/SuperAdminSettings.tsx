@@ -6,15 +6,17 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw } from "lucide-react";
+import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import {
-  getServices, getRemovedServices, updateService, createService, removeService, restoreService, type Service,
+  getServices, getRemovedServices, updateService, createService, removeService, restoreService,
+  reorderServices, type Service,
 } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -26,6 +28,10 @@ export default function SuperAdminSettings() {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
+  // Which row is being dragged, and which one it is currently over.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   const [removed, setRemoved] = useState<Service[]>([]);
   const [removing, setRemoving] = useState<Service | null>(null);
@@ -115,8 +121,8 @@ export default function SuperAdminSettings() {
   const bringBack = async (service: Service) => {
     try {
       const back = await restoreService(service.id);
+      setServices(await getServices());
       setRemoved((prev) => prev.filter((s) => s.id !== service.id));
-      setServices((prev) => [...prev, back].sort((a, b) => a.name.localeCompare(b.name)));
       setPriceDrafts((prev) => ({ ...prev, [back.id]: back.price != null ? String(back.price) : "" }));
       setDurationDrafts((prev) => ({ ...prev, [back.id]: back.duration != null ? String(back.duration) : "" }));
       toast.success(`${back.name} is offered again`);
@@ -124,6 +130,41 @@ export default function SuperAdminSettings() {
       toast.error(err instanceof Error ? err.message : "Failed to restore the service");
     }
   };
+
+  /** Puts `id` at `to`, shifting everything else along. The list moves first and the
+   * catalogue follows; if the save fails the old order comes back, so what is on
+   * screen is never an order the clinic doesn't actually have. */
+  const moveTo = async (id: string, to: number) => {
+    const from = services.findIndex((s) => s.id === id);
+    if (from < 0 || to < 0 || to >= services.length || to === from) return;
+
+    const next = [...services];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+
+    const previous = services;
+    setServices(next);
+    setSavingOrder(true);
+    try {
+      setServices(await reorderServices(next.map((s) => s.id)));
+      toast.success(`Moved ${moved.name} to position ${to + 1}`);
+    } catch (err) {
+      setServices(previous);
+      toast.error(err instanceof Error ? err.message : "Failed to save the new order");
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  const dropOn = (targetId: string) => {
+    const id = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (id && id !== targetId) moveTo(id, services.findIndex((s) => s.id === targetId));
+  };
+
+  // Dragging is no use to a keyboard, so the handle also takes the arrow keys.
+  const nudge = (id: string, by: number) => moveTo(id, services.findIndex((s) => s.id === id) + by);
 
   const openAddService = () => {
     setNewService({ name: "", duration: "30", price: "" });
@@ -152,7 +193,7 @@ export default function SuperAdminSettings() {
     setSavingNew(true);
     try {
       const created = await createService({ name, duration, price });
-      setServices((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setServices(await getServices());
       setPriceDrafts((prev) => ({ ...prev, [created.id]: created.price != null ? String(created.price) : "" }));
       setDurationDrafts((prev) => ({ ...prev, [created.id]: created.duration != null ? String(created.duration) : "" }));
       setAdding(false);
@@ -356,6 +397,8 @@ export default function SuperAdminSettings() {
               <p className="text-sm text-muted-foreground">
                 Duration is what the booking forms reserve: a visit is offered only the time slots
                 long enough for the services chosen. A service can be booked once it has one.
+                Drag a row by its handle to arrange the list — this is the order patients see
+                when they book.
               </p>
             </div>
             <Button className="gradient-primary text-primary-foreground print:hidden" onClick={openAddService}>
@@ -367,6 +410,7 @@ export default function SuperAdminSettings() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10 print:hidden"><span className="sr-only">Reorder</span></TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Price (₱)</TableHead>
@@ -374,8 +418,37 @@ export default function SuperAdminSettings() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {services.map((s) => (
-                <TableRow key={s.id}>
+              {services.map((s, i) => (
+                <TableRow
+                  key={s.id}
+                  // The whole row is the drop target, so there is no thin line to hit.
+                  onDragOver={(e) => { e.preventDefault(); setOverId(s.id); }}
+                  onDragLeave={() => setOverId((prev) => (prev === s.id ? null : prev))}
+                  onDrop={(e) => { e.preventDefault(); dropOn(s.id); }}
+                  className={cn(
+                    dragId === s.id && "opacity-50",
+                    overId === s.id && dragId !== s.id && "outline outline-2 -outline-offset-2 outline-primary",
+                  )}
+                >
+                  <TableCell className="print:hidden">
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragId(s.id); }}
+                      onDragEnd={() => { setDragId(null); setOverId(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                        e.preventDefault();
+                        nudge(s.id, e.key === "ArrowUp" ? -1 : 1);
+                      }}
+                      disabled={savingOrder}
+                      aria-label={`Reorder ${s.name}, position ${i + 1} of ${services.length}`}
+                      title="Drag to reorder, or use the arrow keys"
+                      className="cursor-grab text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </button>
+                  </TableCell>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -421,7 +494,7 @@ export default function SuperAdminSettings() {
               ))}
               {!loading && services.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">No services found</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">No services found</TableCell>
                 </TableRow>
               )}
             </TableBody>
