@@ -27,6 +27,8 @@ export interface PatientInput {
   email: string;
   phone?: string;
   address?: string;
+  /** "YYYY-MM-DD". Sending one also re-derives the stored age from it. */
+  birthdate?: string;
   age?: number;
   gender?: string;
   bloodType?: string;

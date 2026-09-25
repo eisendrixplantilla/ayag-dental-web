@@ -1,6 +1,6 @@
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The Profile pages run for real. Replaced: the network, and the auth context — whose
 // cached `user` is deliberately stale here, because the point of these tests is that the
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   patient: {} as any,
   staff: {} as any,
+  patches: [] as any[],
 }));
 
 vi.mock("@/contexts/AuthContext", async (importOriginal) => {
@@ -31,7 +32,17 @@ vi.mock("@/contexts/AuthContext", async (importOriginal) => {
 
 vi.mock("@/lib/api/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/patients")>();
-  return { ...actual, getPatient: vi.fn(async () => h.patient), updatePatient: vi.fn(async () => h.patient) };
+  return {
+    ...actual,
+    getPatient: vi.fn(async () => h.patient),
+    updatePatient: vi.fn(async (_id: string, patch: any) => {
+      h.patches.push(patch);
+      // The client field names are the ones the record comes back with, so the saved
+      // patch merges straight onto the row the page then re-renders from.
+      h.patient = { ...h.patient, ...patch };
+      return h.patient;
+    }),
+  };
 });
 
 vi.mock("@/lib/api/staff", async (importOriginal) => {
@@ -41,10 +52,40 @@ vi.mock("@/lib/api/staff", async (importOriginal) => {
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
+// jsdom can't drive a Radix Select; a native one with the trigger's aria-label stands in.
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  const items = (node: any): any[] =>
+    React.Children.toArray(node).flatMap((c: any) =>
+      c?.props?.value !== undefined ? [c] : c?.props?.children ? items(c.props.children) : []);
+  const passthrough = ({ children }: any) => children ?? null;
+  return {
+    Select: ({ value, onValueChange, disabled, children }: any) =>
+      React.createElement(
+        "select",
+        {
+          "aria-label": (React.Children.toArray(children) as any[])
+            .find(c => c?.props?.["aria-label"])?.props["aria-label"],
+          value,
+          disabled,
+          onChange: (e: any) => onValueChange(e.target.value),
+        },
+        items(children).map((i: any) =>
+          React.createElement("option", { key: i.props.value, value: i.props.value }, i.props.children)),
+      ),
+    SelectTrigger: passthrough,
+    SelectContent: passthrough,
+    SelectItem: passthrough,
+    SelectValue: () => null,
+  };
+});
+
 import PatientProfile from "@/pages/patient/PatientProfile";
 import AdminProfile from "@/pages/admin/AdminProfile";
 import { patientRef, ageFromBirthdate, formatBirthdate } from "@/lib/patientRef";
+import { toast } from "sonner";
 
+beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 const PATIENT_ROW = {
@@ -73,8 +114,15 @@ const PATIENT_ROW = {
 
 const renderPatient = async (row: Partial<typeof PATIENT_ROW> = {}) => {
   h.patient = { ...PATIENT_ROW, ...row };
+  h.patches = [];
   render(<MemoryRouter><PatientProfile /></MemoryRouter>);
   await waitFor(() => expect(screen.queryByText("Loading your details...")).not.toBeInTheDocument());
+};
+
+/** Opens the Personal Details card for editing and waits for the fields to appear. */
+const openDetailsEditor = async () => {
+  fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+  await waitFor(() => expect(screen.getByLabelText(/Date of Birth/)).toBeInTheDocument());
 };
 
 describe("the patient's profile", () => {
@@ -116,6 +164,109 @@ describe("the patient's profile", () => {
     await renderPatient();
     expect(screen.getByLabelText("Contact Number")).toHaveValue("0917 555 1234");
     expect(screen.getByLabelText(/Address/)).toHaveValue("12 Rizal St, Cabanatuan");
+  });
+});
+
+describe("editing personal details", () => {
+  it("opens with the fields already holding what's on file", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    expect(screen.getByLabelText(/Date of Birth/)).toHaveValue("1998-04-12");
+    expect(screen.getByLabelText("Sex")).toHaveValue("Female");
+    expect(screen.getByLabelText("Blood Type")).toHaveValue("O+");
+    expect(screen.getByLabelText(/Allergies/)).toHaveValue("Penicillin");
+  });
+
+  it("saves the changed fields and goes back to showing them", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Date of Birth/), { target: { value: "1997-03-01" } });
+    fireEvent.change(screen.getByLabelText("Blood Type"), { target: { value: "AB-" } });
+    fireEvent.change(screen.getByLabelText(/Allergies/), { target: { value: "Latex, ibuprofen" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(h.patches).toHaveLength(1));
+    expect(h.patches[0]).toMatchObject({
+      birthdate: "1997-03-01",
+      bloodType: "AB-",
+      allergies: "Latex, ibuprofen",
+      gender: "Female",
+    });
+    // Back to the read-only list, showing what was just saved.
+    await waitFor(() => expect(screen.getByText(/March 1, 1997/)).toBeInTheDocument());
+    expect(screen.getByText("AB-")).toBeInTheDocument();
+    expect(screen.getByText("Latex, ibuprofen")).toBeInTheDocument();
+  });
+
+  it("sends an empty blood type when the patient says they don't know it", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText("Blood Type"), { target: { value: "__unknown__" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(h.patches).toHaveLength(1));
+    expect(h.patches[0].bloodType).toBe("");
+  });
+
+  it("trims the allergies before saving, so spaces don't count as an entry", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Allergies/), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(h.patches).toHaveLength(1));
+    expect(h.patches[0].allergies).toBe("");
+  });
+
+  it("refuses to save a birthdate blanked out after one was on file", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Date of Birth/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      "Date of birth can't be removed",
+      expect.anything(),
+    ));
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("lets a record that never had a birthdate be saved without one", async () => {
+    await renderPatient({ birthdate: null, age: 41 });
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Allergies/), { target: { value: "None" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(h.patches).toHaveLength(1));
+    expect(h.patches[0].birthdate).toBeUndefined();
+    expect(h.patches[0].allergies).toBe("None");
+  });
+
+  it("refuses a birthdate in the future", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Date of Birth/), { target: { value: "2099-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Details/ }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Date of birth can't be in the future"));
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("throws away the edits on Cancel", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    fireEvent.change(screen.getByLabelText(/Allergies/), { target: { value: "Something else" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.getByText("Penicillin")).toBeInTheDocument());
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("doesn't offer to edit what the clinic derives", async () => {
+    await renderPatient();
+    await openDetailsEditor();
+    expect(screen.queryByLabelText(/Patient Since/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Records on File/)).not.toBeInTheDocument();
   });
 });
 
