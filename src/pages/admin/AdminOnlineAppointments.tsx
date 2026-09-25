@@ -209,7 +209,7 @@ export default function AdminOnlineAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className="[&_th]:px-2 [&_td]:px-2 [&_th]:whitespace-normal [&_th]:align-bottom">
             <TableHeader>
               <TableRow>
                 <TableHead className="hidden lg:table-cell">Reference</TableHead>
@@ -232,15 +232,15 @@ export default function AdminOnlineAppointments() {
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
                   <TableCell className="hidden lg:table-cell font-mono text-xs whitespace-nowrap">{appointmentRef(apt.id)}</TableCell>
-                  <TableCell className="font-medium whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{apt.patientName}</TableCell>
-                  <TableCell className="hidden sm:table-cell whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{apt.service}</TableCell>
-                  <TableCell className="hidden md:table-cell whitespace-normal break-words min-w-[8rem] max-w-[13rem]">{apt.dentistName}</TableCell>
+                  <TableCell className="font-medium whitespace-normal break-words">{apt.patientName}</TableCell>
+                  <TableCell className="hidden sm:table-cell whitespace-normal break-words">{apt.service}</TableCell>
+                  <TableCell className="hidden md:table-cell whitespace-normal break-words">{apt.dentistName}</TableCell>
                   <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
-                  <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
-                  <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
+                  <TableCell className="whitespace-normal">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
+                  <TableCell className="hidden lg:table-cell whitespace-normal text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
                   <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={`whitespace-nowrap ${statusColors[apt.status]}`}>
+                    <Badge variant="outline" className={`whitespace-normal ${statusColors[apt.status]}`}>
                       {apt.status === "pending" && apt.rescheduleCount > 0 ? "reschedule request" : apt.status}
                     </Badge>
                   </TableCell>

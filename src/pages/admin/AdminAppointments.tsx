@@ -501,7 +501,7 @@ export default function AdminAppointments() {
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
-          <Table>
+          <Table className="[&_th]:px-2 [&_td]:px-2 [&_th]:whitespace-normal [&_th]:align-bottom">
             <TableHeader>
               <TableRow>
                 <TableHead>Patient</TableHead>
@@ -520,9 +520,9 @@ export default function AdminAppointments() {
                   ref={registerRow(w.id)}
                   className={highlightedKey === w.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="font-medium whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{w.patientName}</TableCell>
-                  <TableCell className="whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{w.service}</TableCell>
-                  <TableCell className="whitespace-normal break-words min-w-[8rem] max-w-[13rem]">{w.dentistName}</TableCell>
+                  <TableCell className="font-medium whitespace-normal break-words">{w.patientName}</TableCell>
+                  <TableCell className="whitespace-normal break-words">{w.service}</TableCell>
+                  <TableCell className="whitespace-normal break-words">{w.dentistName}</TableCell>
                   <TableCell>{w.date}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatTimeRange(w.time, w.endTime)}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>

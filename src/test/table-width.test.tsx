@@ -93,6 +93,41 @@ describe("the Appointments table's own width", () => {
     }
   });
 
+  it("tightens the cell padding, which is the single biggest slice of its width", async () => {
+    h.appts = [appointment()];
+    const { container } = render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("table")).toBeInTheDocument());
+    // Ten columns of the shared p-4 spend 320px on padding alone.
+    const table = container.querySelector("table")!;
+    expect(table.className).toContain("[&_td]:px-2");
+    expect(table.className).toContain("[&_th]:px-2");
+    // The headers carry whitespace-nowrap from the shared TableHead, so "Assigned Dentist"
+    // sets that column's floor however narrow its values are. Let them wrap too.
+    expect(table.className).toContain("[&_th]:whitespace-normal");
+  });
+
+  it("lets the widest single-line columns wrap — time, booked-on and the status badge", async () => {
+    h.appts = [appointment()];
+    const { container } = render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("tbody tr")).toBeInTheDocument());
+    const cells = container.querySelectorAll("tbody tr:first-child td");
+    expect(cells[5].className).toContain("whitespace-normal");  // Time
+    expect(cells[5].className).not.toContain("whitespace-nowrap");
+    expect(cells[6].className).toContain("whitespace-normal");  // Booked On
+    expect(cells[8].querySelector("[class*=whitespace-normal]")).not.toBeNull(); // Status badge
+  });
+
+  it("doesn't put a floor under the text columns that the old padding didn't have", async () => {
+    h.appts = [appointment()];
+    const { container } = render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("tbody tr")).toBeInTheDocument());
+    // A min-width on a cell is honoured in auto table layout, so three columns pinned at
+    // 8rem would add 384px back to the very width this is trying to reclaim.
+    for (const cell of container.querySelectorAll("tbody tr:first-child td")) {
+      expect(cell.className).not.toContain("min-w-[8rem]");
+    }
+  });
+
   it("still keeps the short columns on one line, where a wrap would read as two rows", async () => {
     h.appts = [appointment()];
     render(<MemoryRouter><AdminOnlineAppointments /></MemoryRouter>);
