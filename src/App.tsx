@@ -80,7 +80,7 @@ function AppRoutes() {
       <Route path="/admin/patients/:id" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminPatientHistory /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/accounts" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAccounts /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAppointments /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/online-appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminOnlineAppointments /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/online-appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout wide><AdminOnlineAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/queue" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminQueue /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/treatment" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminTreatment /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/inventory" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminInventory /></DashboardLayout></ProtectedRoute>} />

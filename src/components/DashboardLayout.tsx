@@ -6,6 +6,7 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar
 } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { NotificationsProvider, useNotifications } from "@/contexts/NotificationsContext";
@@ -145,7 +146,10 @@ function AppSidebar() {
   );
 }
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+/** `wide` lets a page opt out of the readable content column. Use it only for pages whose
+ * job is a table with more columns than that width can hold — a capped column there just
+ * trades the empty margin for a horizontal scrollbar. */
+export default function DashboardLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   return (
     <SidebarProvider>
       <NotificationsProvider>
@@ -160,7 +164,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             {/* A maximised window shouldn't stretch a form or a table the whole way across:
                 the content column stops at a readable width and centres itself. */}
-            <div className="mx-auto w-full max-w-screen-xl">
+            <div className={cn("mx-auto w-full", !wide && "max-w-screen-xl")}>
               {children}
             </div>
           </main>
