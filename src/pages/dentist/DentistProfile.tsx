@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
-import { getDentistSchedule, getStaffMember, updateStaff, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
+import { getDentistSchedule, getStaffMember, updateStaff, DAY_NAMES, type DentistScheduleData, type StaffMember } from "@/lib/api/staff";
 import { resizeImageToDataUrl } from "@/lib/resizeImage";
+import { roleLabel, statusLabel } from "@/lib/roleLabel";
 import { Link } from "react-router-dom";
 import {
   User as UserIcon,
@@ -47,6 +48,9 @@ export default function DentistProfile() {
   const { user, changePassword } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // The `users` row itself, so name, Employee ID and role read as the database holds them
+  // rather than as they were cached in this browser at sign-in.
+  const [staff, setStaff] = useState<StaffMember | null>(null);
   const [phone, setPhone] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -67,6 +71,7 @@ export default function DentistProfile() {
     if (!user) return;
     getStaffMember(user.id)
       .then((s) => {
+        setStaff(s);
         setPhone(s.contact ?? "");
         setPhoto(s.photoUrl ?? null);
       })
@@ -83,7 +88,7 @@ export default function DentistProfile() {
     }
     setSavingProfile(true);
     try {
-      await updateStaff(user.id, { contact: phone });
+      setStaff(await updateStaff(user.id, { contact: phone }));
       toast.success("Profile updated", {
         description: "Your contact number has been saved.",
       });
@@ -124,6 +129,7 @@ export default function DentistProfile() {
     try {
       const dataUrl = await resizeImageToDataUrl(file);
       const updated = await updateStaff(user.id, { photo: dataUrl });
+      setStaff(updated);
       setPhoto(updated.photoUrl ?? dataUrl);
       toast.success("Profile picture updated");
     } catch (err) {
@@ -172,22 +178,38 @@ export default function DentistProfile() {
             </div>
             <div className="flex-1 space-y-3">
               <div>
-                <h2 className="text-xl font-semibold font-heading text-foreground">{user?.name}</h2>
-                <Badge variant="outline" className="bg-secondary text-secondary-foreground mt-1">Dentist</Badge>
+                <h2 className="text-xl font-semibold font-heading text-foreground">{staff?.name ?? user?.name}</h2>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <Badge variant="outline" className="bg-secondary text-secondary-foreground">
+                    {roleLabel(staff?.role ?? user?.role)}
+                  </Badge>
+                  {staff && (
+                    <Badge
+                      variant="outline"
+                      className={staff.status === "active"
+                        ? "bg-success/10 text-success border-success/20"
+                        : "bg-muted text-muted-foreground"}
+                    >
+                      {statusLabel(staff.status)}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex items-center gap-2 text-sm">
                   <IdCard className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Employee ID</p>
-                    <p className="font-medium text-foreground">{user?.employeeId ?? "Not assigned"}</p>
+                    <p className="font-medium text-foreground">
+                      {staff?.employeeId ?? user?.employeeId ?? "Not assigned"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Briefcase className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Role</p>
-                    <p className="font-medium text-foreground">Dentist</p>
+                    <p className="font-medium text-foreground">{roleLabel(staff?.role ?? user?.role)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
@@ -238,7 +260,7 @@ export default function DentistProfile() {
               <Label htmlFor="email" className="flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5" /> Email Address
               </Label>
-              <Input id="email" type="email" value={user?.email ?? ""} disabled />
+              <Input id="email" type="email" value={staff?.email ?? user?.email ?? ""} disabled />
             </div>
             <Button onClick={saveProfile} className="w-full" disabled={loadingProfile || savingProfile}>
               {savingProfile ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save Changes
