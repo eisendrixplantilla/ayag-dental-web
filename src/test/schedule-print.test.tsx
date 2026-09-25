@@ -20,7 +20,7 @@ vi.mock("@/lib/api/staff", async (importOriginal) => {
 });
 vi.mock("@/lib/printReport", () => ({
   printReport: (doc: any) => { printed.calls.push(doc); return true; },
-  ROWS_PER_PAGE: 20,
+  ROWS_PER_PAGE: 18,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 

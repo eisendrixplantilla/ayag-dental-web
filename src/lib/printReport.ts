@@ -11,8 +11,10 @@
  * a plain list passes `columns`/`rows`.
  */
 
-/** Records on one sheet. Kept small enough that a page never overflows. */
-export const ROWS_PER_PAGE = 20;
+/** Records on one sheet. Measured against A4 at the document's type size, in the worst
+ * case that still has to fit: the last sheet, which also carries the signature block,
+ * with every row wrapping to two lines. */
+export const ROWS_PER_PAGE = 18;
 
 export interface ReportTable {
   /** Shown above the table when a document holds more than one. */
@@ -111,33 +113,34 @@ export function paginateTables(tables: ReportTable[], perPage: number = ROWS_PER
 const STYLES = `
   @page { size: A4 portrait; margin: 14mm; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 11px; }
+  /* Sized in pt, not px: a printer works in points, and the px sizes this used to carry
+     came out around 7.5pt — far below the 10-11pt a document is normally set in. */
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 11pt; }
   .sheet { display: flex; flex-direction: column; min-height: 269mm; break-after: page; }
   .sheet:last-of-type { break-after: auto; }
-  .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0f766e; padding-bottom: 10px; }
-  .letterhead img { width: 44px; height: 44px; object-fit: contain; }
-  .clinic { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: .2px; }
-  .tagline { font-size: 10px; color: #6b7280; margin: 2px 0 0; }
-  h2 { font-size: 14px; margin: 10px 0 6px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
-  h3 { font-size: 11px; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .6px; color: #0f766e; }
+  .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0f766e; padding-bottom: 8px; }
+  .letterhead img { width: 46px; height: 46px; object-fit: contain; }
+  .clinic { font-size: 18pt; font-weight: 700; margin: 0; letter-spacing: .2px; }
+  h2 { font-size: 15pt; margin: 9px 0 5px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .6px; color: #0f766e; }
   h3:first-of-type { margin-top: 0; }
-  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 24px; margin: 0 0 12px; font-size: 10px; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 24px; margin: 0 0 10px; font-size: 10pt; }
   .meta div { display: flex; gap: 6px; }
   .meta dt { color: #6b7280; margin: 0; }
   .meta dd { margin: 0; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 10px; }
-  table + h3 { margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  table + h3 { margin-top: 12px; }
   th, td { border: 1px solid #d1d5db; padding: 4px 7px; text-align: left; vertical-align: top; }
-  th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
+  th { background: #f3f4f6; font-size: 10pt; text-transform: uppercase; letter-spacing: .4px; }
   tbody tr:nth-child(even) { background: #fafafa; }
-  td.num, th.num { width: 32px; text-align: right; color: #6b7280; }
-  .empty { text-align: center; color: #6b7280; padding: 24px; font-style: italic; }
-  .sign { margin-top: 20px; }
-  .sign .line { border-bottom: 1px solid #1f2937; width: 220px; height: 26px; }
+  td.num, th.num { width: 34px; text-align: right; color: #6b7280; }
+  .empty { text-align: center; color: #6b7280; padding: 20px; font-style: italic; }
+  .sign { margin-top: 18px; }
+  .sign .line { border-bottom: 1px solid #1f2937; width: 220px; height: 24px; }
   .sign .name { font-weight: 600; margin: 4px 0 0; }
-  .sign .role { color: #6b7280; margin: 0; }
-  .foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #e5e7eb;
-          display: flex; justify-content: space-between; font-size: 9px; color: #6b7280; }
+  .sign .role { color: #6b7280; margin: 0; font-size: 10pt; }
+  .foot { margin-top: auto; padding-top: 8px; border-top: 1px solid #e5e7eb;
+          display: flex; justify-content: space-between; font-size: 9pt; color: #6b7280; }
 `;
 
 export function buildReportHtml(doc: ReportDoc, origin = ""): string {
@@ -147,11 +150,12 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
   const total = tables.reduce((n, t) => n + t.rows.length, 0);
   const plain = tables.length === 1 && !tables[0].heading;
 
+  // Only what isn't already on the sheet. Who prepared it is signed for at the bottom,
+  // and the record count is in the footer of every sheet — printing either one twice
+  // just crowds the header above the table.
   const meta = [
     { label: "Date Generated", value: doc.generatedAt },
-    { label: "Prepared By", value: `${doc.preparedBy.name} (${doc.preparedBy.role})` },
     ...(doc.filters ?? []),
-    { label: "Total Records", value: String(total) },
   ];
 
   const header = `
@@ -159,7 +163,6 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
       <img src="${esc(origin)}/clinic-logo.png" alt="">
       <div>
         <p class="clinic">Ayag Dental Clinic</p>
-        <p class="tagline">Dental Clinic Management System</p>
       </div>
     </div>
     <h2>${esc(doc.title)}</h2>
