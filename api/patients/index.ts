@@ -110,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   if (req.method === "PATCH") {
-    const { action, name, phone, address, age, gender, bloodType, allergies, status, archivedBy, photo } = req.body ?? {};
+    const { action, name, phone, address, birthdate, age, gender, bloodType, allergies, status, archivedBy, photo } = req.body ?? {};
 
     if (action === "archive" || action === "restore") {
       if (!requireStaff(req, res)) return;
@@ -126,6 +126,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!session || (!isSelf && !isStaff)) return res.status(401).json({ error: "Unauthorized" });
       if (!isStaff && status) return res.status(403).json({ error: "Forbidden" });
 
+      // A birthdate has to be a real past date. Anything else would quietly become a
+      // nonsense age everywhere the clinic reads one.
+      if (birthdate != null && birthdate !== "") {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthdate))) {
+          return res.status(400).json({ error: "Enter the date of birth as YYYY-MM-DD" });
+        }
+        if (Number.isNaN(Date.parse(`${birthdate}T00:00:00Z`))) {
+          return res.status(400).json({ error: "That date of birth isn't a real date" });
+        }
+        if (String(birthdate) > manilaDateStr(new Date())!) {
+          return res.status(400).json({ error: "Date of birth can't be in the future" });
+        }
+      }
+
       const nameParts = name ? splitName(name) : null;
       await sql`
         UPDATE patients SET
@@ -133,7 +147,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           last_name = COALESCE(${nameParts?.lastName ?? null}, last_name),
           contact_number = COALESCE(${phone ?? null}, contact_number),
           address = COALESCE(${address ?? null}, address),
-          age = COALESCE(${age ?? null}, age),
+          birthdate = COALESCE(${birthdate || null}::date, birthdate),
+          -- The table carries both, because front-desk rows are entered as a plain age.
+          -- Whenever a birthdate arrives, the age is derived from it so the two can't drift.
+          age = CASE
+            WHEN ${birthdate || null}::date IS NOT NULL
+              THEN date_part('year', age(${birthdate || null}::date))::int
+            ELSE COALESCE(${age ?? null}, age)
+          END,
           sex = COALESCE(${gender ?? null}, sex),
           blood_type = COALESCE(${bloodType ?? null}, blood_type),
           allergies = COALESCE(${allergies ?? null}, allergies),

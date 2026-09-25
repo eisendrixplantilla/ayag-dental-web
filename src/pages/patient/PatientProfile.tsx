@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { manilaTodayDateStr } from "@/lib/formatDate";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
@@ -29,7 +32,13 @@ import {
   TriangleAlert,
   CalendarDays,
   BadgeCheck,
+  Pencil,
 } from "lucide-react";
+
+const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+/** Radix Select can't hold an empty value, so "I don't know" needs a stand-in that the
+ * save turns back into a blank column. */
+const UNKNOWN_BLOOD_TYPE = "__unknown__";
 
 const profileSchema = z.object({
   phone: z
@@ -65,6 +74,10 @@ export default function PatientProfile() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [details, setDetails] = useState({ birthdate: "", gender: "", bloodType: "", allergies: "" });
+
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
@@ -99,6 +112,50 @@ export default function PatientProfile() {
       toast.error(err instanceof Error ? err.message : "Failed to update profile");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const startEditingDetails = () => {
+    setDetails({
+      birthdate: record?.birthdate ?? "",
+      gender: record?.gender ?? "",
+      bloodType: record?.bloodType ?? "",
+      allergies: record?.allergies ?? "",
+    });
+    setEditingDetails(true);
+  };
+
+  const saveDetails = async () => {
+    if (!user) return;
+    // A birthdate that's already on file can be corrected but not taken away — a blank
+    // one would be silently ignored by the server, which looks like a save that worked.
+    if (!details.birthdate && record?.birthdate) {
+      toast.error("Date of birth can't be removed", {
+        description: "Correct it if it's wrong, or ask the front desk to clear it.",
+      });
+      return;
+    }
+    if (details.birthdate && details.birthdate > manilaTodayDateStr()) {
+      toast.error("Date of birth can't be in the future");
+      return;
+    }
+    setSavingDetails(true);
+    try {
+      const updated = await updatePatient(user.id, {
+        ...(details.birthdate ? { birthdate: details.birthdate } : {}),
+        gender: details.gender,
+        bloodType: details.bloodType === UNKNOWN_BLOOD_TYPE ? "" : details.bloodType,
+        allergies: details.allergies.trim(),
+      });
+      setRecord(updated);
+      setEditingDetails(false);
+      toast.success("Personal details updated", {
+        description: "Your clinic record has been saved.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update your details");
+    } finally {
+      setSavingDetails(false);
     }
   };
 
@@ -233,16 +290,99 @@ export default function PatientProfile() {
         </CardContent>
       </Card>
 
-      {/* Everything the clinic holds on file for this patient, read-only here. */}
+      {/* What the clinic holds on file. The patient maintains the top four themselves;
+          the two below them are derived and can't be typed over. */}
       <Card className="shadow-card">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
           <CardTitle className="font-heading text-base flex items-center gap-2">
             <UserIcon className="w-4 h-4 text-primary" /> Personal Details
           </CardTitle>
+          {!loadingProfile && !editingDetails && (
+            <Button variant="outline" size="sm" onClick={startEditingDetails}>
+              <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {loadingProfile ? (
             <p className="text-sm text-muted-foreground">Loading your details...</p>
+          ) : editingDetails ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="birthdate" className="flex items-center gap-1">
+                    <Cake className="w-3.5 h-3.5" /> Date of Birth
+                  </Label>
+                  <Input
+                    id="birthdate"
+                    type="date"
+                    value={details.birthdate}
+                    max={manilaTodayDateStr()}
+                    onChange={(e) => setDetails({ ...details, birthdate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sex" className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" /> Sex
+                  </Label>
+                  <Select
+                    value={details.gender}
+                    onValueChange={(v) => setDetails({ ...details, gender: v })}
+                  >
+                    <SelectTrigger id="sex" aria-label="Sex">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="blood-type" className="flex items-center gap-1">
+                    <Droplet className="w-3.5 h-3.5" /> Blood Type
+                  </Label>
+                  <Select
+                    value={details.bloodType}
+                    onValueChange={(v) => setDetails({ ...details, bloodType: v })}
+                  >
+                    <SelectTrigger id="blood-type" aria-label="Blood Type">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNKNOWN_BLOOD_TYPE}>I don't know</SelectItem>
+                      {BLOOD_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="allergies" className="flex items-center gap-1">
+                  <TriangleAlert className="w-3.5 h-3.5" /> Allergies
+                </Label>
+                <Textarea
+                  id="allergies"
+                  rows={2}
+                  placeholder="Anything the dentist should know about — medicines, anaesthetic, latex. Leave blank if none."
+                  value={details.allergies}
+                  onChange={(e) => setDetails({ ...details, allergies: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Your dentist sees this before treating you, so keep it up to date.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={saveDetails} disabled={savingDetails}>
+                  {savingDetails ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Details
+                </Button>
+                <Button variant="ghost" onClick={() => setEditingDetails(false)} disabled={savingDetails}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
           ) : (
             <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Detail icon={Cake} label="Date of Birth" value={birthdateText} />
@@ -257,9 +397,11 @@ export default function PatientProfile() {
               />
             </dl>
           )}
-          <p className="text-xs text-muted-foreground mt-4">
-            These come from your clinic record. Ask the front desk to correct anything that looks wrong.
-          </p>
+          {!editingDetails && (
+            <p className="text-xs text-muted-foreground mt-4">
+              Patient Since and Records on File come from your clinic record and can't be edited here.
+            </p>
+          )}
         </CardContent>
       </Card>
 
