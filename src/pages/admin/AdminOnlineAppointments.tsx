@@ -232,9 +232,9 @@ export default function AdminOnlineAppointments() {
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
                   <TableCell className="hidden lg:table-cell font-mono text-xs whitespace-nowrap">{appointmentRef(apt.id)}</TableCell>
-                  <TableCell className="font-medium">{apt.patientName}</TableCell>
-                  <TableCell className="hidden sm:table-cell">{apt.service}</TableCell>
-                  <TableCell className="hidden md:table-cell">{apt.dentistName}</TableCell>
+                  <TableCell className="font-medium whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{apt.patientName}</TableCell>
+                  <TableCell className="hidden sm:table-cell whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{apt.service}</TableCell>
+                  <TableCell className="hidden md:table-cell whitespace-normal break-words min-w-[8rem] max-w-[13rem]">{apt.dentistName}</TableCell>
                   <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
                   <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>

@@ -520,9 +520,9 @@ export default function AdminAppointments() {
                   ref={registerRow(w.id)}
                   className={highlightedKey === w.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="font-medium">{w.patientName}</TableCell>
-                  <TableCell>{w.service}</TableCell>
-                  <TableCell>{w.dentistName}</TableCell>
+                  <TableCell className="font-medium whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{w.patientName}</TableCell>
+                  <TableCell className="whitespace-normal break-words min-w-[8rem] max-w-[14rem]">{w.service}</TableCell>
+                  <TableCell className="whitespace-normal break-words min-w-[8rem] max-w-[13rem]">{w.dentistName}</TableCell>
                   <TableCell>{w.date}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatTimeRange(w.time, w.endTime)}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
