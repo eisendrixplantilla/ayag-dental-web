@@ -11,11 +11,11 @@ import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import {
   getServices, getRemovedServices, updateService, createService, removeService, restoreService,
-  reorderServices, deleteService, type Service,
+  reorderServices, deleteService, type Service, type BlockingRecord,
 } from "@/lib/api/dentalRecords";
 import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, ApiError } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 export default function SuperAdminSettings() {
@@ -37,6 +37,9 @@ export default function SuperAdminSettings() {
   const [removing, setRemoving] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState<Service | null>(null);
   const [savingDelete, setSavingDelete] = useState(false);
+  // The records standing in the way, once the server has named them.
+  const [blockers, setBlockers] = useState<BlockingRecord[]>([]);
+  const closeDelete = () => { setDeleting(null); setBlockers([]); };
   const [removeReason, setRemoveReason] = useState("");
   const [savingRemoval, setSavingRemoval] = useState(false);
 
@@ -135,16 +138,24 @@ export default function SuperAdminSettings() {
 
   /** Out of the catalogue for good. The server refuses if a dental record still names
    * the service, so a record can't lose a line it once said. */
-  const deleteForGood = async () => {
+  const deleteForGood = async (withRecords = false) => {
     if (!deleting) return;
     setSavingDelete(true);
     try {
-      await deleteService(deleting.id);
+      await deleteService(deleting.id, withRecords);
       setRemoved((prev) => prev.filter((s) => s.id !== deleting.id));
-      toast.success(`${deleting.name} deleted`);
-      setDeleting(null);
+      toast.success(
+        blockers.length > 0 && withRecords
+          ? `${deleting.name} deleted, along with ${blockers.length} dental record(s)`
+          : `${deleting.name} deleted`,
+      );
+      closeDelete();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete the service");
+      // A refusal names the records in the way, so the choice can be made knowing
+      // exactly what would go with the service rather than only that something would.
+      const blocking = err instanceof ApiError ? (err.data.records as BlockingRecord[] | undefined) : undefined;
+      if (blocking?.length) setBlockers(blocking);
+      else toast.error(err instanceof Error ? err.message : "Failed to delete the service");
     } finally {
       setSavingDelete(false);
     }
@@ -330,19 +341,50 @@ export default function SuperAdminSettings() {
       </Dialog>
 
       {/* Delete for good */}
-      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent className="max-w-md">
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && closeDelete()}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-heading">Delete Service</DialogTitle>
+            <DialogTitle className="font-heading">
+              {blockers.length > 0 ? "This service is part of a record" : "Delete Service"}
+            </DialogTitle>
             <DialogDescription>
-              {deleting?.name} will be gone from the catalogue for good. This can't be undone —
-              if you only want to stop offering it, Restore it and remove it again instead.
+              {blockers.length > 0 ? (
+                <>
+                  {deleting?.name} is named by {blockers.length} dental record
+                  {blockers.length === 1 ? "" : "s"}. Deleting the service deletes{" "}
+                  {blockers.length === 1 ? "that record" : "those records"} too — what they say
+                  happened, and any treatments and prescriptions under them.
+                </>
+              ) : (
+                <>
+                  {deleting?.name} will be gone from the catalogue for good. This can't be undone —
+                  if you only want to stop offering it, Restore it and remove it again instead.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Named, so the choice is never made blind. */}
+          {blockers.length > 0 && (
+            <ul className="max-h-56 overflow-y-auto rounded-md border divide-y text-sm">
+              {blockers.map((r) => (
+                <li key={r.id} className="px-3 py-2">
+                  <p className="font-medium text-foreground">{r.patientName ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.date ?? "—"} · {r.diagnosis || "No diagnosis recorded"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={deleteForGood} disabled={savingDelete}>
-              {savingDelete && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Delete for good
+            <Button variant="outline" onClick={closeDelete}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteForGood(blockers.length > 0)} disabled={savingDelete}>
+              {savingDelete && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {blockers.length > 0
+                ? `Delete the service and ${blockers.length} record${blockers.length === 1 ? "" : "s"}`
+                : "Delete for good"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,6 +7,7 @@ type Row = Record<string, any>;
 const h = vi.hoisted(() => ({
   services: [] as Row[],
   treatments: [] as Row[],
+  records: [] as Row[],
   role: "superadmin" as string,
 }));
 
@@ -16,8 +17,18 @@ vi.mock("../../api/_lib/db.js", () => ({
     if (text.includes("SELECT service_name, removed_at FROM services")) {
       return h.services.filter(s => s.id === v[0]).map(s => ({ service_name: s.service_name, removed_at: s.removed_at }));
     }
-    if (text.includes("FROM treatments WHERE service_id")) {
-      return [{ n: h.treatments.filter(t => t.service_id === v[0]).length }];
+    // Which records name the service, joined to the patient they belong to.
+    if (text.includes("FROM treatments t") && text.includes("WHERE t.service_id")) {
+      return h.treatments
+        .filter(t => t.service_id === v[0])
+        .map(t => h.records.find(r => r.id === t.record_id))
+        .filter(Boolean)
+        .map((r: any) => ({ id: r.id, date: r.date, diagnosis: r.diagnosis, patient_name: r.patient_name }));
+    }
+    if (text.includes("DELETE FROM dental_records")) {
+      h.records = h.records.filter(r => r.id !== v[0]);
+      h.treatments = h.treatments.filter(t => t.record_id !== v[0]); // the FK cascade
+      return [];
     }
     if (text.includes("DELETE FROM services")) {
       h.services = h.services.filter(s => s.id !== v[0]);
@@ -53,7 +64,8 @@ beforeEach(() => {
     { id: "sv-clean", service_name: "Dental Cleaning", removed_at: "2026-09-25" },
     { id: "sv-live", service_name: "Oral", removed_at: null },
   ];
-  h.treatments = [{ id: "t1", service_id: "sv-junk" }];
+  h.records = [{ id: "rec-1", date: "2026-09-24", diagnosis: "dsfdsfdf", patient_name: "Allen Estrella" }];
+  h.treatments = [{ id: "t1", service_id: "sv-junk", record_id: "rec-1" }];
 });
 
 describe("deleting a service for good", () => {
@@ -63,12 +75,33 @@ describe("deleting a service for good", () => {
     expect(h.services.map(s => s.id)).toEqual(["sv-junk", "sv-live"]);
   });
 
-  it("refuses one a dental record still names, and says how many", async () => {
+  it("refuses one a dental record still names, and names the record", async () => {
     const res = await call({ services: "true", id: "sv-junk" });
     expect(res.statusCode).toBe(409);
-    expect(res.body.error).toMatch(/named by 1 dental record treatment/);
-    // The row stays, so the record keeps saying what it said.
+    expect(res.body.error).toMatch(/named by 1 dental record/);
+    // Named, so the choice that follows isn't made blind.
+    expect(res.body.records).toEqual([
+      { id: "rec-1", date: "2026-09-24", diagnosis: "dsfdsfdf", patientName: "Allen Estrella" },
+    ]);
+    // Nothing went: the record keeps saying what it said.
     expect(h.services.map(s => s.id)).toContain("sv-junk");
+    expect(h.records).toHaveLength(1);
+  });
+
+  it("takes the records with it only when that was asked for outright", async () => {
+    const res = await call({ services: "true", id: "sv-junk", withRecords: "true" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.deletedRecords).toBe(1);
+    expect(h.services.map(s => s.id)).not.toContain("sv-junk");
+    expect(h.records).toHaveLength(0);
+    // The treatment under the record goes with it, as the foreign key cascades.
+    expect(h.treatments).toHaveLength(0);
+  });
+
+  it("still refuses a service that is on offer, even asked to take records", async () => {
+    const res = await call({ services: "true", id: "sv-live", withRecords: "true" });
+    expect(res.statusCode).toBe(409);
+    expect(h.services.map(s => s.id)).toContain("sv-live");
   });
 
   it("refuses one that is still on offer — it has to be removed first", async () => {

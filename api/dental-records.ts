@@ -204,15 +204,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(409).json({ error: "Remove the service first — only a removed service can be deleted for good." });
     }
 
-    const used = await sql`SELECT count(*)::int AS n FROM treatments WHERE service_id = ${id}`;
-    if (used[0].n > 0) {
+    // Which records would lose a line — named, so the Super Admin decides knowing
+    // exactly what goes with it rather than being told only that something does.
+    const blocking = await sql`
+      SELECT dr.id, dr.date, dr.diagnosis,
+             COALESCE(p.first_name || ' ' || p.last_name, a.patient_name) AS patient_name
+      FROM treatments t
+      JOIN dental_records dr ON dr.id = t.record_id
+      JOIN appointments a ON a.id = dr.appointment_id
+      LEFT JOIN patients p ON p.patient_id = a.patient_id
+      WHERE t.service_id = ${id}
+      ORDER BY dr.date DESC
+    `;
+
+    if (blocking.length > 0 && req.query.withRecords !== "true") {
+      const n = blocking.length;
       return res.status(409).json({
-        error: `"${displayService(service.service_name)}" is named by ${used[0].n} dental record treatment${used[0].n === 1 ? "" : "s"}. Deleting it would change what those records say, so it stays in Removed Services.`,
+        error: `"${displayService(service.service_name)}" is named by ${n} dental record${n === 1 ? "" : "s"}. Deleting it would change what ${n === 1 ? "that record says" : "those records say"}, so it stays in Removed Services.`,
+        records: blocking.map((r: any) => ({
+          id: r.id,
+          date: toDateStr(r.date),
+          diagnosis: r.diagnosis,
+          patientName: r.patient_name,
+        })),
       });
     }
 
+    // Asked for explicitly, knowing which records go with it. Each record's own
+    // treatments and prescriptions follow it out, which the foreign keys cascade.
+    for (const r of blocking as any[]) {
+      await sql`DELETE FROM dental_records WHERE id = ${r.id}`;
+    }
     await sql`DELETE FROM services WHERE id = ${id}`;
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, deletedRecords: blocking.length });
   }
 
   if (req.method === "POST" && req.query.services === "true") {

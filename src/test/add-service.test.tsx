@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   created: [] as any[],
   removeCalls: [] as { id: string; reason: string; by?: string }[],
   reordered: [] as string[][],
+  deletedWithRecords: [] as string[],
   failWith: null as string | null,
 }));
 
@@ -41,9 +42,15 @@ vi.mock("@/lib/api/dentalRecords", async (importOriginal) => {
       h.services = [...h.services, created];
       return created;
     }),
-    deleteService: vi.fn(async (id: string) => {
+    deleteService: vi.fn(async (id: string, withRecords = false) => {
       const target = h.removed.find((s: any) => s.id === id);
-      if (target?.usedByRecords) throw new Error(`"${target.name}" is named by 1 dental record treatment.`);
+      if (target?.usedByRecords && !withRecords) {
+        const { ApiError } = await import("@/contexts/AuthContext");
+        throw new ApiError(`"${target.name}" is named by ${target.usedByRecords.length} dental records.`, {
+          records: target.usedByRecords,
+        });
+      }
+      if (withRecords) h.deletedWithRecords.push(id);
       h.removed = h.removed.filter((s: any) => s.id !== id);
     }),
     reorderServices: vi.fn(async (order: string[]) => {
@@ -70,10 +77,14 @@ vi.mock("@/lib/api/settings", async (importOriginal) => {
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "su-1", name: "Super Administrator", role: "superadmin", email: "super@admin.com", verified: true } }),
-  api: vi.fn(async () => ({})),
-}));
+vi.mock("@/contexts/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/contexts/AuthContext")>();
+  return {
+    ...actual,
+    useAuth: () => ({ user: { id: "su-1", name: "Super Administrator", role: "superadmin", email: "super@admin.com", verified: true } }),
+    api: vi.fn(async () => ({})),
+  };
+});
 
 import SuperAdminSettings from "@/pages/superadmin/SuperAdminSettings";
 
@@ -94,6 +105,7 @@ beforeEach(() => {
   h.removeCalls = [];
   h.created = [];
   h.reordered = [];
+  h.deletedWithRecords = [];
   h.failWith = null;
   toasts.success.mockClear();
   toasts.error.mockClear();
@@ -378,18 +390,44 @@ describe("taking a removed service out of the catalogue for good", () => {
     expect(toasts.success).toHaveBeenCalledWith("dsdsds deleted");
   });
 
-  it("keeps one a dental record still names, and says why", async () => {
+  it("names the records in the way instead of just refusing", async () => {
     h.services = [];
     h.removed = [{
       id: "sv-used", name: "dsdsds", removedAt: "2026-09-24", removedBy: "Super Administrator",
-      removedReason: "Test", usedByRecords: true,
+      removedReason: "Test",
+      usedByRecords: [
+        { id: "rec-1", date: "2026-09-24", diagnosis: "dsfdsfdf", patientName: "Allen Estrella" },
+        { id: "rec-2", date: "2026-09-23", diagnosis: "gdfgdfgdf", patientName: "Flow g" },
+      ],
     }];
     const dialog = await openDelete("dsdsds");
     fireEvent.click(dialog.getByRole("button", { name: /Delete for good/ }));
 
-    await waitFor(() =>
-      expect(toasts.error).toHaveBeenCalledWith('"dsdsds" is named by 1 dental record treatment.'));
-    // Still there: a record can't lose a line it once said.
+    // Nothing is gone yet — the dialog turns into the list of what would go.
+    await waitFor(() => expect(dialog.getByText("Allen Estrella")).toBeInTheDocument());
+    expect(dialog.getByText("Flow g")).toBeInTheDocument();
+    expect(dialog.getByText(/2026-09-24 · dsfdsfdf/)).toBeInTheDocument();
+    expect(dialog.getByText(/is named by 2 dental records/)).toBeInTheDocument();
     expect(screen.getByText("dsdsds")).toBeInTheDocument();
+    expect(h.deletedWithRecords).toEqual([]);
+  });
+
+  it("takes the records with it once that is what the button says it does", async () => {
+    h.services = [];
+    h.removed = [{
+      id: "sv-used", name: "dsdsds", removedAt: "2026-09-24", removedBy: "Super Administrator",
+      removedReason: "Test",
+      usedByRecords: [{ id: "rec-1", date: "2026-09-24", diagnosis: "dsfdsfdf", patientName: "Allen Estrella" }],
+    }];
+    const dialog = await openDelete("dsdsds");
+    fireEvent.click(dialog.getByRole("button", { name: /Delete for good/ }));
+    await waitFor(() => expect(dialog.getByText("Allen Estrella")).toBeInTheDocument());
+
+    // The button now says what it will take, rather than only naming the service.
+    fireEvent.click(dialog.getByRole("button", { name: "Delete the service and 1 record" }));
+
+    await waitFor(() => expect(screen.queryByText("dsdsds")).toBeNull());
+    expect(h.deletedWithRecords).toEqual(["sv-used"]);
+    expect(toasts.success).toHaveBeenCalledWith("dsdsds deleted, along with 1 dental record(s)");
   });
 });

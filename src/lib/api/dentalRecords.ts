@@ -140,10 +140,20 @@ export async function reorderServices(order: string[]): Promise<Service[]> {
   return data.services;
 }
 
-/** Takes a removed service out of the catalogue for good. Refused by the server if a
- * dental record still names it. */
-export async function deleteService(id: string): Promise<void> {
-  await api(`/dental-records?services=true&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+/** A dental record standing in the way of deleting a service, as the server names it. */
+export interface BlockingRecord {
+  id: string;
+  date: string | null;
+  diagnosis: string;
+  patientName: string | null;
+}
+
+/** Takes a removed service out of the catalogue for good. The server refuses while a
+ * dental record names it, and says which — `withRecords` deletes those records too,
+ * which is only ever asked for once the Super Admin has seen the list. */
+export async function deleteService(id: string, withRecords = false): Promise<void> {
+  const cascade = withRecords ? "&withRecords=true" : "";
+  await api(`/dental-records?services=true&id=${encodeURIComponent(id)}${cascade}`, { method: "DELETE" });
 }
 
 export async function updateService(id: string, patch: { price?: number; duration?: number }): Promise<Service> {

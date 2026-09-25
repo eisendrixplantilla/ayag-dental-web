@@ -48,7 +48,7 @@ vi.mock("@/components/ui/calendar", async () => {
   const React = await import("react");
   return {
     Calendar: ({ onSelect }: any) =>
-      React.createElement("button", { onClick: () => onSelect(new Date(2026, 8, 25)) }, "Pick Sep 25"),
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
   };
 });
 
@@ -191,7 +191,7 @@ describe("slots while the form sits open", () => {
     fireEvent.change(picker(), { target: { value: "Oral" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Pick Sep 25" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pick Mar 10" }));
     await waitFor(() => expect(slotOptions().length).toBeGreaterThan(0));
   };
 
@@ -240,7 +240,7 @@ describe("what the form tells you about the date you are picking", () => {
     fireEvent.change(picker(), { target: { value: "Oral" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Pick Sep 25" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pick Mar 10" }));
     await waitFor(() => expect(within(slotGroup()).getAllByRole("button").length).toBeGreaterThan(0));
   };
 
@@ -262,7 +262,7 @@ describe("what the form tells you about the date you are picking", () => {
     await pickVisit();
 
     const heading = screen.getByText(/^Times on /);
-    expect(heading.textContent).toBe("Times on Fri, Sep 25");
+    expect(heading.textContent).toBe("Times on Wed, Mar 10");
     expect(heading.className).toMatch(/font-semibold/);
     expect(heading.className).toMatch(/text-foreground/);
 
@@ -275,10 +275,10 @@ describe("what the form tells you about the date you are picking", () => {
     await pickVisit();
     fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
 
-    const readback = (await screen.findByText("September 25th, 2026")).closest("p")!;
-    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on September 25th, 2026 at 9:00 AM – 9:30 AM.");
+    const readback = (await screen.findByText("March 10th, 2027")).closest("p")!;
+    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
     // Each thing being booked carries weight, and the whole line is set apart.
-    expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|September 25th, 2026|9:00 AM – 9:30 AM/)
+    expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|March 10th, 2027|9:00 AM – 9:30 AM/)
       .every(el => /font-semibold/.test(el.className))).toBe(true);
     expect(readback.className).toContain("bg-primary/5");
 

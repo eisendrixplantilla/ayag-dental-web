@@ -41,6 +41,15 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = "ayag_auth_token";
 const USER_KEY = "ayag_auth_user";
 
+/** A request the server refused, carrying whatever it said besides the message —
+ * a 409 often explains what is in the way, not just that something is. */
+export class ApiError extends Error {
+  constructor(message: string, readonly data: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
   const res = await fetch(`/api${path}`, {
@@ -52,7 +61,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Something went wrong. Please try again.");
+  if (!res.ok) throw new ApiError(data.error ?? "Something went wrong. Please try again.", data);
   return data as T;
 }
 
