@@ -315,3 +315,26 @@ describe("arranging the catalogue", () => {
     expect(serviceNames()).toEqual(["Braces", "Cleaning", "Extraction"]);
   });
 });
+
+describe("the reorder handle keeps the focus it is given", () => {
+  it("stays focusable while a move is saving, so the next arrow key lands", async () => {
+    h.services = [
+      { id: "sv-a", name: "Braces", description: null, duration: 60, price: 25000, sortOrder: 1 },
+      { id: "sv-b", name: "Cleaning", description: null, duration: 30, price: 1000, sortOrder: 2 },
+    ];
+    render(<SuperAdminSettings />);
+    await screen.findByText("Cleaning");
+
+    const handle = screen.getByRole("button", { name: /^Reorder Cleaning/ });
+    handle.focus();
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+
+    // Disabling it mid-move would hand the focus back to the body, and every arrow
+    // press after the first would go nowhere.
+    expect(handle).not.toBeDisabled();
+    expect(document.activeElement).toBe(handle);
+
+    await waitFor(() => expect(h.reordered).toEqual([["sv-b", "sv-a"]]));
+    expect(document.activeElement).toBe(handle);
+  });
+});

@@ -164,7 +164,10 @@ export default function SuperAdminSettings() {
   };
 
   // Dragging is no use to a keyboard, so the handle also takes the arrow keys.
-  const nudge = (id: string, by: number) => moveTo(id, services.findIndex((s) => s.id === id) + by);
+  const nudge = (id: string, by: number) => {
+    if (savingOrder) return;
+    moveTo(id, services.findIndex((s) => s.id === id) + by);
+  };
 
   const openAddService = () => {
     setNewService({ name: "", duration: "30", price: "" });
@@ -434,17 +437,21 @@ export default function SuperAdminSettings() {
                     <button
                       type="button"
                       draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragId(s.id); }}
+                      onDragStart={(e) => {
+                        if (savingOrder) { e.preventDefault(); return; }
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragId(s.id);
+                      }}
                       onDragEnd={() => { setDragId(null); setOverId(null); }}
                       onKeyDown={(e) => {
                         if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
                         e.preventDefault();
                         nudge(s.id, e.key === "ArrowUp" ? -1 : 1);
                       }}
-                      disabled={savingOrder}
+                      aria-busy={savingOrder}
                       aria-label={`Reorder ${s.name}, position ${i + 1} of ${services.length}`}
                       title="Drag to reorder, or use the arrow keys"
-                      className="cursor-grab text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={cn("cursor-grab text-muted-foreground hover:text-foreground", savingOrder && "opacity-50")}
                     >
                       <GripVertical className="w-4 h-4" />
                     </button>
