@@ -62,6 +62,8 @@ function mapRow(r: any) {
     patientName: r.patient_name,
     contact: r.contact,
     email: r.email,
+    age: r.age,
+    gender: r.gender,
     dentistId: r.dentist_id,
     dentistName: r.dentist_name,
     service: displayService(r.service),
@@ -144,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { patientName, contact, email, dentistId, dentistName, service, date, time, endTime, type, reason } = req.body ?? {};
+    const { patientName, contact, email, age, gender, dentistId, dentistName, service, date, time, endTime, type, reason } = req.body ?? {};
     if (!patientName || !service || !date || !time || !type) {
       return res.status(400).json({ error: "Missing required appointment fields" });
     }
@@ -157,8 +159,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(409).json({ error: SLOT_TAKEN });
     }
     const inserted = await sql`
-      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
-      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
+      INSERT INTO appointments (patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
+      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${age ?? null}, ${gender ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
       RETURNING *
     `;
     return res.status(201).json({ appointment: mapRow(inserted[0]) });

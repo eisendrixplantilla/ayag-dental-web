@@ -12,6 +12,8 @@ export interface Appointment {
   patientName: string;
   contact: string | null;
   email: string | null;
+  age: number | null;
+  gender: string | null;
   dentistId: string | null;
   dentistName: string | null;
   service: string;
@@ -33,6 +35,8 @@ export interface AppointmentInput {
   patientName: string;
   contact?: string;
   email?: string;
+  age?: number;
+  gender?: string;
   dentistId?: string;
   dentistName?: string;
   service: string;
