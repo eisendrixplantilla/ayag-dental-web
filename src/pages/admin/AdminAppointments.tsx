@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { COMPACT_TABLE } from "@/lib/tableClass";
@@ -33,10 +35,18 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 
 
 export default function AdminAppointments() {
+  // Whether this walk-in is for someone with a patient account or a guest with none.
+  // The account path is unchanged; the guest path collects the details below instead.
+  const [mode, setMode] = useState<"account" | "guest">("account");
   const [patientName, setPatientName] = useState("");
   const [patientId, setPatientId] = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientPickerOpen, setPatientPickerOpen] = useState(false);
+  // Guest details — kept on the appointment itself, since no account is created.
+  const [guestContact, setGuestContact] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestAge, setGuestAge] = useState("");
+  const [guestGender, setGuestGender] = useState("");
   // A visit can cover several services, e.g. a cleaning and a filling in one sitting.
   const [chosen, setChosen] = useState<string[]>([]);
 
@@ -66,6 +76,24 @@ export default function AdminAppointments() {
   const serviceLabel = chosen.join(SERVICE_SEPARATOR);
   const selectedLabel = slots.find((s) => s.value === time)?.label ?? "";
   const remaining = services.filter((s) => !chosen.includes(s));
+
+  const isGuest = mode === "guest";
+  // A guest needs the essentials captured; an account walk-in needs an existing patient
+  // actually selected (a linked id), not just a typed name.
+  const guestReady = !!patientName.trim() && !!guestContact.trim() && !!guestAge.trim() && !!guestGender;
+  const patientReady = isGuest ? guestReady : !!patientId;
+
+  // Clear everything the patient section holds — used when switching modes and after a
+  // walk-in is created, so no stale name/details leak across.
+  const resetPatient = () => {
+    setPatientName(""); setPatientId("");
+    setGuestContact(""); setGuestEmail(""); setGuestAge(""); setGuestGender("");
+  };
+  const switchMode = (next: "account" | "guest") => {
+    if (!next || next === mode) return;
+    setMode(next);
+    resetPatient();
+  };
 
   // Arrived here from a notification bell click — scroll to that walk-in's row.
   const { highlightedKey, registerRow } = useNotificationJump(
@@ -149,15 +177,20 @@ export default function AdminAppointments() {
   useAutoRefresh(() => load(true));
 
   const handleAdd = async () => {
-    if (!patientName || chosen.length === 0 || !dentistId || !date || !time) {
+    if (!patientReady || chosen.length === 0 || !dentistId || !date || !time) {
       toast.error("Please fill in all required fields");
       return;
     }
     setSaving(true);
     try {
       await createAppointment({
-        patientId: patientId || undefined,
-        patientName,
+        patientId: isGuest ? undefined : (patientId || undefined),
+        patientName: patientName.trim(),
+        // Guest details ride along on the appointment; an account walk-in carries none.
+        contact: isGuest ? guestContact.trim() : undefined,
+        email: isGuest && guestEmail.trim() ? guestEmail.trim() : undefined,
+        age: isGuest ? Number(guestAge) : undefined,
+        gender: isGuest ? guestGender : undefined,
         dentistId,
         dentistName: dentist,
         service: chosen.join(SERVICE_SEPARATOR),
@@ -166,7 +199,7 @@ export default function AdminAppointments() {
         endTime: endTimeFor(time, visitMinutes),
         type: "walk-in",
       });
-      setPatientName(""); setPatientId(""); setChosen([]); setDentistId(""); setDate(undefined); setTime("");
+      resetPatient(); setChosen([]); setDentistId(""); setDate(undefined); setTime("");
       toast.success("Walk-in appointment confirmed!");
       load();
     } catch (err) {
@@ -252,33 +285,117 @@ export default function AdminAppointments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {/* Who this walk-in is for: someone with a patient account, or a guest with
+              none. The account path is unchanged; the guest path collects details below. */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Does the patient have an account?</Label>
+            <ToggleGroup
+              type="single"
+              value={mode}
+              onValueChange={(v) => switchMode(v as "account" | "guest")}
+              className="justify-start gap-2"
+            >
+              <ToggleGroupItem
+                value="account"
+                aria-label="Patient has an account"
+                className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
+              >
+                <Search className="w-4 h-4 mr-2" /> Has account
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="guest"
+                aria-label="Patient has no account"
+                className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
+              >
+                <UserPlus className="w-4 h-4 mr-2" /> No account
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
+          {isGuest ? (
+            /* Guest: capture the essentials before booking, since nothing is stored under
+               an account. These ride along on the appointment record itself. */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-dashed p-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Full Name <span className="text-destructive">*</span></Label>
+                <Input
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  placeholder="Patient's full name"
+                  className="h-11 sm:h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Contact Number <span className="text-destructive">*</span></Label>
+                <Input
+                  value={guestContact}
+                  onChange={(e) => setGuestContact(e.target.value)}
+                  inputMode="tel"
+                  placeholder="e.g. 0917 123 4567"
+                  className="h-11 sm:h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Age <span className="text-destructive">*</span></Label>
+                <Input
+                  value={guestAge}
+                  onChange={(e) => setGuestAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                  inputMode="numeric"
+                  placeholder="e.g. 32"
+                  className="h-11 sm:h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Gender <span className="text-destructive">*</span></Label>
+                <Select value={guestGender} onValueChange={setGuestGender}>
+                  <SelectTrigger className="h-11 sm:h-9" aria-label="Gender"><SelectValue placeholder="Select gender" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs text-muted-foreground">Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  value={guestEmail}
+                  onChange={(e) => setGuestEmail(e.target.value)}
+                  type="email"
+                  placeholder="name@example.com"
+                  className="h-11 sm:h-9"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Guest walk-in — these details are saved on this appointment, not as a patient account.
+              </p>
+            </div>
+          ) : (
+            /* Account: the existing-patient picker, unchanged. */
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Patient Name</Label>
+              <Label className="text-xs text-muted-foreground">Patient</Label>
               <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={patientPickerOpen}
-                    className="h-11 sm:h-9 w-full justify-between font-normal"
+                    className="h-11 sm:h-9 w-full sm:w-96 justify-between font-normal"
                   >
                     <span className="flex items-center gap-2 truncate">
                       <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                      {patientName || "Enter or search patient name"}
+                      {patientName || "Search for a patient account"}
                     </span>
                     <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                   <Command>
-                    <CommandInput
-                      placeholder="Type a name..."
-                      value={patientName}
-                      onValueChange={(v) => { setPatientName(v); setPatientId(""); }}
-                    />
+                    <CommandInput placeholder="Type a name..." />
                     <CommandList>
-                      <CommandEmpty>No matching patient account.</CommandEmpty>
+                      <CommandEmpty>
+                        No matching patient account. Switch to <span className="font-medium">No account</span> for a guest.
+                      </CommandEmpty>
                       <CommandGroup heading="Existing patients">
                         {patients.map(p => (
                           <CommandItem
@@ -296,70 +413,54 @@ export default function AdminAppointments() {
                         ))}
                       </CommandGroup>
                     </CommandList>
-                    {/* Walk-ins are often for people with no account at all, so the typed
-                        name has to be confirmable on its own. This sits outside CommandList
-                        so cmdk's filtering can never hide it. */}
-                    {patientName.trim() && !patients.some(p => p.name.trim().toLowerCase() === patientName.trim().toLowerCase()) && (
-                      <div className="border-t border-border p-1">
-                        <button
-                          type="button"
-                          onClick={() => { setPatientId(""); setPatientPickerOpen(false); }}
-                          className="w-full flex items-center rounded-sm px-2 py-2 text-sm text-left hover:bg-accent"
-                        >
-                          <UserPlus className="mr-2 w-4 h-4 shrink-0 text-muted-foreground" />
-                          <span className="truncate">Use "{patientName.trim()}" — no account</span>
-                        </button>
-                      </div>
-                    )}
                   </Command>
                 </PopoverContent>
               </Popover>
-              {patientId ? (
+              {patientId && (
                 <p className="text-xs text-muted-foreground mt-1">Linked to existing patient account — will appear in their full history.</p>
-              ) : patientName.trim() ? (
-                <p className="text-xs text-muted-foreground mt-1">Guest walk-in — no patient account linked.</p>
-              ) : null}
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Service</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-full sm:w-56">
-                  {/* Always shows its placeholder: picking an option adds to the list beside
-                      it rather than replacing a single selection. */}
-                  <Select
-                    value=""
-                    disabled={!patientName || remaining.length === 0}
-                    onValueChange={(v) => setChosen(prev => [...prev, v])}
-                  >
-                    <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
-                      <SelectValue placeholder={
-                        !patientName ? "Enter patient name first"
-                          : remaining.length === 0 ? "All services added"
-                          : chosen.length === 0 ? "Select service"
-                          : "Add another service"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {chosen.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
-                ) : (
-                  chosen.map(s => (
-                    <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
-                      <span className="truncate">{s}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${s}`}
-                        className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
-                        onClick={() => setChosen(prev => prev.filter(c => c !== s))}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </Badge>
-                  ))
-                )}
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Service</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-full sm:w-56">
+                {/* Always shows its placeholder: picking an option adds to the list beside
+                    it rather than replacing a single selection. */}
+                <Select
+                  value=""
+                  disabled={!patientReady || remaining.length === 0}
+                  onValueChange={(v) => setChosen(prev => [...prev, v])}
+                >
+                  <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
+                    <SelectValue placeholder={
+                      !patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
+                        : remaining.length === 0 ? "All services added"
+                        : chosen.length === 0 ? "Select service"
+                        : "Add another service"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
+              {chosen.length === 0 ? (
+                <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
+              ) : (
+                chosen.map(s => (
+                  <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
+                    <span className="truncate">{s}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s}`}
+                      className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
+                      onClick={() => setChosen(prev => prev.filter(c => c !== s))}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </Badge>
+                ))
+              )}
             </div>
           </div>
 
@@ -428,7 +529,7 @@ export default function AdminAppointments() {
 
               {!dentistId || !date ? (
                 <p className="text-sm text-muted-foreground py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
-                  {!patientName ? "Enter the patient's name to begin."
+                  {!patientReady ? (isGuest ? "Fill in the patient's details to begin." : "Select a patient to begin.")
                     : chosen.length === 0 ? "Add a service to begin."
                     : !dentistId ? "Assign a dentist to see their calendar."
                     : "Pick a date to see the free times."}
@@ -486,7 +587,7 @@ export default function AdminAppointments() {
             )}
             <Button
               className="gradient-primary text-primary-foreground w-full sm:w-auto h-11 sm:h-10 shrink-0"
-              disabled={!patientName || chosen.length === 0 || !dentistId || !date || !time || saving}
+              disabled={!patientReady || chosen.length === 0 || !dentistId || !date || !time || saving}
               onClick={handleAdd}
             >
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />} Add Walk-in
@@ -572,6 +673,8 @@ export default function AdminAppointments() {
               <DetailRow label="Patient" value={viewing.patientName} />
               {viewing.contact && <DetailRow label="Contact" value={viewing.contact} />}
               {viewing.email && <DetailRow label="Email" value={viewing.email} />}
+              {viewing.age != null && <DetailRow label="Age" value={String(viewing.age)} />}
+              {viewing.gender && <DetailRow label="Gender" value={viewing.gender} />}
               <DetailRow label="Service" value={viewing.service} />
               <DetailRow label="Dentist" value={viewing.dentistName ?? "—"} />
               <DetailRow label="Date" value={viewing.date} />

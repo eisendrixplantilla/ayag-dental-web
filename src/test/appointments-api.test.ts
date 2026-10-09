@@ -33,8 +33,8 @@ vi.mock("../../api/_lib/db.js", () => ({
         .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("INSERT INTO appointments")) {
-      const [patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by] = v;
-      const row = { id: `new-${++h.n}`, patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, type,
+      const [patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by] = v;
+      const row = { id: `new-${++h.n}`, patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, type,
         status, reason, remarks: null, reschedule_count: 0, created_by, end_time,
         created_at: "2026-09-23T00:00:00Z", updated_at: "2026-09-23T00:00:00Z" };
       h.rows.push(row);

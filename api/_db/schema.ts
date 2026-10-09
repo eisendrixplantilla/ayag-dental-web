@@ -151,6 +151,9 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS end_time TEXT;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reschedule_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+-- Captured for guest walk-ins (no patient account), so the desk keeps a usable record.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS age INTEGER;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS gender TEXT;
 
 CREATE TABLE IF NOT EXISTS dental_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
