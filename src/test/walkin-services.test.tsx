@@ -72,6 +72,21 @@ vi.mock("@/components/ui/popover", async () => {
   return { Popover: div, PopoverTrigger: div, PopoverContent: div };
 });
 
+// Simple buttons for the account/guest switch, so a click deterministically flips mode.
+vi.mock("@/components/ui/toggle-group", async () => {
+  const React = await import("react");
+  return {
+    ToggleGroup: ({ value, onValueChange, children }: any) =>
+      React.createElement(
+        "div",
+        { "data-value": value },
+        React.Children.map(children, (c: any) => React.cloneElement(c, { __onSelect: onValueChange })),
+      ),
+    ToggleGroupItem: ({ value, children, __onSelect, ["aria-label"]: ariaLabel }: any) =>
+      React.createElement("button", { "aria-label": ariaLabel, onClick: () => __onSelect?.(value) }, children),
+  };
+});
+
 vi.mock("@/components/ui/command", async () => {
   const React = await import("react");
   const div = ({ children }: any) => React.createElement("div", null, children);
@@ -111,8 +126,15 @@ const renderPage = async () => {
   render(<MemoryRouter><AdminAppointments /></MemoryRouter>);
   await screen.findByLabelText("Add a service");
 };
-const nameWalkIn = () =>
-  fireEvent.change(screen.getByPlaceholderText("Type a name..."), { target: { value: "Rosa Mendoza" } });
+// Identify the walk-in as a guest with no account, filling the details the form now
+// requires before it will offer any services.
+const nameWalkIn = () => {
+  fireEvent.click(screen.getByRole("button", { name: /no account/i }));
+  fireEvent.change(screen.getByPlaceholderText("Patient's full name"), { target: { value: "Rosa Mendoza" } });
+  fireEvent.change(screen.getByPlaceholderText("e.g. 0917 123 4567"), { target: { value: "09171234567" } });
+  fireEvent.change(screen.getByPlaceholderText("e.g. 32"), { target: { value: "32" } });
+  fireEvent.change(screen.getByLabelText("Gender"), { target: { value: "Female" } });
+};
 
 describe("walk-in appointments cover more than one service", () => {
   it("waits for a patient name before offering services", async () => {
@@ -161,6 +183,8 @@ describe("what the walk-in list lets you do", () => {
     patientName: "Rosa Mendoza",
     contact: "09171234567",
     email: null,
+    age: 32,
+    gender: "Female",
     dentistId: "dr-mike",
     dentistName: "Dr. Mike Johnson",
     service: "Oral",
@@ -206,6 +230,8 @@ describe("what the walk-in list lets you do", () => {
     const dialog = within(document.querySelector("[role=dialog]") as HTMLElement);
     expect(dialog.getByText("APT-3F9C2A")).toBeInTheDocument();
     expect(dialog.getByText("09171234567")).toBeInTheDocument();
+    expect(dialog.getByText("32")).toBeInTheDocument();
+    expect(dialog.getByText("Female")).toBeInTheDocument();
     expect(dialog.getByText("Dr. Mike Johnson")).toBeInTheDocument();
     expect(dialog.getByText("9:00 AM – 9:30 AM")).toBeInTheDocument();
     expect(dialog.getByText(/Sep 24, 2026/)).toBeInTheDocument(); // booked on

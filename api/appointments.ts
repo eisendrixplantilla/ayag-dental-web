@@ -55,6 +55,26 @@ async function slotTaken(opts: {
   });
 }
 
+/**
+ * Guest walk-ins save age and gender, which databases migrated before those columns
+ * existed don't have yet. Add them on first use (once per instance) so bookings keep
+ * working without a separate migrate run; the statement is a no-op once they exist.
+ */
+let guestColumns: Promise<void> | null = null;
+function ensureGuestColumns() {
+  guestColumns ??= sql`
+    /* guest-columns */ ALTER TABLE appointments
+      ADD COLUMN IF NOT EXISTS age INTEGER,
+      ADD COLUMN IF NOT EXISTS gender TEXT`
+    .then(() => undefined)
+    .catch((err) => {
+      // Retry on the next booking; if the columns really are missing the insert reports it.
+      guestColumns = null;
+      console.error("Could not add guest walk-in columns", err);
+    });
+  return guestColumns;
+}
+
 function mapRow(r: any) {
   return {
     id: r.id,
@@ -62,6 +82,8 @@ function mapRow(r: any) {
     patientName: r.patient_name,
     contact: r.contact,
     email: r.email,
+    age: r.age,
+    gender: r.gender,
     dentistId: r.dentist_id,
     dentistName: r.dentist_name,
     service: displayService(r.service),
@@ -144,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { patientName, contact, email, dentistId, dentistName, service, date, time, endTime, type, reason } = req.body ?? {};
+    const { patientName, contact, email, age, gender, dentistId, dentistName, service, date, time, endTime, type, reason } = req.body ?? {};
     if (!patientName || !service || !date || !time || !type) {
       return res.status(400).json({ error: "Missing required appointment fields" });
     }
@@ -156,9 +178,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null })) {
       return res.status(409).json({ error: SLOT_TAKEN });
     }
+    await ensureGuestColumns();
     const inserted = await sql`
-      INSERT INTO appointments (patient_id, patient_name, contact, email, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
-      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
+      INSERT INTO appointments (patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
+      VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${age ?? null}, ${gender ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
       RETURNING *
     `;
     return res.status(201).json({ appointment: mapRow(inserted[0]) });
