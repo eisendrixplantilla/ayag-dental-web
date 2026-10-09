@@ -33,6 +33,13 @@ vi.mock("../../api/_lib/db.js", () => ({
         .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("guest-columns")) return [];
+    if (text.includes("link-target")) return v[0] === "acct-9" ? [{ id: "acct-9" }] : [];
+    if (text.includes("link-guest")) {
+      const [patientId, name] = v;
+      const moved = h.rows.filter(r => r.patient_id === null && r.patient_name === name);
+      moved.forEach(r => { r.patient_id = patientId; });
+      return moved.map(r => ({ id: r.id }));
+    }
     if (text.includes("INSERT INTO appointments")) {
       const [patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by] = v;
       const row = { id: `new-${++h.n}`, patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, type,
@@ -320,5 +327,45 @@ describe("a patient rescheduling", () => {
     h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
     const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
     expect(res.body.appointment.status).toBe("rescheduled");
+  });
+});
+
+describe("linking a guest's walk-ins to the account they made", () => {
+  const link = (body: Record<string, unknown>) => call("PATCH", { query: { linkGuest: "true" }, body });
+  beforeEach(() => {
+    h.rows = [
+      row({ id: "w-1", patient_id: null, patient_name: "Rosa Mendoza", type: "walk-in", status: "completed" }),
+      row({ id: "w-2", patient_id: null, patient_name: "Rosa Mendoza", type: "walk-in", status: "confirmed" }),
+      row({ id: "w-3", patient_id: null, patient_name: "Pedro Reyes", type: "walk-in" }),
+      row({ id: "a-1", patient_id: "p1", patient_name: "Rosa Mendoza" }),
+    ];
+  });
+
+  it("moves only that guest's account-less bookings into the account", async () => {
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9" });
+    expect(res.code).toBe(200);
+    expect(res.body.linked).toBe(2);
+    expect(Object.fromEntries(h.rows.map(r => [r.id, r.patient_id]))).toEqual({
+      "w-1": "acct-9", "w-2": "acct-9", "w-3": null, "a-1": "p1",
+    });
+  });
+
+  it("refuses an account that doesn't exist, moving nothing", async () => {
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "nobody" });
+    expect(res.code).toBe(404);
+    expect(h.rows.filter(r => r.patient_id === null)).toHaveLength(3);
+  });
+
+  it("needs both the guest's name and the account", async () => {
+    expect((await link({ patientName: "Rosa Mendoza" })).code).toBe(400);
+    expect((await link({ patientId: "acct-9" })).code).toBe(400);
+  });
+
+  it("is staff-only", async () => {
+    h.session = { sub: "acct-9", email: "rosa@example.com", role: "patient" };
+    expect((await link({ patientName: "Rosa Mendoza", patientId: "acct-9" })).code).toBe(403);
+    h.session = { sub: "dr-1", email: "dr@example.com", role: "dentist" };
+    expect((await link({ patientName: "Rosa Mendoza", patientId: "acct-9" })).code).toBe(403);
+    expect(h.rows.filter(r => r.patient_id === null)).toHaveLength(3);
   });
 });

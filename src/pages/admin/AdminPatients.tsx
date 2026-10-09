@@ -9,11 +9,11 @@ import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Eye, Edit, Loader2, Printer } from "lucide-react";
+import { Users, Plus, Eye, Edit, Loader2, Printer, Link2, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
-import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { getAppointments, linkGuestToAccount, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -21,11 +21,12 @@ import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import { ageFrom, compareAge, compareGender, compareName, comparePhone, type MatchLevel } from "@/lib/guestMatch";
 
 const COLUMNS = ["Name", "Age", "Phone", "Email", "Status", "Walk-in"];
 
-// A walk-in booked for someone with no account has no patients row behind it, so it
-// can only be shown read-only: there's nothing to open, edit or archive.
+// A walk-in booked for someone with no account has no patients row behind it: there's
+// nothing to open, edit or archive. Once they sign up, staff can link it to the account.
 interface PatientRow {
   key: string;
   name: string;
@@ -35,6 +36,8 @@ interface PatientRow {
   patient: Patient | null;
   /** Has at least one walk-in visit — true for every guest, and for account holders booked at the desk. */
   hasWalkIn: boolean;
+  /** Guests only: how many walk-ins were booked under this name. */
+  visits: number;
 }
 
 const patientSchema = z.object({
@@ -62,6 +65,12 @@ export default function AdminPatients() {
   const [editForm, setEditForm] = useState<FormState>(emptyForm);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
+  // Linking a guest (walk-ins with no account) to the account they've since made.
+  const [linking, setLinking] = useState<PatientRow | null>(null);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkTarget, setLinkTarget] = useState<Patient | null>(null);
+  const [linkSaving, setLinkSaving] = useState(false);
+
   // `silent` is for background refreshes: no spinner, no error toast.
   const load = (silent = false) => {
     if (!silent) setLoading(true);
@@ -84,6 +93,7 @@ export default function AdminPatients() {
       email: p.email,
       patient: p,
       hasWalkIn: appointments.some(a => a.patientId === p.id && a.type === "walk-in"),
+      visits: 0,
     }));
 
     // Guest walk-ins, grouped by the name taken at the desk. Fields the clinic never
@@ -102,6 +112,7 @@ export default function AdminPatients() {
       email: own.find(a => a.email)?.email ?? "",
       patient: null,
       hasWalkIn: true,
+      visits: own.length,
     }));
 
     return [...accountRows, ...guestRows];
@@ -178,6 +189,58 @@ export default function AdminPatients() {
       setFormErrors({ general: err instanceof Error ? err.message : "Failed to save patient" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Accounts to link a guest to. The likely one — same contact number or same name —
+  // is suggested first, but staff always choose; nothing is linked on a guess.
+  const linkCandidates = useMemo(() => {
+    if (!linking) return [];
+    const digits = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+    const phone = digits(linking.phone);
+    const name = linking.name.trim().toLowerCase();
+    const q = linkSearch.trim().toLowerCase();
+    return patients
+      .map(p => ({ p, suggested: (!!phone && digits(p.phone) === phone) || p.name.trim().toLowerCase() === name }))
+      .filter(({ p }) => !q || [p.name, p.phone ?? "", p.email ?? ""].some(v => v.toLowerCase().includes(q)))
+      .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.p.name.localeCompare(b.p.name));
+  }, [linking, linkSearch, patients]);
+
+  // What the desk took down at the guest's walk-ins, newest first, to compare with an account.
+  const linkGuest = useMemo(() => {
+    if (!linking) return null;
+    const visits = appointments
+      .filter(a => !a.patientId && a.patientName === linking.name)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    return {
+      name: linking.name,
+      contact: visits.find(v => v.contact)?.contact ?? (linking.phone || null),
+      age: visits.find(v => v.age != null)?.age ?? null,
+      gender: visits.find(v => v.gender)?.gender ?? null,
+      visits,
+    };
+  }, [linking, appointments]);
+
+  const openLink = (row: PatientRow) => {
+    setLinking(row);
+    setLinkSearch("");
+    setLinkTarget(null);
+  };
+
+  const confirmLink = async () => {
+    if (!linking || !linkTarget) return;
+    setLinkSaving(true);
+    try {
+      const moved = await linkGuestToAccount(linking.name, linkTarget.id);
+      toast.success(`Linked to ${linkTarget.name}'s account`, {
+        description: `${moved} walk-in visit${moved === 1 ? "" : "s"} now show in their history.`,
+      });
+      setLinking(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to link to the account");
+    } finally {
+      setLinkSaving(false);
     }
   };
 
@@ -346,11 +409,22 @@ export default function AdminPatients() {
                     </TableCell>
                     <TableCell>{r.hasWalkIn ? "Yes" : "No"}</TableCell>
                     <TableCell className="print:hidden">
-                      {p && (
+                      {p ? (
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>
                         </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-primary"
+                          aria-label={`Link ${r.name} to an account`}
+                          title="Link to the account this patient has made"
+                          onClick={() => openLink(r)}
+                        >
+                          <Link2 className="w-4 h-4 mr-1" /> Link
+                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -410,6 +484,147 @@ export default function AdminPatients() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!linking} onOpenChange={(o) => !o && setLinking(null)}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-heading">Link to an account</DialogTitle></DialogHeader>
+          {linking && linkGuest && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Once this patient has signed up online, choose their account to move these walk-ins, and their
+                dental records, into it. Compare the details first.
+              </p>
+
+              {/* What the desk recorded for the guest. */}
+              <section aria-label="Guest details" className="rounded-md border bg-muted/30 p-3 text-sm space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Walk-in guest (no account)</p>
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1">
+                  <div><dt className="text-xs text-muted-foreground">Name</dt><dd className="font-medium">{linkGuest.name}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Contact</dt><dd className="font-medium">{linkGuest.contact ?? "—"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Age</dt><dd className="font-medium">{linkGuest.age ?? "—"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Gender</dt><dd className="font-medium">{linkGuest.gender ?? "—"}</dd></div>
+                </dl>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    {linkGuest.visits.length} walk-in visit{linkGuest.visits.length === 1 ? "" : "s"}
+                  </p>
+                  <ul className="text-xs">
+                    {linkGuest.visits.slice(0, 3).map(v => (
+                      <li key={v.id}>{formatManilaDate(v.date)} · {v.service}{v.dentistName ? ` · ${v.dentistName}` : ""}</li>
+                    ))}
+                    {linkGuest.visits.length > 3 && <li className="text-muted-foreground">and {linkGuest.visits.length - 3} more</li>}
+                  </ul>
+                </div>
+              </section>
+
+              <Input
+                placeholder="Search by name, phone or email"
+                value={linkSearch}
+                onChange={e => setLinkSearch(e.target.value)}
+                aria-label="Search patient accounts"
+              />
+              <div role="listbox" aria-label="Patient accounts" className="max-h-52 overflow-y-auto rounded-md border divide-y">
+                {linkCandidates.map(({ p, suggested }) => {
+                  const age = ageFrom(p.birthdate) ?? p.age;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="option"
+                      aria-selected={linkTarget?.id === p.id}
+                      onClick={() => setLinkTarget(p)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/60 ${linkTarget?.id === p.id ? "bg-primary/10" : ""}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium">{p.name}</span>
+                        {suggested && <Badge variant="outline" className="text-[10px] font-normal border-primary/30 text-primary">Suggested</Badge>}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">{p.phone || "—"} · {p.email || "—"}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {age != null ? `${age} yrs` : "Age —"} · {p.gender || "Gender —"}
+                        {p.birthdate ? ` · Born ${formatManilaDate(p.birthdate)}` : ""}
+                        {p.createdAt ? ` · Signed up ${formatManilaDate(p.createdAt)}` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+                {linkCandidates.length === 0 && (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    No matching account. Ask the patient to sign up online first.
+                  </p>
+                )}
+              </div>
+
+              {linkTarget && <LinkComparison guest={linkGuest} account={linkTarget} />}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setLinking(null)}>Cancel</Button>
+                <Button className="gradient-primary text-primary-foreground" disabled={!linkTarget || linkSaving} onClick={confirmLink}>
+                  {linkSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {linkTarget ? `Link to ${linkTarget.name}` : "Choose an account"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+const MATCH_STYLE: Record<MatchLevel, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
+  match: { label: "Match", className: "text-success", Icon: CheckCircle2 },
+  close: { label: "Check", className: "text-warning", Icon: AlertTriangle },
+  differs: { label: "Different", className: "text-destructive", Icon: AlertTriangle },
+  unknown: { label: "Not on file", className: "text-muted-foreground", Icon: HelpCircle },
+};
+
+/** The guest's details beside the chosen account's, field by field, before linking. */
+function LinkComparison({ guest, account }: {
+  guest: { name: string; contact: string | null; age: number | null; gender: string | null };
+  account: Patient;
+}) {
+  const accountAge = ageFrom(account.birthdate) ?? account.age;
+  const rows: [string, string, string, MatchLevel][] = [
+    ["Name", guest.name, account.name, compareName(guest.name, account.name)],
+    ["Contact", guest.contact ?? "—", account.phone ?? "—", comparePhone(guest.contact, account.phone)],
+    ["Age", guest.age != null ? String(guest.age) : "—", accountAge != null ? String(accountAge) : "—", compareAge(guest.age, accountAge)],
+    ["Gender", guest.gender ?? "—", account.gender ?? "—", compareGender(guest.gender, account.gender)],
+  ];
+  const doubtful = rows.some(([, , , level]) => level === "close" || level === "differs");
+  return (
+    <section aria-label="Compare before linking" className="rounded-md border p-3 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compare before linking</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-muted-foreground text-left">
+            <th className="font-normal py-1 pr-2"><span className="sr-only">Detail</span></th>
+            <th className="font-normal py-1 pr-2">Walk-in guest</th>
+            <th className="font-normal py-1 pr-2">Account</th>
+            <th className="font-normal py-1"><span className="sr-only">Result</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, g, a, level]) => {
+            const { label: verdict, className, Icon } = MATCH_STYLE[level];
+            return (
+              <tr key={label} className="border-t">
+                <th scope="row" className="text-left text-xs font-normal text-muted-foreground py-1.5 pr-2">{label}</th>
+                <td className="py-1.5 pr-2">{g}</td>
+                <td className="py-1.5 pr-2">{a}</td>
+                <td className={`py-1.5 text-xs whitespace-nowrap ${className}`}>
+                  <span className="inline-flex items-center gap-1"><Icon className="w-3.5 h-3.5" />{verdict}</span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className={`text-xs ${doubtful ? "text-warning" : "text-muted-foreground"}`}>
+        {doubtful
+          ? "Some details need a closer look. Ask the patient to log in and show their Profile, or check a valid ID, before linking."
+          : "To be sure, ask the patient to log in and show their Profile, or check a valid ID."}
+      </p>
+    </section>
   );
 }

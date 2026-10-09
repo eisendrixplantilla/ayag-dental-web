@@ -187,6 +187,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(201).json({ appointment: mapRow(inserted[0]) });
   }
 
+  // A guest who walked in without an account has since made one: staff move that guest's
+  // walk-ins into it, so the visits (and the dental records written for them, which are
+  // found through the appointment) show in the account's history. Only bookings still
+  // without an account move, matched on the name Patient Records groups guests by.
+  if (req.method === "PATCH" && req.query.linkGuest === "true") {
+    if (session.role !== "admin" && session.role !== "superadmin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { patientName, patientId } = req.body ?? {};
+    if (!patientName || !patientId) {
+      return res.status(400).json({ error: "patientName and patientId are required" });
+    }
+    const target = await sql`SELECT id /* link-target */ FROM patients WHERE id = ${patientId}`;
+    if (!target[0]) return res.status(404).json({ error: "Patient account not found" });
+    const linked = await sql`
+      UPDATE appointments /* link-guest */ SET patient_id = ${patientId}, updated_at = now()
+      WHERE patient_id IS NULL AND patient_name = ${patientName}
+      RETURNING id`;
+    return res.status(200).json({ linked: linked.length });
+  }
+
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   if (req.method === "PATCH") {

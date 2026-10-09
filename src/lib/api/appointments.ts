@@ -125,6 +125,19 @@ export async function updateAppointment(id: string, patch: AppointmentUpdate): P
   return { ...data.appointment, emailSent: data.emailSent ?? null };
 }
 
+/**
+ * Moves a guest's walk-ins (booked with no account, under this name) into a patient
+ * account, so they show in that account's history. Returns how many moved.
+ */
+export async function linkGuestToAccount(patientName: string, patientId: string): Promise<number> {
+  const data = await api<{ linked: number }>("/appointments?linkGuest=true", {
+    method: "PATCH",
+    body: JSON.stringify({ patientName, patientId }),
+  });
+  announceChange();
+  return data.linked;
+}
+
 /** Toast wording for the email outcome of a status change. */
 export function describeEmailOutcome(result: UpdatedAppointment, what: string): { ok: boolean; text: string } {
   if (result.emailSent === true) return { ok: true, text: `${what} email sent to ${result.email}.` };

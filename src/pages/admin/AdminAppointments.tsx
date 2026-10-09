@@ -44,7 +44,6 @@ export default function AdminAppointments() {
   const [patientPickerOpen, setPatientPickerOpen] = useState(false);
   // Guest details — kept on the appointment itself, since no account is created.
   const [guestContact, setGuestContact] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
   const [guestAge, setGuestAge] = useState("");
   const [guestGender, setGuestGender] = useState("");
   // A visit can cover several services, e.g. a cleaning and a filling in one sitting.
@@ -87,7 +86,7 @@ export default function AdminAppointments() {
   // walk-in is created, so no stale name/details leak across.
   const resetPatient = () => {
     setPatientName(""); setPatientId("");
-    setGuestContact(""); setGuestEmail(""); setGuestAge(""); setGuestGender("");
+    setGuestContact(""); setGuestAge(""); setGuestGender("");
   };
   const switchMode = (next: "account" | "guest") => {
     if (!next || next === mode) return;
@@ -188,7 +187,6 @@ export default function AdminAppointments() {
         patientName: patientName.trim(),
         // Guest details ride along on the appointment; an account walk-in carries none.
         contact: isGuest ? guestContact.trim() : undefined,
-        email: isGuest && guestEmail.trim() ? guestEmail.trim() : undefined,
         age: isGuest ? Number(guestAge) : undefined,
         gender: isGuest ? guestGender : undefined,
         dentistId,
@@ -356,16 +354,6 @@ export default function AdminAppointments() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs text-muted-foreground">Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                <Input
-                  value={guestEmail}
-                  onChange={(e) => setGuestEmail(e.target.value)}
-                  type="email"
-                  placeholder="name@example.com"
-                  className="h-11 sm:h-9"
-                />
-              </div>
               <p className="text-xs text-muted-foreground sm:col-span-2">
                 Guest walk-in — these details are saved on this appointment, not as a patient account.
               </p>
@@ -373,7 +361,7 @@ export default function AdminAppointments() {
           ) : (
             /* Account: the existing-patient picker, unchanged. */
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Patient</Label>
+              <Label className="block text-xs text-muted-foreground">Patient</Label>
               <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
