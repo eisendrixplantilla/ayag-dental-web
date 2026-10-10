@@ -3,6 +3,9 @@ import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { sendAppointmentEmail } from "./_lib/email.js";
 import { displayService } from "./_lib/services.js";
+import { joinName } from "./_lib/name.js";
+import { manilaDateStr } from "./_lib/date.js";
+import { MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink } from "./_lib/guestMatch.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
@@ -190,22 +193,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // A guest who walked in without an account has since made one: staff move that guest's
   // walk-ins into it, so the visits (and the dental records written for them, which are
   // found through the appointment) show in the account's history. Only bookings still
-  // without an account move, matched on the name Patient Records groups guests by.
+  // without an account move, and only that guest's: the same name *and* the same
+  // contact number (compared as digits), so a namesake's visits are never swept along.
+  //
+  // The guest's details are compared with the account's here, by the same rules the
+  // Link dialog shows: a clearly different person is refused, and anything short of a
+  // clean match needs staff to say how they confirmed who the patient is.
   if (req.method === "PATCH" && req.query.linkGuest === "true") {
     if (session.role !== "admin" && session.role !== "superadmin") {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { patientName, patientId } = req.body ?? {};
+    const { patientName, contact, patientId, verification } = req.body ?? {};
+    const guestDigits = String(contact ?? "").replace(/\D/g, "");
     if (!patientName || !patientId) {
       return res.status(400).json({ error: "patientName and patientId are required" });
     }
-    const target = await sql`SELECT id /* link-target */ FROM patients WHERE id = ${patientId}`;
-    if (!target[0]) return res.status(404).json({ error: "Patient account not found" });
+    const target = await sql`
+      SELECT id, first_name, middle_name, last_name, contact_number, age, birthdate, sex /* link-target */
+      FROM patients WHERE id = ${patientId}`;
+    const account = target[0];
+    if (!account) return res.status(404).json({ error: "Patient account not found" });
+    const visits = await sql`
+      SELECT contact, age, gender /* link-guest-details */ FROM appointments
+      WHERE patient_id IS NULL AND patient_name = ${patientName}
+        AND regexp_replace(coalesce(contact, ''), '[^0-9]', '', 'g') = ${guestDigits}
+      ORDER BY date DESC, time DESC`;
+    if (visits.length === 0) {
+      return res.status(404).json({ error: "No walk-ins without an account under that name and contact number" });
+    }
+
+    // The guest's details as the desk last recorded them (newest visit first).
+    type Visit = { contact: string | null; age: number | null; gender: string | null };
+    const latest = <K extends keyof Visit>(key: K): Visit[K] | null =>
+      (visits as Visit[]).find(v => v[key] != null && v[key] !== "")?.[key] ?? null;
+    const { fields, verdict, anyDiffers } = assessLink(
+      { name: patientName, contact: latest("contact"), age: latest("age"), gender: latest("gender") },
+      {
+        name: joinName(account.first_name, account.middle_name, account.last_name),
+        contact: account.contact_number,
+        age: ageFrom(manilaDateStr(account.birthdate)) ?? account.age,
+        gender: account.sex,
+      },
+    );
+    if (verdict === "blocked") {
+      return res.status(409).json({
+        error: "The name and contact number don't match this account, so it can't be linked. This looks like a different person.",
+        verdict, fields,
+      });
+    }
+    if (verdict === "verify") {
+      const method = verification?.method;
+      const reason = String(verification?.reason ?? "").trim();
+      if (typeof method !== "string" || !Object.prototype.hasOwnProperty.call(VERIFICATION_METHODS, method) || verification?.confirmed !== true) {
+        return res.status(409).json({
+          error: "The details don't fully match. Confirm the patient's identity (their logged-in Profile or a valid ID) before linking.",
+          verdict, fields,
+        });
+      }
+      if (anyDiffers && reason.length < MIN_REASON_LENGTH) {
+        return res.status(409).json({
+          error: "Some details are different. Explain why this is still the same patient before linking.",
+          verdict, fields,
+        });
+      }
+    }
+
     const linked = await sql`
       UPDATE appointments /* link-guest */ SET patient_id = ${patientId}, updated_at = now()
       WHERE patient_id IS NULL AND patient_name = ${patientName}
+        AND regexp_replace(coalesce(contact, ''), '[^0-9]', '', 'g') = ${guestDigits}
       RETURNING id`;
-    return res.status(200).json({ linked: linked.length });
+    return res.status(200).json({ linked: linked.length, verdict });
   }
 
   if (!id) return res.status(400).json({ error: "Missing id" });

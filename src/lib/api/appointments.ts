@@ -126,13 +126,21 @@ export async function updateAppointment(id: string, patch: AppointmentUpdate): P
 }
 
 /**
- * Moves a guest's walk-ins (booked with no account, under this name) into a patient
- * account, so they show in that account's history. Returns how many moved.
+ * Moves a guest's walk-ins (booked with no account under this name *and* contact
+ * number) into a patient account, so they show in that account's history. Returns how
+ * many moved.
  */
-export async function linkGuestToAccount(patientName: string, patientId: string): Promise<number> {
+export async function linkGuestToAccount(
+  patientName: string,
+  /** The guest's number as shown; walk-ins under the same name with another number stay put. */
+  contact: string | null,
+  patientId: string,
+  /** Needed when the details don't fully match: how staff confirmed who the patient is. */
+  verification?: { method: string; confirmed: boolean; reason?: string },
+): Promise<number> {
   const data = await api<{ linked: number }>("/appointments?linkGuest=true", {
     method: "PATCH",
-    body: JSON.stringify({ patientName, patientId }),
+    body: JSON.stringify({ patientName, contact, patientId, verification }),
   });
   announceChange();
   return data.linked;

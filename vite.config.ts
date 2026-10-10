@@ -12,7 +12,10 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     proxy: {
-      "/api": {
+      // Every API route, but not the underscore folders (api/_lib, api/_db): those are
+      // never routes (Vercel doesn't expose them either), and the app imports shared
+      // code from them, which the dev server has to serve as source.
+      "^/api/(?!_)": {
         target: "http://localhost:3010",
         changeOrigin: true,
       },

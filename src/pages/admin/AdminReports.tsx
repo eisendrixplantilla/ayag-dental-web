@@ -15,6 +15,7 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { groupGuests, guestLabel } from "@/lib/guests";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -111,17 +112,11 @@ export default function AdminReports() {
         });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
-      // so they'd be invisible here. Group those by the name taken at the desk.
-      const guests = new Map<string, Appointment[]>();
-      for (const a of appointments.filter((a) => !a.patientId)) {
-        const list = guests.get(a.patientName) ?? [];
-        list.push(a);
-        guests.set(a.patientName, list);
-      }
-      const guestRows = [...guests.entries()].map(([name, own]) => ({
-        label: `${name} — No account (walk-in)`,
-        total: own.length,
-        latest: own.map((a) => a.date).sort().at(-1) ?? "",
+      // so they'd be invisible here. One row per guest: the name and number taken at the desk.
+      const guestRows = groupGuests(appointments).map((g) => ({
+        label: `${guestLabel(g)} — No account (walk-in)`,
+        total: g.visits.length,
+        latest: g.visits[0]?.date ?? "",
       }));
 
       rows = [...accountRows, ...guestRows]

@@ -9,11 +9,12 @@ import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Eye, Edit, Loader2, Printer, Link2, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
+import { Users, Plus, Eye, Edit, Loader2, Printer, Link2, CheckCircle2, AlertTriangle, HelpCircle, Ban, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, linkGuestToAccount, type Appointment } from "@/lib/api/appointments";
+import { groupGuests, guestLabel, type GuestGroup } from "@/lib/guests";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -21,7 +22,13 @@ import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
-import { ageFrom, compareAge, compareGender, compareName, comparePhone, type MatchLevel } from "@/lib/guestMatch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink,
+  type LinkSide, type MatchLevel, type VerificationMethod,
+} from "@/lib/guestMatch";
 
 const COLUMNS = ["Name", "Age", "Phone", "Email", "Status", "Walk-in"];
 
@@ -36,8 +43,8 @@ interface PatientRow {
   patient: Patient | null;
   /** Has at least one walk-in visit — true for every guest, and for account holders booked at the desk. */
   hasWalkIn: boolean;
-  /** Guests only: how many walk-ins were booked under this name. */
-  visits: number;
+  /** Guests only: who they are (name and number) and their walk-ins. */
+  guest: GuestGroup | null;
 }
 
 const patientSchema = z.object({
@@ -69,6 +76,10 @@ export default function AdminPatients() {
   const [linking, setLinking] = useState<PatientRow | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
   const [linkTarget, setLinkTarget] = useState<Patient | null>(null);
+  // When the details don't fully match: how staff confirmed who the patient is.
+  const [verifyMethod, setVerifyMethod] = useState<VerificationMethod | "">("");
+  const [verifyConfirmed, setVerifyConfirmed] = useState(false);
+  const [verifyReason, setVerifyReason] = useState("");
   const [linkSaving, setLinkSaving] = useState(false);
 
   // `silent` is for background refreshes: no spinner, no error toast.
@@ -93,26 +104,21 @@ export default function AdminPatients() {
       email: p.email,
       patient: p,
       hasWalkIn: appointments.some(a => a.patientId === p.id && a.type === "walk-in"),
-      visits: 0,
+      guest: null,
     }));
 
-    // Guest walk-ins, grouped by the name taken at the desk. Fields the clinic never
-    // collected are left blank rather than dashed, so it's obvious they're empty.
-    const guests = new Map<string, Appointment[]>();
-    for (const a of appointments.filter(a => !a.patientId)) {
-      const list = guests.get(a.patientName) ?? [];
-      list.push(a);
-      guests.set(a.patientName, list);
-    }
-    const guestRows: PatientRow[] = [...guests.entries()].map(([name, own]) => ({
-      key: `guest-${name}`,
-      name,
+    // Guest walk-ins: one row per person, i.e. per name *and* contact number, so two
+    // guests who share a name stay apart. Fields the clinic never collected are left
+    // blank rather than dashed, so it's obvious they're empty.
+    const guestRows: PatientRow[] = groupGuests(appointments).map(g => ({
+      key: `guest-${g.key}`,
+      name: g.name,
       age: "",
-      phone: own.find(a => a.contact)?.contact ?? "",
-      email: own.find(a => a.email)?.email ?? "",
+      phone: g.contact ?? "",
+      email: g.visits.find(a => a.email)?.email ?? "",
       patient: null,
       hasWalkIn: true,
-      visits: own.length,
+      guest: g,
     }));
 
     return [...accountRows, ...guestRows];
@@ -206,32 +212,59 @@ export default function AdminPatients() {
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.p.name.localeCompare(b.p.name));
   }, [linking, linkSearch, patients]);
 
-  // What the desk took down at the guest's walk-ins, newest first, to compare with an account.
+  // What the desk took down at this guest's walk-ins (newest first), to compare with an account.
   const linkGuest = useMemo(() => {
-    if (!linking) return null;
-    const visits = appointments
-      .filter(a => !a.patientId && a.patientName === linking.name)
-      .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    const guest = linking?.guest;
+    if (!guest) return null;
     return {
-      name: linking.name,
-      contact: visits.find(v => v.contact)?.contact ?? (linking.phone || null),
-      age: visits.find(v => v.age != null)?.age ?? null,
-      gender: visits.find(v => v.gender)?.gender ?? null,
-      visits,
+      name: guest.name,
+      contact: guest.contact,
+      age: guest.visits.find(v => v.age != null)?.age ?? null,
+      gender: guest.visits.find(v => v.gender)?.gender ?? null,
+      visits: guest.visits,
     };
-  }, [linking, appointments]);
+  }, [linking]);
+
+  const chooseLinkTarget = (p: Patient | null) => {
+    setLinkTarget(p);
+    // A confirmation is about one particular account; choosing another starts over.
+    setVerifyMethod("");
+    setVerifyConfirmed(false);
+    setVerifyReason("");
+  };
 
   const openLink = (row: PatientRow) => {
     setLinking(row);
     setLinkSearch("");
-    setLinkTarget(null);
+    chooseLinkTarget(null);
   };
 
+  // The same check the server makes before it will link: a clearly different person is
+  // refused, and anything short of a clean match needs the confirmation filled in.
+  const linkCheck = useMemo(() => {
+    if (!linkGuest || !linkTarget) return null;
+    const account: LinkSide = {
+      name: linkTarget.name,
+      contact: linkTarget.phone,
+      age: ageFrom(linkTarget.birthdate) ?? linkTarget.age,
+      gender: linkTarget.gender,
+    };
+    return { account, ...assessLink(linkGuest, account) };
+  }, [linkGuest, linkTarget]);
+
+  const verificationDone = !!verifyMethod && verifyConfirmed
+    && (!linkCheck?.anyDiffers || verifyReason.trim().length >= MIN_REASON_LENGTH);
+  const canLink = !!linkCheck && !linkSaving
+    && (linkCheck.verdict === "ok" || (linkCheck.verdict === "verify" && verificationDone));
+
   const confirmLink = async () => {
-    if (!linking || !linkTarget) return;
+    if (!linking || !linkTarget || !canLink) return;
     setLinkSaving(true);
     try {
-      const moved = await linkGuestToAccount(linking.name, linkTarget.id);
+      const verification = linkCheck?.verdict === "verify"
+        ? { method: verifyMethod, confirmed: verifyConfirmed, reason: verifyReason.trim() || undefined }
+        : undefined;
+      const moved = await linkGuestToAccount(linking.name, linking.guest?.contact ?? null, linkTarget.id, verification);
       toast.success(`Linked to ${linkTarget.name}'s account`, {
         description: `${moved} walk-in visit${moved === 1 ? "" : "s"} now show in their history.`,
       });
@@ -419,7 +452,7 @@ export default function AdminPatients() {
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-primary"
-                          aria-label={`Link ${r.name} to an account`}
+                          aria-label={`Link ${r.guest ? guestLabel(r.guest) : r.name} to an account`}
                           title="Link to the account this patient has made"
                           onClick={() => openLink(r)}
                         >
@@ -532,7 +565,7 @@ export default function AdminPatients() {
                       type="button"
                       role="option"
                       aria-selected={linkTarget?.id === p.id}
-                      onClick={() => setLinkTarget(p)}
+                      onClick={() => chooseLinkTarget(p)}
                       className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/60 ${linkTarget?.id === p.id ? "bg-primary/10" : ""}`}
                     >
                       <span className="flex items-center gap-2">
@@ -555,13 +588,76 @@ export default function AdminPatients() {
                 )}
               </div>
 
-              {linkTarget && <LinkComparison guest={linkGuest} account={linkTarget} />}
+              {linkCheck && <LinkComparison guest={linkGuest} account={linkCheck.account} fields={linkCheck.fields} />}
+
+              {linkCheck?.verdict === "blocked" && (
+                <div role="alert" className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                  <Ban className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>
+                    <span className="font-semibold">Can't link: this looks like a different person.</span> The name and the
+                    contact number both don't match. Check that you picked the right account.
+                  </p>
+                </div>
+              )}
+
+              {linkCheck?.verdict === "verify" && (
+                <section aria-label="Confirm identity" className="rounded-md border border-warning/40 bg-warning/5 p-3 space-y-3 text-sm">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <ShieldCheck className="w-4 h-4 text-warning" /> Confirm this is the same patient
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    The details don't fully match, so linking needs a confirmed identity.
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">How did you confirm it? <span className="text-destructive">*</span></Label>
+                    <RadioGroup
+                      value={verifyMethod}
+                      onValueChange={(v) => setVerifyMethod(v as VerificationMethod)}
+                      aria-label="How the identity was confirmed"
+                      className="gap-1.5"
+                    >
+                      {(Object.keys(VERIFICATION_METHODS) as VerificationMethod[]).map(m => (
+                        <label key={m} className="flex items-center gap-2 cursor-pointer">
+                          <RadioGroupItem value={m} aria-label={VERIFICATION_METHODS[m]} />
+                          <span>{VERIFICATION_METHODS[m]}</span>
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                  {linkCheck.anyDiffers && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="link-reason" className="text-xs">
+                        Why is this still the same patient? <span className="text-destructive">*</span>
+                      </Label>
+                      <Textarea
+                        id="link-reason"
+                        value={verifyReason}
+                        onChange={e => setVerifyReason(e.target.value)}
+                        placeholder="e.g. Changed phone number since the walk-in; confirmed with valid ID."
+                        rows={2}
+                      />
+                      {verifyReason.trim().length > 0 && verifyReason.trim().length < MIN_REASON_LENGTH && (
+                        <p className="text-xs text-destructive">Please explain in a few more words.</p>
+                      )}
+                    </div>
+                  )}
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={verifyConfirmed}
+                      onCheckedChange={(c) => setVerifyConfirmed(c === true)}
+                      aria-label="I confirm this is the same person"
+                      className="mt-0.5"
+                    />
+                    <span>I confirm this is the same person who came in as a walk-in guest.</span>
+                  </label>
+                </section>
+              )}
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setLinking(null)}>Cancel</Button>
-                <Button className="gradient-primary text-primary-foreground" disabled={!linkTarget || linkSaving} onClick={confirmLink}>
+                <Button className="gradient-primary text-primary-foreground" disabled={!canLink} onClick={confirmLink}>
                   {linkSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {linkTarget ? `Link to ${linkTarget.name}` : "Choose an account"}
+                  {!linkTarget ? "Choose an account" : linkCheck?.verdict === "blocked" ? "Can't link" : `Link to ${linkTarget.name}`}
                 </Button>
               </div>
             </div>
@@ -580,18 +676,18 @@ const MATCH_STYLE: Record<MatchLevel, { label: string; className: string; Icon: 
 };
 
 /** The guest's details beside the chosen account's, field by field, before linking. */
-function LinkComparison({ guest, account }: {
-  guest: { name: string; contact: string | null; age: number | null; gender: string | null };
-  account: Patient;
+function LinkComparison({ guest, account, fields }: {
+  guest: LinkSide;
+  account: LinkSide;
+  fields: Record<"name" | "contact" | "age" | "gender", MatchLevel>;
 }) {
-  const accountAge = ageFrom(account.birthdate) ?? account.age;
+  const show = (v: string | number | null) => (v == null || v === "" ? "—" : String(v));
   const rows: [string, string, string, MatchLevel][] = [
-    ["Name", guest.name, account.name, compareName(guest.name, account.name)],
-    ["Contact", guest.contact ?? "—", account.phone ?? "—", comparePhone(guest.contact, account.phone)],
-    ["Age", guest.age != null ? String(guest.age) : "—", accountAge != null ? String(accountAge) : "—", compareAge(guest.age, accountAge)],
-    ["Gender", guest.gender ?? "—", account.gender ?? "—", compareGender(guest.gender, account.gender)],
+    ["Name", guest.name, account.name, fields.name],
+    ["Contact", show(guest.contact), show(account.contact), fields.contact],
+    ["Age", show(guest.age), show(account.age), fields.age],
+    ["Gender", show(guest.gender), show(account.gender), fields.gender],
   ];
-  const doubtful = rows.some(([, , , level]) => level === "close" || level === "differs");
   return (
     <section aria-label="Compare before linking" className="rounded-md border p-3 space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compare before linking</p>
@@ -620,11 +716,6 @@ function LinkComparison({ guest, account }: {
           })}
         </tbody>
       </table>
-      <p className={`text-xs ${doubtful ? "text-warning" : "text-muted-foreground"}`}>
-        {doubtful
-          ? "Some details need a closer look. Ask the patient to log in and show their Profile, or check a valid ID, before linking."
-          : "To be sure, ask the patient to log in and show their Profile, or check a valid ID."}
-      </p>
     </section>
   );
 }

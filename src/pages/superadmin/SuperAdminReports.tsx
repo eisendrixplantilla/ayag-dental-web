@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
+import { groupGuests, guestLabel } from "@/lib/guests";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
@@ -119,17 +120,11 @@ export default function SuperAdminReports() {
       });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
-      // so they'd be invisible here. Group those by the name taken at the desk, and
-      // reach their records through the appointment rather than a patient id.
-      const guests = new Map<string, Appointment[]>();
-      for (const a of appointments.filter((a) => !a.patientId)) {
-        const list = guests.get(a.patientName) ?? [];
-        list.push(a);
-        guests.set(a.patientName, list);
-      }
-      const guestRows = [...guests.entries()].map(([name, own]) => {
-        const ids = new Set(own.map((a) => a.id));
-        return [`${name} — No account (walk-in)`, String(own.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
+      // so they'd be invisible here. One row per guest (the name and number taken at the
+      // desk), reaching their records through the appointment rather than a patient id.
+      const guestRows = groupGuests(appointments).map((g) => {
+        const ids = new Set(g.visits.map((a) => a.id));
+        return [`${guestLabel(g)} — No account (walk-in)`, String(g.visits.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
       });
 
       rows = [...accountRows, ...guestRows];

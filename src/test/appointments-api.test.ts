@@ -7,8 +7,11 @@ type Row = Record<string, any>;
 const h = vi.hoisted(() => ({
   rows: [] as Row[],
   session: { sub: "admin-1", email: "admin@admin.com", role: "admin" } as { sub: string; email: string; role: string },
+  accounts: [] as Row[],
   n: 0,
 }));
+
+const onlyDigits = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
 
 const sameDentist = (r: Row, id: string | null, name: string | null) =>
   (id !== null && r.dentist_id === id) || (name !== null && r.dentist_name === name);
@@ -33,10 +36,15 @@ vi.mock("../../api/_lib/db.js", () => ({
         .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("guest-columns")) return [];
-    if (text.includes("link-target")) return v[0] === "acct-9" ? [{ id: "acct-9" }] : [];
+    if (text.includes("link-target")) return h.accounts.filter(a => a.id === v[0]);
+    if (text.includes("link-guest-details")) {
+      const [name, digits] = v;
+      return h.rows.filter(r => r.patient_id === null && r.patient_name === name && onlyDigits(r.contact) === digits)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    }
     if (text.includes("link-guest")) {
-      const [patientId, name] = v;
-      const moved = h.rows.filter(r => r.patient_id === null && r.patient_name === name);
+      const [patientId, name, digits] = v;
+      const moved = h.rows.filter(r => r.patient_id === null && r.patient_name === name && onlyDigits(r.contact) === digits);
       moved.forEach(r => { r.patient_id = patientId; });
       return moved.map(r => ({ id: r.id }));
     }
@@ -331,29 +339,106 @@ describe("a patient rescheduling", () => {
 });
 
 describe("linking a guest's walk-ins to the account they made", () => {
-  const link = (body: Record<string, unknown>) => call("PATCH", { query: { linkGuest: "true" }, body });
+  // The guest is named by name and number together, as Patient Records shows them.
+  const link = (body: Record<string, unknown>) =>
+    call("PATCH", { query: { linkGuest: "true" }, body: { contact: "0917 123 4567", ...body } });
+  const acct = (over: Row) => ({
+    id: "acct-9", first_name: "Rosa", middle_name: null, last_name: "Mendoza", contact_number: "0917-123-4567",
+    age: 32, birthdate: null, sex: "Female", ...over,
+  });
+  const guest = (over: Row) => row({ patient_id: null, patient_name: "Rosa Mendoza", contact: "09171234567", age: 32, gender: "Female",
+    type: "walk-in", status: "completed", ...over });
+  const verified = { method: "id", confirmed: true, reason: "Checked her valid ID at the desk." };
   beforeEach(() => {
+    h.accounts = [acct({})];
     h.rows = [
-      row({ id: "w-1", patient_id: null, patient_name: "Rosa Mendoza", type: "walk-in", status: "completed" }),
-      row({ id: "w-2", patient_id: null, patient_name: "Rosa Mendoza", type: "walk-in", status: "confirmed" }),
+      guest({ id: "w-1", date: "2026-09-20" }),
+      guest({ id: "w-2", date: "2026-10-05" }),
       row({ id: "w-3", patient_id: null, patient_name: "Pedro Reyes", type: "walk-in" }),
       row({ id: "a-1", patient_id: "p1", patient_name: "Rosa Mendoza" }),
     ];
   });
+  const unlinked = () => h.rows.filter(r => r.patient_id === null).length;
 
-  it("moves only that guest's account-less bookings into the account", async () => {
+  it("links straight away when the name and number match and nothing differs", async () => {
     const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9" });
     expect(res.code).toBe(200);
-    expect(res.body.linked).toBe(2);
+    expect(res.body).toMatchObject({ linked: 2, verdict: "ok" });
     expect(Object.fromEntries(h.rows.map(r => [r.id, r.patient_id]))).toEqual({
       "w-1": "acct-9", "w-2": "acct-9", "w-3": null, "a-1": "p1",
     });
   });
 
-  it("refuses an account that doesn't exist, moving nothing", async () => {
-    const res = await link({ patientName: "Rosa Mendoza", patientId: "nobody" });
-    expect(res.code).toBe(404);
-    expect(h.rows.filter(r => r.patient_id === null)).toHaveLength(3);
+  it("refuses a clearly different person, even with a confirmation", async () => {
+    h.accounts = [acct({ first_name: "Ben", last_name: "Cruz", contact_number: "0919 999 0000" })];
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: verified });
+    expect(res.code).toBe(409);
+    expect(res.body.verdict).toBe("blocked");
+    expect(unlinked()).toBe(3);
+  });
+
+  it("needs a confirmed identity when the details only partly match", async () => {
+    h.accounts = [acct({ middle_name: "M." })]; // name is only "close"
+    const bare = await link({ patientName: "Rosa Mendoza", patientId: "acct-9" });
+    expect(bare.code).toBe(409);
+    expect(bare.body.verdict).toBe("verify");
+    expect(unlinked()).toBe(3);
+
+    const unticked = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: { method: "id", confirmed: false } });
+    expect(unticked.code).toBe(409);
+    const madeUp = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: { method: "toString", confirmed: true } });
+    expect(madeUp.code).toBe(409);
+
+    // Nothing differs outright, so no reason is needed — just how it was confirmed.
+    const ok = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: { method: "profile", confirmed: true } });
+    expect(ok.code).toBe(200);
+    expect(ok.body.linked).toBe(2);
+  });
+
+  it("also needs a reason when a detail actually differs", async () => {
+    h.accounts = [acct({ contact_number: "0920 777 8888" })]; // same name, different number
+    const noReason = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: { method: "id", confirmed: true } });
+    expect(noReason.code).toBe(409);
+    const tooShort = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: { method: "id", confirmed: true, reason: "ok" } });
+    expect(tooShort.code).toBe(409);
+    expect(unlinked()).toBe(3);
+
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9", verification: verified });
+    expect(res.code).toBe(200);
+    expect(res.body).toMatchObject({ linked: 2, verdict: "verify" });
+  });
+
+  it("compares with the guest's latest details and the account's age from its birthdate", async () => {
+    h.rows.push(guest({ id: "w-4", date: "2026-10-09", contact: "0917 123 4567", age: 33 }));
+    // Born on Jan 1st 33 years ago, so 33 today; the stored age is stale.
+    h.accounts = [acct({ age: 10, birthdate: new Date(Date.UTC(new Date().getUTCFullYear() - 33, 0, 1)) })];
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9" });
+    expect(res.code).toBe(200);
+    expect(res.body.verdict).toBe("ok");
+  });
+
+  it("never sweeps along a namesake: same name, another number, stays put", async () => {
+    h.rows.push(guest({ id: "w-9", contact: "0999 000 1111", age: 60 })); // a different Rosa Mendoza
+    const res = await link({ patientName: "Rosa Mendoza", patientId: "acct-9" });
+    expect(res.code).toBe(200);
+    expect(res.body.linked).toBe(2);
+    expect(h.rows.find(r => r.id === "w-9")!.patient_id).toBeNull();
+  });
+
+  it("links the namesake on their own when that's who was picked, judged on their own details", async () => {
+    h.rows.push(guest({ id: "w-9", contact: "0999 000 1111", age: 60 })); // a different Rosa Mendoza
+    // Rosa's account doesn't fit the other Rosa: her number is different.
+    const res = await link({ patientName: "Rosa Mendoza", contact: "0999-000-1111", patientId: "acct-9" });
+    expect(res.code).toBe(409);
+    expect(res.body.verdict).toBe("verify");
+    expect(h.rows.find(r => r.id === "w-9")!.patient_id).toBeNull();
+  });
+
+  it("refuses an account that doesn't exist, or a guest with nothing to link", async () => {
+    expect((await link({ patientName: "Rosa Mendoza", patientId: "nobody" })).code).toBe(404);
+    expect((await link({ patientName: "Nobody Here", patientId: "acct-9" })).code).toBe(404);
+    expect((await link({ patientName: "Rosa Mendoza", contact: "0900 000 0000", patientId: "acct-9" })).code).toBe(404);
+    expect(unlinked()).toBe(3);
   });
 
   it("needs both the guest's name and the account", async () => {
@@ -366,6 +451,6 @@ describe("linking a guest's walk-ins to the account they made", () => {
     expect((await link({ patientName: "Rosa Mendoza", patientId: "acct-9" })).code).toBe(403);
     h.session = { sub: "dr-1", email: "dr@example.com", role: "dentist" };
     expect((await link({ patientName: "Rosa Mendoza", patientId: "acct-9" })).code).toBe(403);
-    expect(h.rows.filter(r => r.patient_id === null)).toHaveLength(3);
+    expect(unlinked()).toBe(3);
   });
 });
