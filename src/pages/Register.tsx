@@ -103,9 +103,9 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4 py-10">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto mb-4 aspect-square rounded-2xl gradient-primary shadow-2xl shadow-primary/40 flex items-center justify-center">
+          <Link to="/" aria-label="Back to the home page" title="Back to the home page" className="w-20 h-20 mx-auto mb-4 aspect-square rounded-2xl gradient-primary shadow-2xl shadow-primary/40 flex items-center justify-center hover:opacity-90 transition-opacity">
             <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-2/3 h-2/3 object-contain drop-shadow-2xl" />
-          </div>
+          </Link>
           <h1 className="text-3xl font-bold font-heading text-foreground">Ayag Dental Clinic</h1>
           <p className="text-muted-foreground mt-1">Create your account</p>
         </div>
@@ -120,24 +120,24 @@ export default function Register() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" placeholder="Juan" value={firstName} onChange={e => setFirstName(e.target.value)} required />
+                  <Input id="firstName" autoComplete="given-name" placeholder="Juan" value={firstName} onChange={e => setFirstName(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" placeholder="Dela Cruz" value={lastName} onChange={e => setLastName(e.target.value)} required />
+                  <Input id="lastName" autoComplete="family-name" placeholder="Dela Cruz" value={lastName} onChange={e => setLastName(e.target.value)} required />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="middleName">Middle Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                <Input id="middleName" placeholder="Santos" value={middleName} onChange={e => setMiddleName(e.target.value)} />
+                <Input id="middleName" autoComplete="additional-name" placeholder="Santos" value={middleName} onChange={e => setMiddleName(e.target.value)} />
               </div>
 
               {/* A phone's half-width is too narrow for the browser's date picker. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="birthdate">Date of Birth</Label>
-                  <Input id="birthdate" type="date" value={birthdate} onChange={e => setBirthdate(e.target.value)} max={manilaTodayDateStr()} required />
+                  <Input id="birthdate" type="date" autoComplete="bday" value={birthdate} onChange={e => setBirthdate(e.target.value)} max={manilaTodayDateStr()} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="sex">Sex</Label>
@@ -153,12 +153,12 @@ export default function Register() {
 
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
-                <Input id="address" placeholder="123 Rizal St, Quezon City" value={address} onChange={e => setAddress(e.target.value)} required />
+                <Input id="address" autoComplete="street-address" placeholder="123 Rizal St, Quezon City" value={address} onChange={e => setAddress(e.target.value)} required />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="contactNumber">Contact Number</Label>
-                <Input id="contactNumber" placeholder="09171234567" value={contactNumber} onChange={e => setContactNumber(e.target.value)} required />
+                <Input id="contactNumber" type="tel" inputMode="tel" autoComplete="tel" placeholder="09171234567" value={contactNumber} onChange={e => setContactNumber(e.target.value)} required />
               </div>
 
               <div className="space-y-2">
@@ -166,6 +166,7 @@ export default function Register() {
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
                   onChange={e => handleEmailChange(e.target.value)}
@@ -177,12 +178,12 @@ export default function Register() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <PasswordInput id="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+                <PasswordInput id="password" autoComplete="new-password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <PasswordInput id="confirmPassword" placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6} />
+                <PasswordInput id="confirmPassword" autoComplete="new-password" placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6} />
               </div>
 
               <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={isLoading || !!emailError}>
