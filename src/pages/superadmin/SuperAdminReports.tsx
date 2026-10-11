@@ -43,6 +43,10 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
 
 const statusList = ["pending", "confirmed", "completed", "cancelled"] as const;
 
+/** Free text (names, services) may wrap; short values (dates, numbers, "No account")
+ * stay on one line, so a row isn't made tall by a two-word status. */
+const cellFit = (column: string) => (/name|service|dentist/i.test(column) ? WRAP_CELL : "whitespace-nowrap");
+
 const roleLabel: Record<string, string> = {
   admin: "Clinic Admin",
   superadmin: "Super Admin",
@@ -271,7 +275,7 @@ export default function SuperAdminReports() {
                       ) : paged.map((row, i) => (
                         <TableRow key={i}>
                           {row.map((cell, j) => (
-                            <TableCell key={j} className={cn(report.type === "appointment" && j === 5 ? `font-medium ${statusClassByLabel(cell)} ${WRAP_CELL}` : WRAP_CELL, j === pinnedCol && PIN_COL)}>
+                            <TableCell key={j} className={cn(cellFit(reportMeta[report.type].columns[j]), report.type === "appointment" && j === 5 && `font-medium ${statusClassByLabel(cell)}`, j === pinnedCol && PIN_COL)}>
                               {/Email/.test(reportMeta[report.type].columns[j]) ? <CollapsedEmail email={cell} /> : cell}
                             </TableCell>
                           ))}
