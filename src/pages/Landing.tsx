@@ -59,12 +59,21 @@ export default function Landing() {
             </Link>
           </div>
         </div>
+        {/* On a phone the menu above is hidden for lack of room, so the sections get their own row. */}
+        <nav className="md:hidden border-t border-border">
+          <div className="max-w-7xl mx-auto px-4 h-10 flex items-center justify-between text-sm text-muted-foreground">
+            <a href="#services" className="hover:text-foreground transition-colors">Services</a>
+            <a href="#about" className="hover:text-foreground transition-colors">About</a>
+            <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
+            <a href="#contact" className="hover:text-foreground transition-colors">Contact</a>
+          </div>
+        </nav>
       </header>
 
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 gradient-primary opacity-10" />
-        <div className="max-w-7xl mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center relative">
+        <div className="max-w-7xl mx-auto px-4 py-12 sm:py-20 md:py-28 grid md:grid-cols-2 gap-10 md:gap-12 items-center relative">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-4">
               <Sparkles className="w-3 h-3" /> Trusted Dental Care
@@ -90,7 +99,7 @@ export default function Landing() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="relative"
+            className="relative w-full max-w-[14rem] sm:max-w-xs mx-auto md:max-w-none"
           >
             <div className="aspect-square rounded-3xl gradient-primary shadow-elevated flex items-center justify-center">
               <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-2/3 h-2/3 object-contain drop-shadow-2xl" />
@@ -119,7 +128,7 @@ export default function Landing() {
       </section>
 
       {/* Services */}
-      <section id="services" className="py-20">
+      <section id="services" className="scroll-mt-[6.5rem] md:scroll-mt-16 py-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold font-heading text-foreground">Our Services</h2>
@@ -143,7 +152,7 @@ export default function Landing() {
       </section>
 
       {/* About */}
-      <section id="about" className="py-20 bg-muted/30">
+      <section id="about" className="scroll-mt-[6.5rem] md:scroll-mt-16 py-20 bg-muted/30">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold font-heading text-foreground">About Ayag Dental Clinic</h2>
           <p className="mt-5 text-muted-foreground text-lg leading-relaxed">
@@ -155,7 +164,7 @@ export default function Landing() {
       </section>
 
       {/* Testimonials */}
-      <section id="testimonials" className="py-20">
+      <section id="testimonials" className="scroll-mt-[6.5rem] md:scroll-mt-16 py-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold font-heading text-foreground">What Our Patients Say</h2>
@@ -203,7 +212,7 @@ export default function Landing() {
       </section>
 
       {/* Contact / Footer */}
-      <footer id="contact" className="bg-sidebar text-sidebar-foreground">
+      <footer id="contact" className="scroll-mt-[6.5rem] md:scroll-mt-16 bg-sidebar text-sidebar-foreground">
         <div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-3">
