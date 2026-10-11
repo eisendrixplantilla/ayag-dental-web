@@ -234,3 +234,20 @@ describe("how big the document is set", () => {
     expect(sizeOf(".clinic")).toBeGreaterThan(sizeOf("h2"));
   });
 });
+
+describe("columns left off paper", () => {
+  it("drops Reference and Type from every printed table, keeping the rest in line", () => {
+    const html = buildReportHtml({
+      ...doc(0),
+      tables: [
+        { columns: ["Reference", "Patient Name", "Type", "Status"], rows: [["APT-1", "Rosa Mendoza", "Walk-in", "Completed"]] },
+        { heading: "Other", columns: ["Date", "Type"], rows: [["2026-10-01", "Online"]] },
+      ],
+    });
+    expect(html).not.toMatch(/<th>(Reference|Type)<\/th>/);
+    expect(html).not.toContain("APT-1");
+    expect(html).not.toContain("Walk-in");
+    expect(bodyRows(html)[0]).toContain("<td>Rosa Mendoza</td><td>Completed</td>");
+    expect(bodyRows(html)[1]).toContain("<td>2026-10-01</td></tr>");
+  });
+});

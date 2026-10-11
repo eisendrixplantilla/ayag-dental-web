@@ -68,9 +68,22 @@ export interface TableChunk {
   continued: boolean;
 }
 
+/** Columns no printed document carries. Pages still show them on screen (and can be
+ * filtered by them); on paper the reference code and the booking channel only crowd
+ * the table. */
+export const NOT_PRINTED = new Set(["Reference", "Type"]);
+
+function withoutUnprinted(table: ReportTable): ReportTable {
+  const keep = table.columns.flatMap((c, i) => (NOT_PRINTED.has(c) ? [] : [i]));
+  if (keep.length === table.columns.length) return table;
+  return { ...table, columns: keep.map((i) => table.columns[i]), rows: table.rows.map((r) => keep.map((i) => r[i])) };
+}
+
 export function tablesOf(doc: ReportDoc): ReportTable[] {
-  if (doc.tables?.length) return doc.tables;
-  return [{ columns: doc.columns ?? [], rows: doc.rows ?? [], emptyText: DEFAULT_EMPTY }];
+  const tables = doc.tables?.length
+    ? doc.tables
+    : [{ columns: doc.columns ?? [], rows: doc.rows ?? [], emptyText: DEFAULT_EMPTY }];
+  return tables.map(withoutUnprinted);
 }
 
 /** Lays the tables out over sheets, filling each one before starting the next. */

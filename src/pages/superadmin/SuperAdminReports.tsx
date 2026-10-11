@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { getStaff, type StaffMember } from "@/lib/api/staff";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { groupGuests, guestLabel } from "@/lib/guests";
+import { groupGuests } from "@/lib/guests";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,7 +33,7 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
   },
   patient: {
     title: "Patient Summary Report",
-    columns: ["Patient Information", "Total Appointments", "Latest Consultation"],
+    columns: ["Patient Name", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"],
   },
 };
 
@@ -116,7 +116,7 @@ export default function SuperAdminReports() {
       const accountRows = patients.map((p) => {
         const patientAppointments = appointments.filter((a) => a.patientId === p.id);
         const patientRecords = records.filter((r) => r.patientId === p.id);
-        return [`${p.name} — ${p.email} · ${p.phone || "—"}`, String(patientAppointments.length), latestOf(patientRecords)];
+        return [p.name, p.phone || "—", p.email, "Registered", String(patientAppointments.length), latestOf(patientRecords)];
       });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
@@ -124,7 +124,7 @@ export default function SuperAdminReports() {
       // desk), reaching their records through the appointment rather than a patient id.
       const guestRows = groupGuests(appointments).map((g) => {
         const ids = new Set(g.visits.map((a) => a.id));
-        return [`${guestLabel(g)} — No account (walk-in)`, String(g.visits.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
+        return [g.name, g.contact || "—", "—", "Walk-in (no account)", String(g.visits.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
       });
 
       rows = [...accountRows, ...guestRows];

@@ -15,7 +15,7 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
-import { groupGuests, guestLabel } from "@/lib/guests";
+import { groupGuests } from "@/lib/guests";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -29,8 +29,11 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
     title: "Appointment Report",
     columns: ["Reference", "Patient Name", "Dentist", "Service", "Appointment Date", "Status"],
   },
-  walkin: { title: "Walk-in Report", columns: ["Patient Name", "Dentist", "Date", "Time"] },
-  patient: { title: "Patient Report", columns: ["Patient Information", "Total Appointments", "Latest Consultation"] },
+  walkin: {
+    title: "Walk-in Report",
+    columns: ["Patient Name", "Contact Number", "Service", "Dentist", "Date", "Time", "Status"],
+  },
+  patient: { title: "Patient Report", columns: ["Patient Name", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"] },
 };
 
 const roleLabel: Record<string, string> = {
@@ -102,26 +105,26 @@ export default function AdminReports() {
     } else if (type === "walkin") {
       rows = appointments
         .filter((a) => a.type === "walk-in" && inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
-        .map((a) => [a.patientName, a.dentistName ?? "—", a.date, toLabel(toMinutes(a.time))]);
+        .map((a) => [a.patientName, a.contact || "—", a.service, a.dentistName ?? "—", a.date, toLabel(toMinutes(a.time)), capitalize(a.status)]);
     } else {
       const accountRows = patients
         .map((p) => {
           const own = appointments.filter((a) => a.patientId === p.id);
           const latest = own.map((a) => a.date).sort().at(-1) ?? "";
-          return { label: `${p.name} — ${p.email} · ${p.phone || "—"}`, total: own.length, latest };
+          return { info: [p.name, p.phone || "—", p.email, "Registered"], total: own.length, latest };
         });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
       // so they'd be invisible here. One row per guest: the name and number taken at the desk.
       const guestRows = groupGuests(appointments).map((g) => ({
-        label: `${guestLabel(g)} — No account (walk-in)`,
+        info: [g.name, g.contact || "—", "—", "Walk-in (no account)"],
         total: g.visits.length,
         latest: g.visits[0]?.date ?? "",
       }));
 
       rows = [...accountRows, ...guestRows]
         .filter(({ latest }) => !start && !end ? true : latest && inRange(latest))
-        .map(({ label, total, latest }) => [label, String(total), latest || "—"]);
+        .map(({ info, total, latest }) => [...info, String(total), latest || "—"]);
     }
 
     setFilter(EMPTY_FILTER);

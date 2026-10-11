@@ -7,15 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Package, Plus, AlertTriangle, Edit, Printer } from "lucide-react";
+import { Package, Plus, AlertTriangle, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
-import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
-import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import { EMPTY_FILTER, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["ID", "Item", "Category", "Quantity", "Min Stock", "Unit", "Status"];
 
@@ -57,20 +56,6 @@ export default function AdminInventory() {
   const filtered = shown.map(s => s.item);
   const { page, setPage, paged } = usePagination(filtered, filter);
   const lowStock = inventory.filter(i => i.status === "low").length;
-
-  const print = usePrintDocument();
-  const handlePrint = () =>
-    print({
-      title: "Inventory Report",
-      columns: COLUMNS,
-      rows: shown.map(s => s.row),
-      filters: [
-        ...(filterIsActive(filter)
-          ? [{ label: "Filtered By", value: describeReportFilter(COLUMNS, filter) ?? "" }]
-          : []),
-        { label: "Low Stock Items", value: String(lowStock) },
-      ],
-    });
 
   const openEdit = (item: typeof mockInventory[0]) => {
     setEditingItem(item);
@@ -171,11 +156,6 @@ export default function AdminInventory() {
             onChange={setFilter}
             shown={filtered.length}
             noun="item(s)"
-            actions={
-              <Button onClick={handlePrint} variant="outline" size="sm">
-                <Printer className="w-4 h-4 mr-2" /> Print
-              </Button>
-            }
           />
         </CardHeader>
         <CardContent>
