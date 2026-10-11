@@ -15,6 +15,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["ID", "Full Name", "Account Type", "Date Archived", "Archived By", "Reason"];
@@ -80,12 +82,13 @@ export default function SuperAdminArchives() {
     () => rows.map((r) => [r.id, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
     [rows],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => rows.map((row, i) => ({ row, text: textRows[i] })).filter(({ text }) => matchesReportFilter(text, filter)),
     [rows, textRows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.text);
   const filtered = shown.map((s) => s.row);
-  const { page, setPage, paged } = usePagination(filtered, filter);
+  const { page, setPage, paged } = usePagination(filtered, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -153,12 +156,12 @@ export default function SuperAdminArchives() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Full Name</TableHead>
-                <TableHead>Account Type</TableHead>
-                <TableHead>Date Archived</TableHead>
-                <TableHead>Archived By</TableHead>
-                <TableHead>Reason</TableHead>
+                <SortableHead {...headProps(0)}>ID</SortableHead>
+                <SortableHead {...headProps(1)}>Full Name</SortableHead>
+                <SortableHead {...headProps(2)}>Account Type</SortableHead>
+                <SortableHead {...headProps(3)}>Date Archived</SortableHead>
+                <SortableHead {...headProps(4)}>Archived By</SortableHead>
+                <SortableHead {...headProps(5)}>Reason</SortableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

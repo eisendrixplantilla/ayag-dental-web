@@ -12,6 +12,8 @@ import { FileText, Search, Loader2 } from "lucide-react";
 import ReportToolbar from "@/components/ReportToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
@@ -128,6 +130,7 @@ export default function AdminReports() {
     }
 
     setFilter(EMPTY_FILTER);
+    clearSort();
     setReport({
       type,
       rows,
@@ -144,7 +147,8 @@ export default function AdminReports() {
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
-  const { page, setPage, paged } = usePagination(visibleRows, filter);
+  const { sorted: sortedRows, sortKey, headProps, clearSort } = useTableSort(visibleRows, (r) => r);
+  const { page, setPage, paged } = usePagination(sortedRows, [filter, sortKey]);
 
   // What prints is what the screen shows, so a printed copy never depends on what the
   // screen happened to look like.
@@ -154,7 +158,7 @@ export default function AdminReports() {
     print({
       title: meta.title,
       columns: meta.columns,
-      rows: visibleRows,
+      rows: sortedRows,
       generatedAt: report.generatedAt,
       filters: [
         { label: "Date Range", value: `${report.filters.start || "All"} to ${report.filters.end || "All"}` },
@@ -270,9 +274,7 @@ export default function AdminReports() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    {reportMeta[report.type].columns.map((c) => (
-                      <TableHead key={c}>{c}</TableHead>
-                    ))}
+                    {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)}>{c}</SortableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>

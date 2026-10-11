@@ -13,6 +13,8 @@ import { BarChart3, CalendarDays, FileText, Search, Users, UserCog, Loader2 } fr
 import ReportToolbar from "@/components/ReportToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
@@ -131,6 +133,7 @@ export default function SuperAdminReports() {
     }
 
     setFilter(EMPTY_FILTER);
+    clearSort();
     setReport({ type, rows, generatedAt: formatManilaDateTime() });
     toast.success("Report preview generated");
   };
@@ -142,7 +145,8 @@ export default function SuperAdminReports() {
     () => (report ? filterReportRows(report.rows, filter) : []),
     [report, filter],
   );
-  const { page, setPage, paged } = usePagination(visibleRows, filter);
+  const { sorted: sortedRows, sortKey, headProps, clearSort } = useTableSort(visibleRows, (r) => r);
+  const { page, setPage, paged } = usePagination(sortedRows, [filter, sortKey]);
 
   // What prints is what the screen shows.
   const handlePrint = () => {
@@ -151,7 +155,7 @@ export default function SuperAdminReports() {
     print({
       title: meta.title,
       columns: meta.columns,
-      rows: visibleRows,
+      rows: sortedRows,
       generatedAt: report.generatedAt,
       filters: filterIsActive(filter)
         ? [{ label: "Filtered By", value: describeReportFilter(meta.columns, filter) ?? "" }]
@@ -249,7 +253,7 @@ export default function SuperAdminReports() {
                   <Table className={COMPACT_TABLE}>
                     <TableHeader>
                       <TableRow>
-                        {reportMeta[report.type].columns.map(c => <TableHead key={c}>{c}</TableHead>)}
+                        {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)}>{c}</SortableHead>)}
                       </TableRow>
                     </TableHeader>
                     <TableBody>

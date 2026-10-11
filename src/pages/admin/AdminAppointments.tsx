@@ -32,7 +32,20 @@ import { getServices } from "@/lib/api/dentalRecords";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 
+
+// What the walk-in table shows, sorts by and prints.
+const WALK_IN_COLUMNS = ["Patient", "Service", "Dentist", "Date", "Time", "Status"];
+const walkInRow = (w: Appointment) => [
+  w.patientName,
+  w.service,
+  w.dentistName ?? "—",
+  w.date,
+  formatTimeRange(w.time, w.endTime),
+  w.status,
+];
 
 export default function AdminAppointments() {
   // Whether this walk-in is for someone with a patient account or a guest with none.
@@ -210,23 +223,18 @@ export default function AdminAppointments() {
     }
   };
 
-  // Newest booking first, so a walk-in just taken at the desk is the top row.
-  const ordered = useMemo(() => [...walkIns].sort(byNewestBooked), [walkIns]);
-  const { page, setPage, paged } = usePagination(ordered);
+  // Newest booking first, so a walk-in just taken at the desk is the top row — until a
+  // column heading is clicked to sort by that instead.
+  const booked = useMemo(() => [...walkIns].sort(byNewestBooked), [walkIns]);
+  const { sorted: ordered, sortKey, headProps } = useTableSort(booked, walkInRow);
+  const { page, setPage, paged } = usePagination(ordered, sortKey);
 
   const print = usePrintDocument();
   const handlePrint = () =>
     print({
       title: "Walk-in Appointments Report",
-      columns: ["Patient", "Service", "Dentist", "Date", "Time", "Status"],
-      rows: ordered.map(w => [
-        w.patientName,
-        w.service,
-        w.dentistName ?? "—",
-        w.date,
-        formatTimeRange(w.time, w.endTime),
-        w.status,
-      ]),
+      columns: WALK_IN_COLUMNS,
+      rows: ordered.map(walkInRow),
     });
 
   // Everything about a walk-in, including removing it, lives behind View — the same
@@ -597,12 +605,12 @@ export default function AdminAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Patient</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Dentist</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHead {...headProps(0)}>Patient</SortableHead>
+                <SortableHead {...headProps(1)}>Service</SortableHead>
+                <SortableHead {...headProps(2)}>Dentist</SortableHead>
+                <SortableHead {...headProps(3)}>Date</SortableHead>
+                <SortableHead {...headProps(4)}>Time</SortableHead>
+                <SortableHead {...headProps(5)}>Status</SortableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

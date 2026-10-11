@@ -15,6 +15,8 @@ import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 
 const statusClass = (s: string) =>
   s === "completed" || s === "confirmed"
@@ -23,14 +25,34 @@ const statusClass = (s: string) =>
     ? "bg-destructive/10 text-destructive border-destructive/20"
     : "bg-warning/10 text-warning border-warning/20";
 
+// What each table shows, sorts by and prints.
+const APT_COLUMNS = ["Date", "Time", "Service", "Dentist", "Type", "Status"];
+const aptRow = (a: Appointment) => [
+  a.date,
+  toLabel(toMinutes(a.time)),
+  a.service,
+  a.dentistName ?? "—",
+  a.type === "walk-in" ? "Walk-in" : "Online",
+  a.status,
+];
+const RECORD_COLUMNS = ["Date", "Procedures", "Diagnosis", "Dentist"];
+const recordRow = (r: DentalRecord) => [
+  r.date,
+  r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
+  r.diagnosis,
+  r.dentistName ?? "—",
+];
+
 export default function AdminPatientHistory() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<DentalRecord[]>([]);
-  const aptPages = usePagination(appointments);
-  const recordPages = usePagination(records);
+  const aptSort = useTableSort(appointments, aptRow);
+  const recordSort = useTableSort(records, recordRow);
+  const aptPages = usePagination(aptSort.sorted, aptSort.sortKey);
+  const recordPages = usePagination(recordSort.sorted, recordSort.sortKey);
   const [loading, setLoading] = useState(true);
   const print = usePrintDocument();
 
@@ -53,26 +75,14 @@ export default function AdminPatientHistory() {
       tables: [
         {
           heading: "Appointment History",
-          columns: ["Date", "Time", "Service", "Dentist", "Type", "Status"],
-          rows: appointments.map(a => [
-            a.date,
-            toLabel(toMinutes(a.time)),
-            a.service,
-            a.dentistName ?? "—",
-            a.type === "walk-in" ? "Walk-in" : "Online",
-            a.status,
-          ]),
+          columns: APT_COLUMNS,
+          rows: aptSort.sorted.map(aptRow),
           emptyText: "No appointments yet.",
         },
         {
           heading: "Dental Records",
-          columns: ["Date", "Procedures", "Diagnosis", "Dentist"],
-          rows: records.map(r => [
-            r.date,
-            r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—",
-            r.diagnosis,
-            r.dentistName ?? "—",
-          ]),
+          columns: RECORD_COLUMNS,
+          rows: recordSort.sorted.map(recordRow),
           emptyText: "No dental records yet.",
         },
       ],
@@ -172,12 +182,12 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Dentist</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHead {...aptSort.headProps(0)}>Date</SortableHead>
+                <SortableHead {...aptSort.headProps(1)}>Time</SortableHead>
+                <SortableHead {...aptSort.headProps(2)}>Service</SortableHead>
+                <SortableHead {...aptSort.headProps(3)}>Dentist</SortableHead>
+                <SortableHead {...aptSort.headProps(4)}>Type</SortableHead>
+                <SortableHead {...aptSort.headProps(5)}>Status</SortableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -210,10 +220,10 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Procedures</TableHead>
-                <TableHead>Diagnosis</TableHead>
-                <TableHead>Dentist</TableHead>
+                <SortableHead {...recordSort.headProps(0)}>Date</SortableHead>
+                <SortableHead {...recordSort.headProps(1)}>Procedures</SortableHead>
+                <SortableHead {...recordSort.headProps(2)}>Diagnosis</SortableHead>
+                <SortableHead {...recordSort.headProps(3)}>Dentist</SortableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

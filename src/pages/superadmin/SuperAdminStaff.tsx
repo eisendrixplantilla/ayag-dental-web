@@ -25,6 +25,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"];
@@ -84,12 +86,13 @@ export default function SuperAdminStaff() {
     ]),
     [staff],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => staff.map((member, i) => ({ member, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [staff, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const filtered = shown.map(s => s.member);
-  const { page, setPage, paged } = usePagination(filtered, filter);
+  const { page, setPage, paged } = usePagination(filtered, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -301,12 +304,12 @@ export default function SuperAdminStaff() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Employee ID</TableHead>
-                <TableHead>Full Name</TableHead>
-                <TableHead>Email Address</TableHead>
-                <TableHead>Contact Number</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Account Status</TableHead>
+                <SortableHead {...headProps(0)}>Employee ID</SortableHead>
+                <SortableHead {...headProps(1)}>Full Name</SortableHead>
+                <SortableHead {...headProps(2)}>Email Address</SortableHead>
+                <SortableHead {...headProps(3)}>Contact Number</SortableHead>
+                <SortableHead {...headProps(4)}>Role</SortableHead>
+                <SortableHead {...headProps(5)}>Account Status</SortableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

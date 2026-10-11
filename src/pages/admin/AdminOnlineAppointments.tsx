@@ -21,6 +21,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { ALL_FIELDS, EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = [
@@ -96,7 +98,7 @@ export default function AdminOnlineAppointments() {
     ]),
     [ordered],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => ordered.map((apt, i) => ({ apt, row: rows[i] })).filter(({ apt, row }) =>
       // A pasted full appointment id finds its row too, though only the short
       // reference is on screen.
@@ -104,8 +106,9 @@ export default function AdminOnlineAppointments() {
       (filter.field === ALL_FIELDS && !!filter.value.trim() && matchesRef(apt.id, filter.value))),
     [ordered, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const filtered = shown.map(s => s.apt);
-  const { page, setPage, paged } = usePagination(filtered, filter);
+  const { page, setPage, paged } = usePagination(filtered, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -216,15 +219,15 @@ export default function AdminOnlineAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead className="hidden lg:table-cell">Reference</TableHead>
-                <TableHead>Patient Name</TableHead>
-                <TableHead className="hidden sm:table-cell">Service</TableHead>
-                <TableHead className="hidden md:table-cell">Assigned Dentist</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead className="hidden lg:table-cell">Booked On</TableHead>
-                <TableHead className="hidden md:table-cell">Type</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHead {...headProps(0)} className="hidden lg:table-cell">Reference</SortableHead>
+                <SortableHead {...headProps(1)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(2)} className="hidden sm:table-cell">Service</SortableHead>
+                <SortableHead {...headProps(3)} className="hidden md:table-cell">Assigned Dentist</SortableHead>
+                <SortableHead {...headProps(4)}>Date</SortableHead>
+                <SortableHead {...headProps(5)}>Time</SortableHead>
+                <SortableHead {...headProps(6)} className="hidden lg:table-cell">Booked On</SortableHead>
+                <SortableHead {...headProps(7)} className="hidden md:table-cell">Type</SortableHead>
+                <SortableHead {...headProps(8)}>Status</SortableHead>
                 <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

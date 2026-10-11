@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,8 +27,11 @@ const mockSales = [
 
 type Sale = typeof mockSales[number];
 
+const saleRow = (s: Sale) => [s.id, s.patient, s.service, String(s.amount), s.date, s.status];
+
 export default function AdminSales() {
-  const { page, setPage, paged } = usePagination(mockSales);
+  const { sorted, sortKey, headProps } = useTableSort(mockSales, saleRow);
+  const { page, setPage, paged } = usePagination(sorted, sortKey);
   const [showRecord, setShowRecord] = useState(false);
   const print = usePrintDocument();
 
@@ -108,12 +113,12 @@ export default function AdminSales() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHead {...headProps(0)}>ID</SortableHead>
+                <SortableHead {...headProps(1)}>Patient</SortableHead>
+                <SortableHead {...headProps(2)}>Service</SortableHead>
+                <SortableHead {...headProps(3)}>Amount</SortableHead>
+                <SortableHead {...headProps(4)}>Date</SortableHead>
+                <SortableHead {...headProps(5)}>Status</SortableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>

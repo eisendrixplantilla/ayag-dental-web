@@ -16,6 +16,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter, type ReportFilter } from "@/lib/reportFilter";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { cn } from "@/lib/utils";
@@ -28,18 +30,19 @@ const RECORD_COLUMNS = ["Date", "Procedures", "Diagnosis", "Treatment Notes"];
 const PROCEDURE_COLUMNS = ["Date", "Procedure", "Dentist", "Outcome"];
 const RX_COLUMNS = ["Date", "Medication", "Prescribed By"];
 
-/** One section of the history: its own filter over its own rows. The four sections
+/** One section of the history: its own filter and sort over its own rows. The four sections
  * differ only in what they hold, so they all narrow down the same way. */
 function useSection<T>(items: T[], toRow: (item: T) => string[]) {
   const [filter, setFilter] = useState(EMPTY_FILTER);
   const rows = useMemo(() => items.map(toRow), [items, toRow]);
-  const shown = useMemo(
+  const matched = useMemo(
     () => items.map((item, i) => ({ item, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [items, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const visible = useMemo(() => shown.map(s => s.item), [shown]);
-  const { page, setPage, paged } = usePagination(visible, filter);
-  return { filter, setFilter, rows, shown, visible, paged, page, setPage };
+  const { page, setPage, paged } = usePagination(visible, [filter, sortKey]);
+  return { filter, setFilter, rows, shown, visible, paged, page, setPage, headProps };
 }
 
 /** How a section's filter reads on the printed document — nothing, when it isn't set. */
@@ -294,11 +297,11 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableHead {...aptSection.headProps(0)}>Date</SortableHead>
+                    <SortableHead {...aptSection.headProps(1)}>Time</SortableHead>
+                    <SortableHead {...aptSection.headProps(2)}>Service</SortableHead>
+                    <SortableHead {...aptSection.headProps(3)}>Type</SortableHead>
+                    <SortableHead {...aptSection.headProps(4)}>Status</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -339,10 +342,10 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Procedures</TableHead>
-                    <TableHead>Diagnosis</TableHead>
-                    <TableHead>Treatment Notes</TableHead>
+                    <SortableHead {...recordSection.headProps(0)}>Date</SortableHead>
+                    <SortableHead {...recordSection.headProps(1)}>Procedures</SortableHead>
+                    <SortableHead {...recordSection.headProps(2)}>Diagnosis</SortableHead>
+                    <SortableHead {...recordSection.headProps(3)}>Treatment Notes</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -382,10 +385,10 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Procedure</TableHead>
-                    <TableHead>Dentist</TableHead>
-                    <TableHead>Outcome</TableHead>
+                    <SortableHead {...procedureSection.headProps(0)}>Date</SortableHead>
+                    <SortableHead {...procedureSection.headProps(1)}>Procedure</SortableHead>
+                    <SortableHead {...procedureSection.headProps(2)}>Dentist</SortableHead>
+                    <SortableHead {...procedureSection.headProps(3)}>Outcome</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -425,9 +428,9 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Medication</TableHead>
-                    <TableHead>Prescribed By</TableHead>
+                    <SortableHead {...rxSection.headProps(0)}>Date</SortableHead>
+                    <SortableHead {...rxSection.headProps(1)}>Medication</SortableHead>
+                    <SortableHead {...rxSection.headProps(2)}>Prescribed By</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

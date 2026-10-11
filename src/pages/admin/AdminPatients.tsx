@@ -21,6 +21,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -135,12 +137,13 @@ export default function AdminPatients() {
     ]),
     [rows],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => rows.map((row, i) => ({ row, text: textRows[i] })).filter(({ text }) => matchesReportFilter(text, filter)),
     [rows, textRows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.text);
   const filtered = shown.map(s => s.row);
-  const { page, setPage, paged } = usePagination(filtered, filter);
+  const { page, setPage, paged } = usePagination(filtered, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -409,12 +412,12 @@ export default function AdminPatients() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Age</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Walk-in</TableHead>
+                <SortableHead {...headProps(0)}>Name</SortableHead>
+                <SortableHead {...headProps(1)}>Age</SortableHead>
+                <SortableHead {...headProps(2)}>Phone</SortableHead>
+                <SortableHead {...headProps(3)}>Email</SortableHead>
+                <SortableHead {...headProps(4)}>Status</SortableHead>
+                <SortableHead {...headProps(5)}>Walk-in</SortableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

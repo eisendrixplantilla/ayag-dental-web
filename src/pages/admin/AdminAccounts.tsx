@@ -14,6 +14,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 // What the table shows, and what can be filtered by — one list, so the filter, the
@@ -48,12 +50,13 @@ export default function AdminAccounts() {
     ]),
     [accounts],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => accounts.map((account, i) => ({ account, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [accounts, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const filtered = shown.map(s => s.account);
-  const { page, setPage, paged } = usePagination(filtered, filter);
+  const { page, setPage, paged } = usePagination(filtered, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -155,10 +158,10 @@ export default function AdminAccounts() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Patient Name</TableHead>
-                <TableHead>Email Address</TableHead>
-                <TableHead>Account Status</TableHead>
-                <TableHead>Date Registered</TableHead>
+                <SortableHead {...headProps(0)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(1)}>Email Address</SortableHead>
+                <SortableHead {...headProps(2)}>Account Status</SortableHead>
+                <SortableHead {...headProps(3)}>Date Registered</SortableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

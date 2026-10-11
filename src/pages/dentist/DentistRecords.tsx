@@ -29,6 +29,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
@@ -77,12 +79,13 @@ export default function DentistRecords() {
     ]),
     [records],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => records.map((record, i) => ({ record, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [records, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const visible = shown.map(s => s.record);
-  const { page, setPage, paged } = usePagination(visible, filter);
+  const { page, setPage, paged } = usePagination(visible, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -256,12 +259,12 @@ export default function DentistRecords() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead>Procedures</TableHead>
-                <TableHead>Tooth No.</TableHead>
-                <TableHead>Diagnosis</TableHead>
-                <TableHead>Prescriptions</TableHead>
+                <SortableHead {...headProps(0)}>Date</SortableHead>
+                <SortableHead {...headProps(1)}>Patient</SortableHead>
+                <SortableHead {...headProps(2)}>Procedures</SortableHead>
+                <SortableHead {...headProps(3)}>Tooth No.</SortableHead>
+                <SortableHead {...headProps(4)}>Diagnosis</SortableHead>
+                <SortableHead {...headProps(5)}>Prescriptions</SortableHead>
                 <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

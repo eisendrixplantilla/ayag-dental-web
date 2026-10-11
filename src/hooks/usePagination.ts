@@ -20,7 +20,11 @@ export function usePagination<T>(items: T[], resetKey?: unknown, pageSize = PAGE
 
   // A filter that narrows the list can leave the current page past the end of it.
   useEffect(() => { setPage(p => Math.min(p, pageCount)); }, [pageCount]);
-  useEffect(() => { setPage(1); }, [resetKey]);
+  // Several things can make it a different list (the filter, the sort order): pass them
+  // as an array. The array's length must not change between renders.
+  const resetKeys = Array.isArray(resetKey) ? resetKey : [resetKey];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, resetKeys);
 
   const paged = useMemo(
     () => items.slice((page - 1) * pageSize, page * pageSize),

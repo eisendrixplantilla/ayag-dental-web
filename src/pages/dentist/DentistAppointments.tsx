@@ -34,6 +34,8 @@ import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
+import SortableHead from "@/components/SortableHead";
+import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 
 const COLUMNS = ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"];
@@ -108,12 +110,13 @@ export default function DentistAppointments() {
     ]),
     [mine],
   );
-  const shown = useMemo(
+  const matched = useMemo(
     () => mine.map((apt, i) => ({ apt, row: rows[i] })).filter(({ row }) => matchesReportFilter(row, filter)),
     [mine, rows, filter],
   );
+  const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
   const visible = shown.map(s => s.apt);
-  const { page, setPage, paged } = usePagination(visible, filter);
+  const { page, setPage, paged } = usePagination(visible, [filter, sortKey]);
 
   const print = usePrintDocument();
   const handlePrint = () =>
@@ -294,11 +297,11 @@ export default function DentistAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead>Patient Name</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Appointment Date</TableHead>
-                <TableHead>Appointment Time</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHead {...headProps(0)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(1)}>Service</SortableHead>
+                <SortableHead {...headProps(2)}>Appointment Date</SortableHead>
+                <SortableHead {...headProps(3)}>Appointment Time</SortableHead>
+                <SortableHead {...headProps(4)}>Status</SortableHead>
                 <TableHead className="text-right print:hidden">Actions</TableHead>
               </TableRow>
             </TableHeader>

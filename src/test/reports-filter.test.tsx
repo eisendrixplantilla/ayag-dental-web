@@ -310,3 +310,42 @@ describe("filtering a date column by range", () => {
     await waitFor(() => expect(names()).toHaveLength(3));
   });
 });
+
+describe("sorting a report by clicking a column heading", () => {
+  const heading = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name}`) });
+
+  it("sorts A to Z, then Z to A, then back to the report's own order", async () => {
+    h.appts = [
+      apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", patientName: "Pedro Reyes" }),
+      apt({ id: "b7d41e55-0000-4000-8000-00000000000b", patientName: "allen Estrella" }),
+      apt({ id: "c2e58a99-0000-4000-8000-00000000000c", patientName: "Maria Santos" }),
+    ];
+    await generate();
+    expect(names()).toEqual(["Pedro Reyes", "allen Estrella", "Maria Santos"]);
+
+    fireEvent.click(heading("Patient Name"));
+    await waitFor(() => expect(names()).toEqual(["allen Estrella", "Maria Santos", "Pedro Reyes"]));
+    expect(heading("Patient Name").closest("th")).toHaveAttribute("aria-sort", "ascending");
+
+    fireEvent.click(heading("Patient Name"));
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "Maria Santos", "allen Estrella"]));
+
+    fireEvent.click(heading("Patient Name"));
+    await waitFor(() => expect(names()).toEqual(["Pedro Reyes", "allen Estrella", "Maria Santos"]));
+    expect(heading("Patient Name").closest("th")).toHaveAttribute("aria-sort", "none");
+  });
+
+  it("starts a date column newest first, and prints in the order on screen", async () => {
+    h.appts = [
+      apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", patientName: "Middle", date: "2026-09-25" }),
+      apt({ id: "b7d41e55-0000-4000-8000-00000000000b", patientName: "Oldest", date: "2026-08-01" }),
+      apt({ id: "c2e58a99-0000-4000-8000-00000000000c", patientName: "Newest", date: "2026-10-12" }),
+    ];
+    await generate();
+    fireEvent.click(heading("Appointment Date"));
+    await waitFor(() => expect(names()).toEqual(["Newest", "Middle", "Oldest"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
+    expect(printed.calls[0].rows.map((r: string[]) => r[1])).toEqual(["Newest", "Middle", "Oldest"]);
+  });
+});
