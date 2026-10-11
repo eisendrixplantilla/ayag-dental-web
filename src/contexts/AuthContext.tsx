@@ -30,6 +30,8 @@ interface AuthContextType {
   register: (input: RegisterPatientInput) => Promise<void>;
   logout: () => void;
   verify: (code: string) => Promise<User>;
+  /** The email a sign-up code was sent to, while one is waiting to be entered. */
+  pendingEmail: string | null;
   forgotPassword: (email: string) => Promise<void>;
   verifyResetCode: (code: string) => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
@@ -40,6 +42,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = "ayag_auth_token";
 const USER_KEY = "ayag_auth_user";
+const PENDING_EMAIL_KEY = "ayag_pending_verify_email";
 
 /** A request the server refused, carrying whatever it said besides the message —
  * a 409 often explains what is in the way, not just that something is. */
@@ -75,7 +78,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // Kept for the tab, not just in memory: on a phone you leave for the mail app to read the
+  // code, and the browser often reloads the page when you come back. Without this the
+  // email would be forgotten and the code couldn't be entered.
+  const [pendingEmail, setPendingEmailState] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(PENDING_EMAIL_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const setPendingEmail = useCallback((email: string | null) => {
+    try {
+      if (email) sessionStorage.setItem(PENDING_EMAIL_KEY, email);
+      else sessionStorage.removeItem(PENDING_EMAIL_KEY);
+    } catch {}
+    setPendingEmailState(email);
+  }, []);
   const [pendingResetEmail, setPendingResetEmail] = useState<string | null>(null);
 
   const setSession = useCallback((token: string, u: User) => {
@@ -110,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setPendingEmail]);
 
   const verify = useCallback(async (code: string) => {
     setIsLoading(true);
@@ -126,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [pendingEmail, setSession]);
+  }, [pendingEmail, setSession, setPendingEmail]);
 
   const logout = useCallback(() => {
     try {
@@ -135,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     setUserState(null);
     setPendingEmail(null);
-  }, []);
+  }, [setPendingEmail]);
 
   const forgotPassword = useCallback(async (email: string) => {
     setIsLoading(true);
@@ -190,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, forgotPassword, verifyResetCode, resetPassword, changePassword }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, pendingEmail, forgotPassword, verifyResetCode, resetPassword, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
