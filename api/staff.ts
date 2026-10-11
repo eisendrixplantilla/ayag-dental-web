@@ -57,6 +57,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ dentists: rows.map((r) => ({ id: r.id, name: joinName(r.first_name, r.middle_name, r.last_name) })) });
   }
 
+  // What every printed document carries under the clinic's name. Read-only, and open to
+  // anyone signed in (patients print their own records too); editing stays with the
+  // superadmin below.
+  if (req.method === "GET" && req.query.letterhead === "true") {
+    if (!getSessionFromRequest(req)) return res.status(401).json({ error: "Unauthorized" });
+    const [info] = await sql`/* letterhead-info */ SELECT name, phone, email, address FROM clinic_info WHERE id = 1`;
+    const hours = await sql`/* letterhead-hours */
+      SELECT day, open_time, close_time, enabled FROM clinic_hours
+      ORDER BY CASE day
+        WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4
+        WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 END`;
+    return res.status(200).json({
+      info: info ?? null,
+      hours: hours.map((r) => ({ day: r.day, open: r.open_time, close: r.close_time, enabled: r.enabled })),
+    });
+  }
+
   if (req.query.schedule === "true") {
     const dentistId = typeof req.query.dentistId === "string" ? req.query.dentistId : undefined;
 

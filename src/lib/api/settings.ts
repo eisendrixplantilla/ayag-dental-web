@@ -26,6 +26,11 @@ export async function updateClinicHours(hours: ClinicHourEntry[]): Promise<void>
   });
 }
 
+/** The clinic's details and hours, as printed documents show them. Any signed-in user. */
+export async function getLetterhead(): Promise<{ info: ClinicInfo | null; hours: ClinicHourEntry[] }> {
+  return api<{ info: ClinicInfo | null; hours: ClinicHourEntry[] }>("/staff?letterhead=true");
+}
+
 export async function getClinicInfo(): Promise<ClinicInfo> {
   const data = await api<{ info: ClinicInfo }>("/staff?clinicInfo=true");
   return data.info;

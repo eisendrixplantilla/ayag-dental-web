@@ -12,9 +12,10 @@
  */
 
 /** Records on one sheet. Measured against A4 at the document's type size, in the worst
- * case that still has to fit: the last sheet, which also carries the signature block,
- * with every row wrapping to two lines. */
-export const ROWS_PER_PAGE = 18;
+ * case that still has to fit: the last sheet, which also carries the signature block
+ * and the clinic's address, contact and hours on the letterhead, with every row
+ * wrapping to two lines. Fifteen comes to 254mm, inside the 255mm a sheet allows. */
+export const ROWS_PER_PAGE = 15;
 
 export interface ReportTable {
   /** Shown above the table when a document holds more than one. */
@@ -23,6 +24,16 @@ export interface ReportTable {
   rows: string[][];
   /** What to print in place of the rows when there are none. */
   emptyText?: string;
+}
+
+/** The clinic's details under its name on every sheet. Missing parts are left off. */
+export interface ClinicLetterhead {
+  name?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  /** Already worded, e.g. "Mon–Fri 9:00 AM–5:00 PM · Sat 9:00 AM–12:00 PM · Sun Closed". */
+  hours?: string | null;
 }
 
 export interface ReportDoc {
@@ -40,6 +51,7 @@ export interface ReportDoc {
   /** Manila date-time this report was generated. */
   generatedAt: string;
   rowsPerPage?: number;
+  clinic?: ClinicLetterhead | null;
 }
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -137,6 +149,7 @@ const STYLES = `
   .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0f766e; padding-bottom: 8px; }
   .letterhead img { width: 46px; height: 46px; object-fit: contain; }
   .clinic { font-size: 18pt; font-weight: 700; margin: 0; letter-spacing: .2px; }
+  .contact { margin: 2px 0 0; font-size: 9pt; color: #4b5563; line-height: 1.35; }
   h2 { font-size: 15pt; margin: 9px 0 5px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
   h3 { font-size: 11pt; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .6px; color: #0f766e; }
   h3:first-of-type { margin-top: 0; }
@@ -174,6 +187,15 @@ export function columnFit(column: string): "nowrap" | "name" | "breakable" | "" 
   return "";
 }
 
+/** The letterhead's small print: where the clinic is, how to reach it, when it's open. */
+export function contactLines(c: ClinicLetterhead | null | undefined): string[] {
+  if (!c) return [];
+  const reach = [c.phone && `Tel: ${c.phone}`, c.email && `Email: ${c.email}`].filter(Boolean).join("  ·  ");
+  return [c.address, reach, c.hours && `Clinic Hours: ${c.hours}`]
+    .map((l) => (l ?? "").trim())
+    .filter(Boolean);
+}
+
 export function buildReportHtml(doc: ReportDoc, origin = ""): string {
   const perPage = doc.rowsPerPage ?? ROWS_PER_PAGE;
   const tables = tablesOf(doc);
@@ -193,7 +215,8 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
     <div class="letterhead">
       <img src="${esc(origin)}/clinic-logo.png" alt="">
       <div>
-        <p class="clinic">Ayag Dental Clinic</p>
+        <p class="clinic">${esc(doc.clinic?.name?.trim() || "Ayag Dental Clinic")}</p>
+        ${contactLines(doc.clinic).map((l) => `<p class="contact">${esc(l)}</p>`).join("")}
       </div>
     </div>
     <h2>${esc(doc.title)}</h2>

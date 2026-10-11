@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // that understands the handful of queries the handler makes; the session is faked as
 // the Super Admin, who is the only role allowed to manage staff.
 type Row = Record<string, any>;
-const h = vi.hoisted(() => ({ users: [] as Row[], n: 0 }));
+const h = vi.hoisted(() => ({ users: [] as Row[], n: 0, session: null as Row | null, signedOut: false }));
 
 const empNumber = (id: unknown) =>
   typeof id === "string" && /^EMP-[0-9]+$/.test(id) ? Number(id.slice(4)) : null;
@@ -50,11 +50,17 @@ vi.mock("../../api/_lib/db.js", () => ({
       const archived = text.includes("= 'archived'");
       return h.users.filter(u => (u.status === "archived") === archived).map(u => ({ ...u }));
     }
+    if (text.includes("letterhead-info")) {
+      return [{ name: "Ayag Dental Clinic", phone: "0917 123 4567", email: "info@ayagdental.com", address: "Cabanatuan City" }];
+    }
+    if (text.includes("letterhead-hours")) {
+      return [{ day: "Monday", open_time: "09:00", close_time: "17:00", enabled: true }];
+    }
     throw new Error(`unexpected query: ${text}`);
   }),
 }));
 vi.mock("../../api/_lib/auth.js", () => ({
-  getSessionFromRequest: () => ({ sub: "su-1", email: "super@admin.com", role: "superadmin" }),
+  getSessionFromRequest: () => h.signedOut ? null : h.session ?? { sub: "su-1", email: "super@admin.com", role: "superadmin" },
 }));
 
 import handler from "../../api/staff";
@@ -148,5 +154,28 @@ describe("archiving a staff account records why", () => {
     expect(res.body.staff).toMatchObject({
       status: "active", archivedBy: null, archivedReason: null, archivedAt: null,
     });
+  });
+});
+
+describe("the clinic details printed on every document", () => {
+  it("can be read by anyone signed in, a patient included", async () => {
+    h.session = { sub: "p-1", email: "user@user.com", role: "patient" };
+    try {
+      const res = await call("GET", { query: { letterhead: "true" } });
+      expect(res.code).toBe(200);
+      expect(res.body.info).toEqual({ name: "Ayag Dental Clinic", phone: "0917 123 4567", email: "info@ayagdental.com", address: "Cabanatuan City" });
+      expect(res.body.hours).toEqual([{ day: "Monday", open: "09:00", close: "17:00", enabled: true }]);
+    } finally {
+      h.session = null;
+    }
+  });
+
+  it("isn't given to someone not signed in", async () => {
+    h.signedOut = true;
+    try {
+      expect((await call("GET", { query: { letterhead: "true" } })).code).toBe(401);
+    } finally {
+      h.signedOut = false;
+    }
   });
 });

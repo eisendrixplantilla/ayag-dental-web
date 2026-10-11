@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildReportHtml, columnFit, paginate, ROWS_PER_PAGE } from "@/lib/printReport";
+import { buildReportHtml, columnFit, contactLines, paginate, ROWS_PER_PAGE } from "@/lib/printReport";
+import { describeClinicHours } from "@/lib/clinicHours";
 
 const rows = (n: number) =>
   Array.from({ length: n }, (_, i) => [`APT-00000${i + 1}`, `Patient ${i + 1}`, "Dr. Mike Johnson"]);
@@ -17,11 +18,11 @@ const sheets = (html: string) => html.split('<section class="sheet">').length - 
 const bodyRows = (html: string) => html.split("<tbody>").slice(1).map(part => part.split("</tbody>")[0]);
 
 describe("paginating a report", () => {
-  it("puts eighteen records on a page by default", () => {
-    // Eighteen is what an A4 sheet holds at the document's type size, with the
-    // signature block and rows wrapping to two lines.
-    expect(ROWS_PER_PAGE).toBe(18);
-    expect(paginate(rows(45)).map(p => p.length)).toEqual([18, 18, 9]);
+  it("puts fifteen records on a page by default", () => {
+    // Fifteen is what an A4 sheet holds at the document's type size, with the clinic's
+    // details on the letterhead, the signature block and rows wrapping to two lines.
+    expect(ROWS_PER_PAGE).toBe(15);
+    expect(paginate(rows(45)).map(p => p.length)).toEqual([15, 15, 15]);
   });
 
   it("takes a different page size when one is asked for", () => {
@@ -33,9 +34,9 @@ describe("paginating a report", () => {
     expect(paginate([])).toEqual([[]]);
   });
 
-  it("prints a sheet per eighteen records", () => {
-    expect(sheets(buildReportHtml(doc(18)))).toBe(1);
-    expect(sheets(buildReportHtml(doc(19)))).toBe(2);
+  it("prints a sheet per fifteen records", () => {
+    expect(sheets(buildReportHtml(doc(15)))).toBe(1);
+    expect(sheets(buildReportHtml(doc(16)))).toBe(2);
     expect(sheets(buildReportHtml(doc(45)))).toBe(3);
   });
 
@@ -43,9 +44,9 @@ describe("paginating a report", () => {
     const parts = bodyRows(buildReportHtml(doc(20)));
     expect(parts).toHaveLength(2);
     expect(parts[0]).toContain("Patient 1");
-    expect(parts[0]).toContain("Patient 18");
-    expect(parts[0]).not.toContain("Patient 19");
-    expect(parts[1]).toContain("Patient 19");
+    expect(parts[0]).toContain("Patient 15");
+    expect(parts[0]).not.toContain("Patient 16");
+    expect(parts[1]).toContain("Patient 16");
     expect(parts[1]).toContain(">20</td>"); // the running record number
   });
 
@@ -53,8 +54,8 @@ describe("paginating a report", () => {
     const html = buildReportHtml(doc(45));
     expect(html).toContain("Page 1 of 3");
     expect(html).toContain("Page 3 of 3");
-    expect(html).toContain("Records 1–18 of 45");
-    expect(html).toContain("Records 37–45 of 45");
+    expect(html).toContain("Records 1–15 of 45");
+    expect(html).toContain("Records 31–45 of 45");
   });
 
   it("repeats the letterhead and column headings on each sheet", () => {
@@ -179,7 +180,7 @@ describe("a document made of several sections", () => {
 
   it("carries a long section onto the next sheet, saying it continues", () => {
     const html = buildReportHtml(sectionDoc({
-      tables: [{ heading: "Appointment History", columns: ["Date"], rows: rows(30).map(r => [r[0]]) }],
+      tables: [{ heading: "Appointment History", columns: ["Date"], rows: rows(24).map(r => [r[0]]) }],
     }));
     expect(sheets(html)).toBe(2);
     expect(html).toContain("Appointment History (continued)");
@@ -201,7 +202,7 @@ describe("a document made of several sections", () => {
   it("leaves a plain list exactly as it was", () => {
     const html = buildReportHtml(doc(45));
     expect(sheets(html)).toBe(3); // still twenty to a sheet, no heading eating into it
-    expect(html).toContain("Records 1–18 of 45");
+    expect(html).toContain("Records 1–15 of 45");
     expect(html).not.toContain("<h3>");
   });
 });
@@ -263,5 +264,39 @@ describe("fitting a sheet and its columns", () => {
     expect(["Appointment Date", "Time", "Contact Number", "Status", "Date Registered"].map(columnFit)).toEqual(Array(5).fill("nowrap"));
     expect(columnFit("Email Address")).toBe("breakable");
     expect(columnFit("Service")).toBe("");
+  });
+});
+
+describe("the clinic's details on the letterhead", () => {
+  const clinic = {
+    name: "Ayag Dental Clinic",
+    address: "123 Rizal St., Cabanatuan City",
+    phone: "0917 123 4567",
+    email: "info@ayagdental.com",
+    hours: "Mon–Fri 9:00 AM–5:00 PM · Sun Closed",
+  };
+
+  it("prints the address, how to reach the clinic and its hours under the name, on every sheet", () => {
+    const html = buildReportHtml(doc(30, { clinic }));
+    expect(html.split("123 Rizal St., Cabanatuan City").length - 1).toBe(2);
+    expect(html).toContain("Tel: 0917 123 4567  ·  Email: info@ayagdental.com");
+    expect(html).toContain("Clinic Hours: Mon–Fri 9:00 AM–5:00 PM · Sun Closed");
+  });
+
+  it("leaves off whatever the clinic hasn't filled in", () => {
+    expect(contactLines({ phone: "0917 123 4567", address: " ", email: null })).toEqual(["Tel: 0917 123 4567"]);
+    expect(contactLines(null)).toEqual([]);
+    expect(buildReportHtml(doc(1))).not.toContain('class="contact"');
+  });
+});
+
+describe("wording the clinic hours", () => {
+  it("runs days with the same hours together, and says which days it's closed", () => {
+    const day = (d: string, open: string, close: string, enabled = true) => ({ day: d, open, close, enabled });
+    expect(describeClinicHours([
+      day("Monday", "09:00", "17:00"), day("Tuesday", "09:00", "17:00"), day("Wednesday", "09:00:00", "17:00:00"),
+      day("Thursday", "09:00", "17:00"), day("Friday", "09:00", "17:00"),
+      day("Saturday", "08:30", "12:00"), day("Sunday", "00:00", "00:00", false),
+    ])).toBe("Mon–Fri 9:00 AM–5:00 PM · Sat 8:30 AM–12:00 PM · Sun Closed");
   });
 });
