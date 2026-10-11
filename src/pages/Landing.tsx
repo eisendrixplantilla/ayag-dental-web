@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,8 @@ import {
   CalendarPlus, Smile, ShieldCheck, Clock, Phone, MapPin, Mail,
   Stethoscope, Sparkles, HeartPulse, Star
 } from "lucide-react";
+import { getLetterhead, type ClinicInfo } from "@/lib/api/settings";
+import { describeClinicHours } from "@/lib/clinicHours";
 
 const services = [
   { name: "Orthodontics (Braces)", icon: Smile },
@@ -35,6 +38,26 @@ const testimonials = [
 ];
 
 export default function Landing() {
+  // The footer's contact details and hours come from Clinic Settings, so they change when
+  // the superadmin changes them. Until they arrive (or if they can't be fetched) the rows
+  // are simply left out rather than showing details that may be wrong.
+  const [clinic, setClinic] = useState<{ info: ClinicInfo | null; hours: string[] } | null>(null);
+  const [clinicFailed, setClinicFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    getLetterhead()
+      .then((d) => {
+        if (!live) return;
+        const hours = Array.isArray(d?.hours) && d.hours.length ? describeClinicHours(d.hours).split(" · ") : [];
+        setClinic({ info: d?.info ?? null, hours });
+      })
+      .catch(() => { if (live) setClinicFailed(true); });
+    return () => { live = false; };
+  }, []);
+  const info = clinic?.info;
+  const clinicName = info?.name?.trim() || "Ayag Dental Clinic";
+  const loadingNote = !clinic && !clinicFailed && <li className="text-sidebar-foreground/50">Loading…</li>;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -226,23 +249,43 @@ export default function Landing() {
           <div>
             <h4 className="font-heading font-semibold mb-3">Contact</h4>
             <ul className="space-y-2 text-sm text-sidebar-foreground/70">
-              <li className="flex items-center gap-2"><Phone className="w-4 h-4" /> (123) 456-7890</li>
-              <li className="flex items-center gap-2"><Mail className="w-4 h-4" /> info@ayagdental.com</li>
-              <li className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Ayag, Philippines</li>
+              {loadingNote}
+              {info?.phone && (
+                <li className="flex items-start gap-2">
+                  <Phone className="w-4 h-4 mt-0.5 shrink-0" />
+                  <a href={`tel:${info.phone.replace(/[^\d+]/g, "")}`} className="hover:text-sidebar-foreground">{info.phone}</a>
+                </li>
+              )}
+              {info?.email && (
+                <li className="flex items-start gap-2">
+                  <Mail className="w-4 h-4 mt-0.5 shrink-0" />
+                  <a href={`mailto:${info.email}`} className="min-w-0 break-all hover:text-sidebar-foreground">{info.email}</a>
+                </li>
+              )}
+              {info?.address && (
+                <li className="flex items-start gap-2"><MapPin className="w-4 h-4 mt-0.5 shrink-0" /> <span className="min-w-0">{info.address}</span></li>
+              )}
             </ul>
           </div>
           <div>
             <h4 className="font-heading font-semibold mb-3">Hours</h4>
             <ul className="space-y-1 text-sm text-sidebar-foreground/70">
-              <li>Mon – Fri: 9:00 AM – 6:00 PM</li>
-              <li>Saturday: 9:00 AM – 4:00 PM</li>
-              <li>Sunday: Closed</li>
+              {loadingNote}
+              {clinic?.hours.map((line) => {
+                // "Mon–Fri 9:00 AM–5:00 PM": the days, then when it's open
+                const cut = line.indexOf(" ");
+                return (
+                  <li key={line}>
+                    <span className="font-medium text-sidebar-foreground/90">{line.slice(0, cut)}:</span> {line.slice(cut + 1)}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
         <div className="border-t border-sidebar-border">
           <div className="max-w-7xl mx-auto px-4 py-4 text-xs text-sidebar-foreground/50 text-center">
-            © {new Date().getFullYear()} Ayag Dental Clinic. All rights reserved.
+            © {new Date().getFullYear()} {clinicName}. All rights reserved.
           </div>
         </div>
       </footer>

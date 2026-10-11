@@ -170,10 +170,12 @@ describe("the clinic details printed on every document", () => {
     }
   });
 
-  it("isn't given to someone not signed in", async () => {
+  it("is public, so the landing page can show it to visitors", async () => {
     h.signedOut = true;
     try {
-      expect((await call("GET", { query: { letterhead: "true" } })).code).toBe(401);
+      const res = await call("GET", { query: { letterhead: "true" } });
+      expect(res.code).toBe(200);
+      expect(res.body.info.phone).toBe("0917 123 4567");
     } finally {
       h.signedOut = false;
     }

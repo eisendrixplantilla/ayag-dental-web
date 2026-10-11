@@ -57,11 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ dentists: rows.map((r) => ({ id: r.id, name: joinName(r.first_name, r.middle_name, r.last_name) })) });
   }
 
-  // What every printed document carries under the clinic's name. Read-only, and open to
-  // anyone signed in (patients print their own records too); editing stays with the
-  // superadmin below.
+  // The clinic's public details: what every printed document carries under its name, and
+  // what the landing page's footer shows visitors. Read-only and open to anyone, since it
+  // is only the name, address, phone, email and hours the clinic advertises anyway;
+  // editing stays with the superadmin below.
   if (req.method === "GET" && req.query.letterhead === "true") {
-    if (!getSessionFromRequest(req)) return res.status(401).json({ error: "Unauthorized" });
     const [info] = await sql`/* letterhead-info */ SELECT name, phone, email, address FROM clinic_info WHERE id = 1`;
     const hours = await sql`/* letterhead-hours */
       SELECT day, open_time, close_time, enabled FROM clinic_hours
