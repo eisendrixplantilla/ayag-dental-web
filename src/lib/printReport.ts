@@ -129,7 +129,10 @@ const STYLES = `
   /* Sized in pt, not px: a printer works in points, and the px sizes this used to carry
      came out around 7.5pt — far below the 10-11pt a document is normally set in. */
   body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 11pt; }
-  .sheet { display: flex; flex-direction: column; min-height: 269mm; break-after: page; }
+  /* A4 leaves 269mm inside the margins, but browsers don't all measure it alike: Firefox
+     finds a little less, and a sheet that fills all 269mm spills its footer onto a page
+     of its own, leaving every other page blank. The slack keeps one sheet to one page. */
+  .sheet { display: flex; flex-direction: column; min-height: 255mm; break-after: page; }
   .sheet:last-of-type { break-after: auto; }
   .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0f766e; padding-bottom: 8px; }
   .letterhead img { width: 46px; height: 46px; object-fit: contain; }
@@ -144,9 +147,16 @@ const STYLES = `
   table { width: 100%; border-collapse: collapse; font-size: 10pt; }
   table + h3 { margin-top: 12px; }
   th, td { border: 1px solid #d1d5db; padding: 4px 7px; text-align: left; vertical-align: top; }
-  th { background: #f3f4f6; font-size: 10pt; text-transform: uppercase; letter-spacing: .4px; }
+  /* Headings in normal case: capitals at 10pt made words like "Appointments" too wide to
+     fit a six-column table across A4. */
+  th { background: #f3f4f6; font-size: 10pt; }
   tbody tr:nth-child(even) { background: #fafafa; }
   td.num, th.num { width: 34px; text-align: right; color: #6b7280; }
+  /* Short values (dates, numbers, statuses) stay on one line, and long unbroken ones
+     (emails) may break, so the width goes to the columns that need it: names. */
+  td.nowrap { white-space: nowrap; }
+  td.name, th.name { min-width: 30mm; }
+  td.breakable, th.breakable { min-width: 36mm; overflow-wrap: anywhere; }
   .empty { text-align: center; color: #6b7280; padding: 20px; font-style: italic; }
   .sign { margin-top: 18px; }
   .sign .line { border-bottom: 1px solid #1f2937; width: 220px; height: 24px; }
@@ -155,6 +165,14 @@ const STYLES = `
   .foot { margin-top: auto; padding-top: 8px; border-top: 1px solid #e5e7eb;
           display: flex; justify-content: space-between; font-size: 9pt; color: #6b7280; }
 `;
+
+/** How a column sits in the table, judged by its heading. */
+export function columnFit(column: string): "nowrap" | "name" | "breakable" | "" {
+  if (/email/i.test(column)) return "breakable";
+  if (/name|^patient$|^dentist$|prescribed by|archived by/i.test(column)) return "name";
+  if (/date|^time$|contact|phone|^status$|registered|booked on|^age$|amount|price|^count$|^id$|employee id/i.test(column)) return "nowrap";
+  return "";
+}
 
 export function buildReportHtml(doc: ReportDoc, origin = ""): string {
   const perPage = doc.rowsPerPage ?? ROWS_PER_PAGE;
@@ -184,8 +202,10 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
     </dl>`;
 
   const chunkHtml = ({ table, rows, start, continued }: TableChunk) => {
+    const fits = table.columns.map(columnFit);
+    const cls = (i: number) => (fits[i] ? ` class="${fits[i]}"` : "");
     const body = rows.length
-      ? rows.map((r, n) => `<tr><td class="num">${start + n + 1}</td>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")
+      ? rows.map((r, n) => `<tr><td class="num">${start + n + 1}</td>${r.map((c, i) => `<td${cls(i)}>${esc(c)}</td>`).join("")}</tr>`).join("")
       : `<tr><td class="empty" colspan="${table.columns.length + 1}">${esc(table.emptyText ?? "No records.")}</td></tr>`;
 
     const heading = table.heading
@@ -194,7 +214,7 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
       : "";
 
     return `${heading}<table>
-      <thead><tr><th class="num">#</th>${table.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <thead><tr><th class="num">#</th>${table.columns.map((c, i) => `<th${fits[i] === "nowrap" ? "" : cls(i)}>${esc(c)}</th>`).join("")}</tr></thead>
       <tbody>${body}</tbody>
     </table>`;
   };

@@ -124,7 +124,7 @@ export default function SuperAdminReports() {
       // desk), reaching their records through the appointment rather than a patient id.
       const guestRows = groupGuests(appointments).map((g) => {
         const ids = new Set(g.visits.map((a) => a.id));
-        return [g.name, g.contact || "—", "—", "Walk-in (no account)", String(g.visits.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
+        return [g.name, g.contact || "—", "—", "No account", String(g.visits.length), latestOf(records.filter((r) => ids.has(r.appointmentId)))];
       });
 
       rows = [...accountRows, ...guestRows];

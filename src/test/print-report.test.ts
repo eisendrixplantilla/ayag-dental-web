@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportHtml, paginate, ROWS_PER_PAGE } from "@/lib/printReport";
+import { buildReportHtml, columnFit, paginate, ROWS_PER_PAGE } from "@/lib/printReport";
 
 const rows = (n: number) =>
   Array.from({ length: n }, (_, i) => [`APT-00000${i + 1}`, `Patient ${i + 1}`, "Dr. Mike Johnson"]);
@@ -247,7 +247,21 @@ describe("columns left off paper", () => {
     expect(html).not.toMatch(/<th>(Reference|Type)<\/th>/);
     expect(html).not.toContain("APT-1");
     expect(html).not.toContain("Walk-in");
-    expect(bodyRows(html)[0]).toContain("<td>Rosa Mendoza</td><td>Completed</td>");
-    expect(bodyRows(html)[1]).toContain("<td>2026-10-01</td></tr>");
+    expect(bodyRows(html)[0]).toContain('<td class="name">Rosa Mendoza</td><td class="nowrap">Completed</td></tr>');
+    expect(bodyRows(html)[1]).toContain('<td class="nowrap">2026-10-01</td></tr>');
+  });
+});
+
+describe("fitting a sheet and its columns", () => {
+  it("leaves slack under a full A4 sheet, so a browser that measures the page smaller doesn't spill the footer onto a blank page", () => {
+    const minHeight = Number(buildReportHtml(doc(1)).match(/\.sheet \{[^}]*min-height: (\d+)mm/)![1]);
+    expect(minHeight).toBeLessThanOrEqual(297 - 2 * 14 - 10);
+  });
+
+  it("gives names room, keeps short values on one line, and lets emails break", () => {
+    expect(["Patient Name", "Patient", "Dentist", "Full Name"].map(columnFit)).toEqual(["name", "name", "name", "name"]);
+    expect(["Appointment Date", "Time", "Contact Number", "Status", "Date Registered"].map(columnFit)).toEqual(Array(5).fill("nowrap"));
+    expect(columnFit("Email Address")).toBe("breakable");
+    expect(columnFit("Service")).toBe("");
   });
 });

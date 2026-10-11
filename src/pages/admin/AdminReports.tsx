@@ -117,7 +117,7 @@ export default function AdminReports() {
       // Walk-ins booked for someone with no account have no patients row to hang off,
       // so they'd be invisible here. One row per guest: the name and number taken at the desk.
       const guestRows = groupGuests(appointments).map((g) => ({
-        info: [g.name, g.contact || "—", "—", "Walk-in (no account)"],
+        info: [g.name, g.contact || "—", "—", "No account"],
         total: g.visits.length,
         latest: g.visits[0]?.date ?? "",
       }));
