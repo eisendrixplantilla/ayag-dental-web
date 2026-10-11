@@ -33,6 +33,10 @@ interface AuthContextType {
   /** The email a sign-up code was sent to, while one is waiting to be entered. */
   pendingEmail: string | null;
   forgotPassword: (email: string) => Promise<void>;
+  /** The email a password-reset code was sent to, while one is waiting to be entered. */
+  pendingResetEmail: string | null;
+  /** Drop the reset in progress, to start again with another email. */
+  cancelPasswordReset: () => void;
   verifyResetCode: (code: string) => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -43,6 +47,26 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = "ayag_auth_token";
 const USER_KEY = "ayag_auth_user";
 const PENDING_EMAIL_KEY = "ayag_pending_verify_email";
+const PENDING_RESET_KEY = "ayag_pending_reset_email";
+
+/** A value kept for this browser tab (sessionStorage), so a page reload doesn't lose it. */
+function useTabValue(key: string) {
+  const [value, setValueState] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  });
+  const setValue = useCallback((v: string | null) => {
+    try {
+      if (v) sessionStorage.setItem(key, v);
+      else sessionStorage.removeItem(key);
+    } catch {}
+    setValueState(v);
+  }, [key]);
+  return [value, setValue] as const;
+}
 
 /** A request the server refused, carrying whatever it said besides the message —
  * a 409 often explains what is in the way, not just that something is. */
@@ -78,24 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [isLoading, setIsLoading] = useState(false);
-  // Kept for the tab, not just in memory: on a phone you leave for the mail app to read the
+  // Kept for the tab, not just in memory: on a phone you leave for the mail app to read a
   // code, and the browser often reloads the page when you come back. Without this the
   // email would be forgotten and the code couldn't be entered.
-  const [pendingEmail, setPendingEmailState] = useState<string | null>(() => {
-    try {
-      return sessionStorage.getItem(PENDING_EMAIL_KEY);
-    } catch {
-      return null;
-    }
-  });
-  const setPendingEmail = useCallback((email: string | null) => {
-    try {
-      if (email) sessionStorage.setItem(PENDING_EMAIL_KEY, email);
-      else sessionStorage.removeItem(PENDING_EMAIL_KEY);
-    } catch {}
-    setPendingEmailState(email);
-  }, []);
-  const [pendingResetEmail, setPendingResetEmail] = useState<string | null>(null);
+  const [pendingEmail, setPendingEmail] = useTabValue(PENDING_EMAIL_KEY);
+  const [pendingResetEmail, setPendingResetEmail] = useTabValue(PENDING_RESET_KEY);
+  const cancelPasswordReset = useCallback(() => setPendingResetEmail(null), [setPendingResetEmail]);
 
   const setSession = useCallback((token: string, u: User) => {
     try {
@@ -167,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setPendingResetEmail]);
 
   const verifyResetCode = useCallback(async (code: string) => {
     setIsLoading(true);
@@ -194,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [pendingResetEmail]);
+  }, [pendingResetEmail, setPendingResetEmail]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     setIsLoading(true);
@@ -209,7 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, pendingEmail, forgotPassword, verifyResetCode, resetPassword, changePassword }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, verify, pendingEmail, forgotPassword, pendingResetEmail, cancelPasswordReset, verifyResetCode, resetPassword, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

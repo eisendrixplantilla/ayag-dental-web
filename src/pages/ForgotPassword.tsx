@@ -15,10 +15,13 @@ import { motion } from "framer-motion";
 type Step = "email" | "code" | "password";
 
 export default function ForgotPassword() {
-  const { forgotPassword, verifyResetCode, resetPassword, isLoading } = useAuth();
+  const { forgotPassword, verifyResetCode, resetPassword, pendingResetEmail, cancelPasswordReset, isLoading } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  // A reset already under way in this tab (the page was reloaded while the person was in
+  // their mail app) picks up at the code. The code itself isn't kept; it stays valid until
+  // the password is changed, so it's simply typed again.
+  const [step, setStep] = useState<Step>(pendingResetEmail ? "code" : "email");
+  const [email, setEmail] = useState(pendingResetEmail ?? "");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -133,17 +136,15 @@ export default function ForgotPassword() {
             {step === "code" && (
               <form onSubmit={handleVerifyCode} className="space-y-6">
                 <p className="text-sm text-muted-foreground text-center">
-                  We've sent a reset code to <span className="font-medium text-foreground">{email}</span>. Please check your inbox.
+                  We've sent a reset code to <span className="block font-medium text-foreground [overflow-wrap:anywhere]">{email}</span> Please check your inbox.
                 </p>
                 <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={code} onChange={setCode} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric">
+                  {/* one-time-code lets a phone offer the code straight from the email */}
+                  <InputOTP maxLength={6} value={code} onChange={setCode} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric" autoComplete="one-time-code">
                     <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
+                      {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <InputOTPSlot key={i} index={i} className="h-12 w-11 text-lg" />
+                      ))}
                     </InputOTPGroup>
                   </InputOTP>
                 </div>
@@ -155,7 +156,7 @@ export default function ForgotPassword() {
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Verify Code
                 </Button>
-                <Button type="button" variant="ghost" className="w-full" onClick={() => setStep("email")}>
+                <Button type="button" variant="ghost" className="w-full" onClick={() => { cancelPasswordReset(); setCode(""); setStep("email"); }}>
                   Use a different email
                 </Button>
               </form>
