@@ -281,7 +281,7 @@ export default function AdminOnlineAppointments() {
 
       {/* View Details */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="w-auto max-w-[min(90vw,36rem)] max-h-[90vh] overflow-y-auto sm:rounded-lg">
+        <DialogContent className="w-full max-w-[min(90vw,36rem)] max-h-[90vh] overflow-y-auto sm:rounded-lg">
           <DialogHeader>
             <DialogTitle className="font-heading">Appointment Details</DialogTitle>
             <DialogDescription>Full information for this appointment.</DialogDescription>

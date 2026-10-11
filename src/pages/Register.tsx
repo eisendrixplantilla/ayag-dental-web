@@ -133,7 +133,8 @@ export default function Register() {
                 <Input id="middleName" placeholder="Santos" value={middleName} onChange={e => setMiddleName(e.target.value)} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* A phone's half-width is too narrow for the browser's date picker. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="birthdate">Date of Birth</Label>
                   <Input id="birthdate" type="date" value={birthdate} onChange={e => setBirthdate(e.target.value)} max={manilaTodayDateStr()} required />

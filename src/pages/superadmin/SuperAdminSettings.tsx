@@ -564,7 +564,7 @@ export default function SuperAdminSettings() {
                       aria-label={`Price for ${s.name}`}
                       value={priceDrafts[s.id] ?? ""}
                       onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                      className="w-28"
+                      className="w-32"
                     />
                   </TableCell>
                   <TableCell className="print:hidden">

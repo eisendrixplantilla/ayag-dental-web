@@ -219,7 +219,7 @@ export default function AdminAccounts() {
       </Card>
 
       <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <DialogContent className="w-auto max-w-[min(90vw,32rem)] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-[min(90vw,32rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Account Details</DialogTitle>
           </DialogHeader>

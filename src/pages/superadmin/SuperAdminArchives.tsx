@@ -211,7 +211,7 @@ export default function SuperAdminArchives() {
       </Card>
 
       <Dialog open={!!viewing} onOpenChange={o => !o && setViewing(null)}>
-        <DialogContent className="w-auto max-w-[min(90vw,32rem)] max-h-[90vh] overflow-y-auto bg-background">
+        <DialogContent className="w-full max-w-[min(90vw,32rem)] max-h-[90vh] overflow-y-auto bg-background">
           <DialogHeader>
             <DialogTitle>Archived {viewing?.type} Account</DialogTitle>
           </DialogHeader>
@@ -235,7 +235,7 @@ export default function SuperAdminArchives() {
       </Dialog>
 
       <Dialog open={!!restoring} onOpenChange={o => !o && setRestoring(null)}>
-        <DialogContent className="w-auto max-w-[min(90vw,28rem)] bg-background">
+        <DialogContent className="w-full max-w-[min(90vw,28rem)] bg-background">
           <DialogHeader>
             <DialogTitle>Restore account?</DialogTitle>
             <DialogDescription>
