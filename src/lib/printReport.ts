@@ -11,11 +11,29 @@
  * a plain list passes `columns`/`rows`.
  */
 
-/** Records on one sheet. Measured against A4 at the document's type size, in the worst
- * case that still has to fit: the last sheet, which also carries the signature block
- * and the clinic's address, contact and hours on the letterhead, with every row
- * wrapping to two lines. Fifteen comes to 254mm, inside the 255mm a sheet allows. */
+/** Records on one sheet when the real rows can't be measured (no layout to measure in,
+ * e.g. under test). Sized for the worst case: the last sheet, with the signature block
+ * and the letterhead's contact lines, and every row wrapping to two lines. When printing
+ * for real, `printReport` measures the rows instead and fills each sheet to its foot. */
 export const ROWS_PER_PAGE = 15;
+
+/** How much of a sheet the content may fill, in CSS px. A sheet is 255mm (see `.sheet`);
+ * the few mm held back absorb rounding between the screen layout the rows are measured
+ * in and the printer's, so a full sheet never spills its footer onto a page of its own. */
+export const SHEET_BUDGET_PX = (250 * 96) / 25.4;
+
+/** Heights measured from a rendering of the document, in CSS px. */
+export interface SheetMetrics {
+  /** Letterhead, title and filters: everything above the first table. */
+  header: number;
+  /** The page footer ("Records 1–30 of 42 · Page 1 of 2"). */
+  foot: number;
+  /** "Prepared by" and the signature line, on the last sheet. */
+  signature: number;
+  /** Per table (in `tablesOf` order): its heading, its column row, and each record's row.
+   * A table with no records has one entry in `rows`: its "no records" line. */
+  tables: { heading: number; thead: number; rows: number[] }[];
+}
 
 export interface ReportTable {
   /** Shown above the table when a document holds more than one. */
@@ -135,6 +153,69 @@ export function paginateTables(tables: ReportTable[], perPage: number = ROWS_PER
   return sheets.length ? sheets : [[]];
 }
 
+/** Lays the tables out over sheets by measured height: each sheet takes as many rows as
+ * fit above its footer, so a sheet of one-line rows holds more than one of long, wrapped
+ * names, and neither leaves half the sheet empty. The last sheet must also hold the
+ * signature; if it can't, its last rows move to a sheet of their own with it, so the
+ * signature never stands alone. */
+export function fitSheets(tables: ReportTable[], m: SheetMetrics, budget: number = SHEET_BUDGET_PX): TableChunk[][] {
+  const fresh = () => ({ chunks: [] as TableChunk[], used: m.header + m.foot });
+  const sheets: { chunks: TableChunk[]; used: number }[] = [];
+  let sheet = fresh();
+  const close = () => {
+    sheets.push(sheet);
+    sheet = fresh();
+  };
+  const metricsOf = (table: ReportTable) => m.tables[tables.indexOf(table)] ?? { heading: 0, thead: 0, rows: [] };
+  const topOf = (table: ReportTable) => (table.heading ? metricsOf(table).heading : 0) + metricsOf(table).thead;
+
+  for (const table of tables) {
+    const tm = metricsOf(table);
+    const rowH = (i: number) => tm.rows[i] ?? tm.rows[tm.rows.length - 1] ?? 0;
+    const top = topOf(table);
+    const count = table.rows.length;
+    let taken = 0;
+    let continued = false;
+
+    do {
+      // Never start a table where not even its first row fits under its heading.
+      if (sheet.chunks.length && sheet.used + top + rowH(taken) > budget) close();
+
+      let add = top + (count === 0 ? rowH(0) : 0);
+      let n = 0;
+      // At least one row per chunk, even one taller than a sheet, or this never ends.
+      while (taken + n < count && (n === 0 || sheet.used + add + rowH(taken + n) <= budget)) {
+        add += rowH(taken + n);
+        n++;
+      }
+      sheet.chunks.push({ table, rows: table.rows.slice(taken, taken + n), start: taken, continued });
+      sheet.used += add;
+      taken += n;
+      continued = true;
+      if (taken < count) close();
+    } while (taken < count);
+  }
+  close();
+
+  // Room for the signature on the last sheet, or carry its last rows over to a new one
+  // with it (a row or two, never the sheet's only content).
+  const last = sheets[sheets.length - 1];
+  if (last.used + m.signature > budget) {
+    const chunk = last.chunks[last.chunks.length - 1];
+    const carry = !chunk ? 0 : chunk.rows.length > 1 ? Math.min(2, chunk.rows.length - 1) : last.chunks.length > 1 ? chunk.rows.length : 0;
+    const next = fresh();
+    if (chunk && carry > 0) {
+      const keep = chunk.rows.length - carry;
+      if (keep > 0) last.chunks[last.chunks.length - 1] = { ...chunk, rows: chunk.rows.slice(0, keep) };
+      else last.chunks.pop();
+      next.chunks.push({ table: chunk.table, rows: chunk.rows.slice(keep), start: chunk.start + keep, continued: keep > 0 || chunk.continued });
+    }
+    sheets.push(next);
+  }
+
+  return sheets.map((x) => x.chunks);
+}
+
 const STYLES = `
   @page { size: A4 portrait; margin: 14mm; }
   * { box-sizing: border-box; }
@@ -177,6 +258,10 @@ const STYLES = `
   .sign .role { color: #6b7280; margin: 0; font-size: 10pt; }
   .foot { margin-top: auto; padding-top: 8px; border-top: 1px solid #e5e7eb;
           display: flex; justify-content: space-between; font-size: 9pt; color: #6b7280; }
+  /* While rows are being measured: each sheet only as tall as what's on it, and no
+     scrollbar taking width the printed page has, or rows wrap that won't on paper. */
+  html.measuring { overflow: hidden; }
+  html.measuring .sheet { min-height: 0; }
 `;
 
 /** How a column sits in the table, judged by its heading. */
@@ -196,10 +281,12 @@ export function contactLines(c: ClinicLetterhead | null | undefined): string[] {
     .filter(Boolean);
 }
 
-export function buildReportHtml(doc: ReportDoc, origin = ""): string {
+/** `layout` is the sheets as `fitSheets` laid them out; without it the rows go a fixed
+ * number to a sheet. `measuring` renders for `printReport` to take measurements from. */
+export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk[][], measuring = false): string {
   const perPage = doc.rowsPerPage ?? ROWS_PER_PAGE;
   const tables = tablesOf(doc);
-  const sheets = paginateTables(tables, perPage);
+  const sheets = layout ?? paginateTables(tables, perPage);
   const total = tables.reduce((n, t) => n + t.rows.length, 0);
   const plain = tables.length === 1 && !tables[0].heading;
 
@@ -266,16 +353,100 @@ export function buildReportHtml(doc: ReportDoc, origin = ""): string {
     </section>`;
   });
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(doc.title)}</title>
+  return `<!doctype html><html${measuring ? ' class="measuring"' : ""}><head><meta charset="utf-8"><title>${esc(doc.title)}</title>
     <style>${STYLES}</style></head><body>${rendered.join("")}</body></html>`;
+}
+
+const outerHeight = (el: Element | null | undefined) => {
+  if (!el) return 0;
+  const cs = el.ownerDocument.defaultView?.getComputedStyle(el);
+  return el.getBoundingClientRect().height + (parseFloat(cs?.marginTop ?? "") || 0) + (parseFloat(cs?.marginBottom ?? "") || 0);
+};
+
+/** Takes the heights `fitSheets` needs from a measuring render of `sheets`. Null when
+ * there's no real layout to measure. */
+function measure(frameDoc: Document, tables: ReportTable[], sheets: TableChunk[][]): SheetMetrics | null {
+  const els = [...frameDoc.querySelectorAll<HTMLElement>("section.sheet")];
+  if (!els.length) return null;
+  const first = els[0];
+  const meta = first.querySelector(".meta");
+  const metaGap = meta ? parseFloat(frameDoc.defaultView?.getComputedStyle(meta).marginBottom ?? "") || 0 : 0;
+  const header = meta ? meta.getBoundingClientRect().bottom + metaGap - first.getBoundingClientRect().top : 0;
+  const m: SheetMetrics = {
+    header,
+    foot: outerHeight(first.querySelector(".foot")),
+    signature: outerHeight(frameDoc.querySelector(".sign")),
+    tables: tables.map(() => ({ heading: 0, thead: 0, rows: [] })),
+  };
+
+  els.forEach((el, s) => {
+    const tableEls = [...el.querySelectorAll("table")];
+    (sheets[s] ?? []).forEach((chunk, c) => {
+      const t = m.tables[tables.indexOf(chunk.table)];
+      const tableEl = tableEls[c];
+      if (!t || !tableEl) return;
+      const h3 = tableEl.previousElementSibling;
+      // Counted with the gap above it, even where it opens a sheet and has none.
+      if (chunk.table.heading && h3?.tagName === "H3") t.heading = Math.max(t.heading, h3.getBoundingClientRect().height + 16);
+      t.thead = Math.max(t.thead, tableEl.tHead?.getBoundingClientRect().height ?? 0);
+      [...(tableEl.tBodies[0]?.rows ?? [])].forEach((tr, n) => {
+        const i = chunk.rows.length ? chunk.start + n : 0;
+        t.rows[i] = Math.max(t.rows[i] ?? 0, tr.getBoundingClientRect().height);
+      });
+    });
+  });
+
+  const measured = m.header > 0 && m.tables.some((t) => t.rows.some((h) => h > 0));
+  return measured ? m : null;
+}
+
+/** Where a layout's sheets break, to tell when refitting has stopped changing it. */
+const breaksOf = (tables: ReportTable[], sheets: TableChunk[][]) =>
+  sheets.map((s) => s.map((c) => `${tables.indexOf(c.table)}:${c.start}+${c.rows.length}`).join(",")).join("|");
+
+/** Lays the document out to fill each sheet: renders it in `frameDoc` (which must be the
+ * printed page's width), measures every row, and fits the sheets to those heights.
+ *
+ * A table sizes its columns to the rows it holds, so the same row can wrap in one sheet's
+ * table and not in another's. Each layout is therefore rendered and measured as it will
+ * print, and refitted to those heights, until it no longer changes. Null when nothing can
+ * be measured, or no layout settles without a sheet running over: the fixed count, sized
+ * for the worst case, prints instead. */
+export function layoutSheets(doc: ReportDoc, frameDoc: Document, origin = ""): TableChunk[][] | null {
+  const tables = tablesOf(doc);
+  const render = (sheets: TableChunk[][]) => {
+    frameDoc.open();
+    frameDoc.write(buildReportHtml(doc, origin, sheets, true));
+    frameDoc.close();
+  };
+  const fitsOnSheets = () =>
+    [...frameDoc.querySelectorAll<HTMLElement>("section.sheet")].every((el) => el.getBoundingClientRect().height <= SHEET_BUDGET_PX + 1);
+
+  let sheets: TableChunk[][] = [tables.map((table) => ({ table, rows: table.rows, start: 0, continued: false }))];
+  render(sheets);
+  let m = measure(frameDoc, tables, sheets);
+  if (!m) return null;
+
+  let lastGood: TableChunk[][] | null = null;
+  for (let pass = 0; pass < 8; pass++) {
+    sheets = fitSheets(tables, m);
+    render(sheets);
+    const ok = fitsOnSheets();
+    if (ok) lastGood = sheets;
+    m = measure(frameDoc, tables, sheets);
+    if (!m) break;
+    // Settled: measured as it will print, it fits, and refitting would change nothing.
+    if (ok && breaksOf(tables, fitSheets(tables, m)) === breaksOf(tables, sheets)) return sheets;
+  }
+  return lastGood;
 }
 
 /** Prints via a hidden iframe rather than window.open(), so no popup blocker can stop it. */
 export function printReport(doc: ReportDoc): boolean {
-  const html = buildReportHtml(doc, window.location.origin);
-
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  // Off-screen at the printed page's width (A4 less its 14mm margins) while the rows are
+  // measured, so they wrap here as they will on paper.
+  iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:182mm;height:600px;border:0;visibility:hidden";
   document.body.appendChild(iframe);
 
   const frameDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -283,6 +454,15 @@ export function printReport(doc: ReportDoc): boolean {
     document.body.removeChild(iframe);
     return false;
   }
+
+  let layout: TableChunk[][] | null = null;
+  try {
+    layout = doc.rowsPerPage ? null : layoutSheets(doc, frameDoc, window.location.origin);
+  } catch {
+    layout = null; // filling the sheets is a nicety; the fixed count still prints soundly
+  }
+  const html = buildReportHtml(doc, window.location.origin, layout ?? undefined);
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
 
   frameDoc.open();
   frameDoc.write(html);

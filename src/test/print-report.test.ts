@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportHtml, columnFit, contactLines, paginate, ROWS_PER_PAGE } from "@/lib/printReport";
+import { buildReportHtml, columnFit, contactLines, fitSheets, paginate, ROWS_PER_PAGE, tablesOf, type SheetMetrics } from "@/lib/printReport";
 import { describeClinicHours } from "@/lib/clinicHours";
 
 const rows = (n: number) =>
@@ -298,5 +298,50 @@ describe("wording the clinic hours", () => {
       day("Thursday", "09:00", "17:00"), day("Friday", "09:00", "17:00"),
       day("Saturday", "08:30", "12:00"), day("Sunday", "00:00", "00:00", false),
     ])).toBe("Mon–Fri 9:00 AM–5:00 PM · Sat 8:30 AM–12:00 PM · Sun Closed");
+  });
+});
+
+describe("filling each sheet to its foot", () => {
+  // A sheet of 1000px: 200 above the table, 40 for the foot, 100 for the signature,
+  // 20 for the column row, so 740px is left for rows.
+  const metrics = (rowHeights: number[], extra: Partial<SheetMetrics> = {}): SheetMetrics => ({
+    header: 200, foot: 40, signature: 100,
+    tables: [{ heading: 0, thead: 20, rows: rowHeights }],
+    ...extra,
+  });
+  const counts = (s: ReturnType<typeof fitSheets>) => s.map((chunks) => chunks.reduce((n, c) => n + c.rows.length, 0));
+
+  it("takes as many one-line rows as fit, not a fixed fifteen", () => {
+    const tables = tablesOf(doc(60));
+    const s = fitSheets(tables, metrics(Array(60).fill(20)), 1000);
+    expect(counts(s)).toEqual([37, 23]);
+    expect(s[1][0].start).toBe(37);
+  });
+
+  it("takes fewer rows on a sheet where names wrap", () => {
+    const tables = tablesOf(doc(40));
+    const heights = [...Array(20).fill(40), ...Array(20).fill(20)];
+    expect(counts(fitSheets(tables, metrics(heights), 1000))[0]).toBe(18);
+  });
+
+  it("carries the last rows over with the signature rather than printing it alone", () => {
+    const tables = tablesOf(doc(37));
+    const s = fitSheets(tables, metrics(Array(37).fill(20)), 1000);
+    expect(counts(s)).toEqual([35, 2]);
+    expect(s[1][0]).toMatchObject({ start: 35, continued: true });
+  });
+
+  it("still gives an empty report a sheet", () => {
+    const tables = tablesOf(doc(0));
+    expect(fitSheets(tables, metrics([30]), 1000)).toEqual([[{ table: tables[0], rows: [], start: 0, continued: false }]]);
+  });
+
+  it("prints the sheets it was given", () => {
+    const tables = tablesOf(doc(45));
+    const layout = fitSheets(tables, metrics(Array(45).fill(20)), 1000);
+    const html = buildReportHtml(doc(45), "", layout);
+    expect(sheets(html)).toBe(2);
+    expect(html).toContain("Records 1–37 of 45");
+    expect(html).toContain("Records 38–45 of 45");
   });
 });
