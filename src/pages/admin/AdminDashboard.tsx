@@ -135,7 +135,7 @@ export default function AdminDashboard() {
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard title="Today's Appointments" value={stats.today} icon={CalendarDays} trend="Scheduled today" delay={0} />
         <StatCard title="Pending Appointments" value={stats.pending} icon={Clock} trend="Awaiting approval" delay={0.05} />
         <StatCard title="Confirmed Appointments" value={stats.confirmed} icon={CalendarCheck} trend="Approved" delay={0.1} />

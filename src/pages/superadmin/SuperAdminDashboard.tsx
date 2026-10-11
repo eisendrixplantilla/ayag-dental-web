@@ -104,7 +104,7 @@ export default function SuperAdminDashboard() {
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatCard title="Total Registered Patients" value={patientCount} icon={Users} trend="All time" delay={0} />
             <StatCard title="Total Appointments" value={appointments.length} icon={CalendarDays} trend="All time" delay={0.1} />
             <StatCard title="Total Staff" value={staff.length} icon={UserCog} trend="Admins & dentists" delay={0.2} />

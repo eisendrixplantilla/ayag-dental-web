@@ -74,7 +74,7 @@ export default function DentistDashboard() {
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Today's Appointments" value={stats.today} icon={CalendarDays} trend="Scheduled today" delay={0} />
         <StatCard title="Upcoming Appointments" value={stats.upcoming} icon={CalendarClock} trend="Pending + Confirmed" delay={0.05} />
         <StatCard title="Completed Consultations" value={stats.completed} icon={CheckCircle2} trend="Finished visits" delay={0.1} />

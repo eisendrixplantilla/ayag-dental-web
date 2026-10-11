@@ -98,7 +98,7 @@ export default function AdminSales() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Today's Revenue" value="₱12,500" icon={DollarSign} trend="+18%" trendUp delay={0} />
         <StatCard title="Weekly Revenue" value="₱68,200" icon={TrendingUp} trend="+12%" trendUp delay={0.1} />
         <StatCard title="Pending Payments" value="₱8,000" icon={Receipt} delay={0.2} />

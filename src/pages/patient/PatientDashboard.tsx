@@ -62,7 +62,7 @@ export default function PatientDashboard() {
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard title="Upcoming Appointments" value={upcoming.length} icon={CalendarDays} delay={0} />
         <StatCard title="Total Visits" value={totalVisits} icon={History} delay={0.1} />
         <StatCard
@@ -71,6 +71,7 @@ export default function PatientDashboard() {
           icon={CalendarDays}
           trend={nextConfirmed ? nextConfirmed.service : "No confirmed appointment"}
           delay={0.2}
+          className="col-span-2 sm:col-span-1"
         />
       </div>
 

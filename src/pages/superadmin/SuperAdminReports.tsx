@@ -183,10 +183,10 @@ export default function SuperAdminReports() {
         <div className="flex justify-center py-16 print:hidden"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 print:hidden">
             <StatCard title="Total Registered Patients" value={patients.length} icon={Users} delay={0} />
             <StatCard title="Total Appointments" value={totalAppointments} icon={CalendarDays} delay={0.1} />
-            <StatCard title="Total Staff" value={staff.length} icon={UserCog} delay={0.2} />
+            <StatCard title="Total Staff" value={staff.length} icon={UserCog} delay={0.2} className="col-span-2 sm:col-span-1" />
           </div>
 
           <Card className="shadow-card print:hidden">
