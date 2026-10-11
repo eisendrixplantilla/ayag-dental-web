@@ -1,3 +1,4 @@
+import { PIN_COL } from "@/lib/tableClass";
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -180,7 +181,7 @@ export default function AdminDashboard() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                <th className="py-2 pr-4 font-medium">Patient</th>
+                <th className={`py-2 pr-4 font-medium ${PIN_COL}`}>Patient</th>
                 <th className="py-2 pr-4 font-medium">Service</th>
                 <th className="py-2 pr-4 font-medium">Dentist</th>
                 <th className="py-2 pr-4 font-medium">Schedule</th>
@@ -194,7 +195,7 @@ export default function AdminDashboard() {
               )}
               {recent.map(apt => (
                 <tr key={apt.id} className="border-b border-border/50 last:border-0">
-                  <td className="py-3 pr-4 font-medium text-foreground">{apt.patientName}</td>
+                  <td className={`py-3 pr-4 font-medium text-foreground ${PIN_COL}`}>{apt.patientName}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{apt.service}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{apt.dentistName ?? "—"}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{format(parseISO(apt.date), "MMM d, yyyy")} • {toLabel(toMinutes(apt.time))}</td>

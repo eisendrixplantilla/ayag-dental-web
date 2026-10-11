@@ -16,7 +16,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -297,7 +297,7 @@ export default function DentistAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(0)} className={PIN_COL}>Patient Name</SortableHead>
                 <SortableHead {...headProps(1)}>Service</SortableHead>
                 <SortableHead {...headProps(2)}>Appointment Date</SortableHead>
                 <SortableHead {...headProps(3)}>Appointment Time</SortableHead>
@@ -319,7 +319,7 @@ export default function DentistAppointments() {
                   ref={registerRow(apt.id)}
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{apt.patientName}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{apt.patientName}</TableCell>
                   <TableCell className={WRAP_CELL}>{apt.service}</TableCell>
                   <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>

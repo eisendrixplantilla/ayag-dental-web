@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE } from "@/lib/tableClass";
+import { COMPACT_TABLE, PIN_COL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -220,7 +220,7 @@ export default function AdminOnlineAppointments() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)} className="hidden lg:table-cell">Reference</SortableHead>
-                <SortableHead {...headProps(1)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Patient Name</SortableHead>
                 <SortableHead {...headProps(2)} className="hidden sm:table-cell">Service</SortableHead>
                 <SortableHead {...headProps(3)} className="hidden md:table-cell">Assigned Dentist</SortableHead>
                 <SortableHead {...headProps(4)}>Date</SortableHead>
@@ -239,7 +239,7 @@ export default function AdminOnlineAppointments() {
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
                   <TableCell className="hidden lg:table-cell font-mono text-xs whitespace-nowrap">{appointmentRef(apt.id)}</TableCell>
-                  <TableCell className="font-medium whitespace-normal break-words">{apt.patientName}</TableCell>
+                  <TableCell className={`font-medium whitespace-normal break-words ${PIN_COL}`}>{apt.patientName}</TableCell>
                   <TableCell className="hidden sm:table-cell whitespace-normal break-words">{apt.service}</TableCell>
                   <TableCell className="hidden md:table-cell whitespace-normal break-words">{apt.dentistName}</TableCell>
                   <TableCell className="whitespace-nowrap">{apt.date}</TableCell>

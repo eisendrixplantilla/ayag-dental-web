@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -501,7 +501,7 @@ export default function SuperAdminSettings() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10 print:hidden"><span className="sr-only">Reorder</span></TableHead>
-                <TableHead>Service</TableHead>
+                <TableHead className={PIN_COL}>Service</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Price (₱)</TableHead>
                 <TableHead className="print:hidden">Actions</TableHead>
@@ -543,7 +543,7 @@ export default function SuperAdminSettings() {
                       <GripVertical className="w-4 h-4" />
                     </button>
                   </TableCell>
-                  <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell className={`font-medium ${PIN_COL}`}>{s.name}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Input
@@ -604,7 +604,7 @@ export default function SuperAdminSettings() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Service</TableHead>
+                    <TableHead className={PIN_COL}>Service</TableHead>
                     <TableHead>Date Removed</TableHead>
                     <TableHead>Removed By</TableHead>
                     <TableHead>Reason</TableHead>
@@ -614,7 +614,7 @@ export default function SuperAdminSettings() {
                 <TableBody>
                   {removedPages.paged.map((s) => (
                     <TableRow key={s.id} className="text-muted-foreground">
-                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className={`font-medium ${PIN_COL}`}>{s.name}</TableCell>
                       <TableCell>{s.removedAt ?? "—"}</TableCell>
                       <TableCell>{s.removedBy ?? "—"}</TableCell>
                       <TableCell className="max-w-[18rem] whitespace-normal break-words">{s.removedReason ?? "—"}</TableCell>

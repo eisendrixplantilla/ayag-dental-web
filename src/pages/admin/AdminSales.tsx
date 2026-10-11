@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
@@ -114,7 +114,7 @@ export default function AdminSales() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)}>ID</SortableHead>
-                <SortableHead {...headProps(1)}>Patient</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(2)}>Service</SortableHead>
                 <SortableHead {...headProps(3)}>Amount</SortableHead>
                 <SortableHead {...headProps(4)}>Date</SortableHead>
@@ -126,7 +126,7 @@ export default function AdminSales() {
               {paged.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-sm">{s.id}</TableCell>
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{s.patient}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{s.patient}</TableCell>
                   <TableCell className={WRAP_CELL}>{s.service}</TableCell>
                   <TableCell className="font-semibold">₱{s.amount.toLocaleString()}</TableCell>
                   <TableCell>{s.date}</TableCell>

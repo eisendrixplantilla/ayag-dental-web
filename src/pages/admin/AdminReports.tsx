@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { appointmentRef } from "@/lib/appointmentRef";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import CollapsedEmail from "@/components/CollapsedEmail";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Search, Loader2 } from "lucide-react";
 import ReportToolbar from "@/components/ReportToolbar";
@@ -85,6 +87,9 @@ export default function AdminReports() {
   const [dentist, setDentist] = useState("all");
   const [status, setStatus] = useState("all");
   const [report, setReport] = useState<GeneratedReport | null>(null);
+  // The column pinned on a phone: the patient. The appointment report opens with its
+  // reference code, so there the name is the second column.
+  const pinnedCol = report?.type === "appointment" ? 1 : 0;
 
   const inRange = (d: string) => (!start || d >= start) && (!end || d <= end);
 
@@ -274,7 +279,7 @@ export default function AdminReports() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)}>{c}</SortableHead>)}
+                    {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)} className={i === pinnedCol ? PIN_COL : undefined}>{c}</SortableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -290,8 +295,8 @@ export default function AdminReports() {
                     paged.map((row, i) => (
                       <TableRow key={i}>
                         {row.map((cell, j) => (
-                          <TableCell key={j} className={report.type === "appointment" && j === 5 ? `font-medium ${statusVariant(cell)} ${WRAP_CELL}` : WRAP_CELL}>
-                            {cell}
+                          <TableCell key={j} className={cn(report.type === "appointment" && j === 5 ? `font-medium ${statusVariant(cell)} ${WRAP_CELL}` : WRAP_CELL, j === pinnedCol && PIN_COL)}>
+                            {/Email/.test(reportMeta[report.type].columns[j]) ? <CollapsedEmail email={cell} /> : cell}
                           </TableCell>
                         ))}
                       </TableRow>

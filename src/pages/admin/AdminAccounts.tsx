@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
@@ -158,7 +159,7 @@ export default function AdminAccounts() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Patient Name</SortableHead>
+                <SortableHead {...headProps(0)} className={PIN_COL}>Patient Name</SortableHead>
                 <SortableHead {...headProps(1)}>Email Address</SortableHead>
                 <SortableHead {...headProps(2)}>Account Status</SortableHead>
                 <SortableHead {...headProps(3)}>Date Registered</SortableHead>
@@ -168,8 +169,8 @@ export default function AdminAccounts() {
             <TableBody>
               {paged.map(a => (
                 <TableRow key={a.id}>
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{a.name}</TableCell>
-                  <TableCell className={WRAP_CELL}>{a.email}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{a.name}</TableCell>
+                  <TableCell><CollapsedEmail email={a.email} /></TableCell>
                   <TableCell>
                     <Badge
                       variant={a.status === "active" ? "default" : "secondary"}

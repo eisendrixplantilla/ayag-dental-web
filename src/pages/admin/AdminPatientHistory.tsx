@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import { ArrowLeft, User, CalendarDays, FileText, Loader2, Printer } from "lucide-react";
 import { getPatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
@@ -182,7 +182,7 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...aptSort.headProps(0)}>Date</SortableHead>
+                <SortableHead {...aptSort.headProps(0)} className={PIN_COL}>Date</SortableHead>
                 <SortableHead {...aptSort.headProps(1)}>Time</SortableHead>
                 <SortableHead {...aptSort.headProps(2)}>Service</SortableHead>
                 <SortableHead {...aptSort.headProps(3)}>Dentist</SortableHead>
@@ -193,7 +193,7 @@ export default function AdminPatientHistory() {
             <TableBody>
               {aptPages.paged.map(a => (
                 <TableRow key={a.id}>
-                  <TableCell>{a.date}</TableCell>
+                  <TableCell className={PIN_COL}>{a.date}</TableCell>
                   <TableCell>{toLabel(toMinutes(a.time))}</TableCell>
                   <TableCell className={WRAP_CELL}>{a.service}</TableCell>
                   <TableCell className={WRAP_CELL}>{a.dentistName ?? "—"}</TableCell>
@@ -220,7 +220,7 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...recordSort.headProps(0)}>Date</SortableHead>
+                <SortableHead {...recordSort.headProps(0)} className={PIN_COL}>Date</SortableHead>
                 <SortableHead {...recordSort.headProps(1)}>Procedures</SortableHead>
                 <SortableHead {...recordSort.headProps(2)}>Diagnosis</SortableHead>
                 <SortableHead {...recordSort.headProps(3)}>Dentist</SortableHead>
@@ -229,7 +229,7 @@ export default function AdminPatientHistory() {
             <TableBody>
               {recordPages.paged.map(r => (
                 <TableRow key={r.id}>
-                  <TableCell>{r.date}</TableCell>
+                  <TableCell className={PIN_COL}>{r.date}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.dentistName ?? "—"}</TableCell>

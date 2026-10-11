@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE } from "@/lib/tableClass";
+import { COMPACT_TABLE, PIN_COL } from "@/lib/tableClass";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarCheck, CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
@@ -291,212 +291,220 @@ export default function AdminAppointments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-4">
-          {/* Who this walk-in is for: someone with a patient account, or a guest with
-              none. The account path is unchanged; the guest path collects details below. */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Does the patient have an account?</Label>
-            <ToggleGroup
-              type="single"
-              value={mode}
-              onValueChange={(v) => switchMode(v as "account" | "guest")}
-              className="justify-start gap-2"
-            >
-              <ToggleGroupItem
-                value="account"
-                aria-label="Patient has an account"
-                className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
-              >
-                <Search className="w-4 h-4 mr-2" /> Has account
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="guest"
-                aria-label="Patient has no account"
-                className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
-              >
-                <UserPlus className="w-4 h-4 mr-2" /> No account
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-
-          {isGuest ? (
-            /* Guest: capture the essentials before booking, since nothing is stored under
-               an account. These ride along on the appointment record itself. */
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-dashed p-3">
+          {/* Who on the left, what and with whom on the right: on a wide screen the form
+              fills the card instead of running down one narrow column. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+            <div className="space-y-4 min-w-0">
+              {/* Who this walk-in is for: someone with a patient account, or a guest with
+                  none. The account path is unchanged; the guest path collects details below. */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Full Name <span className="text-destructive">*</span></Label>
-                <Input
-                  value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
-                  placeholder="Patient's full name"
-                  className="h-11 sm:h-9"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Contact Number <span className="text-destructive">*</span></Label>
-                <Input
-                  value={guestContact}
-                  onChange={(e) => setGuestContact(e.target.value)}
-                  inputMode="tel"
-                  placeholder="e.g. 0917 123 4567"
-                  className="h-11 sm:h-9"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Age <span className="text-destructive">*</span></Label>
-                <Input
-                  value={guestAge}
-                  onChange={(e) => setGuestAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
-                  inputMode="numeric"
-                  placeholder="e.g. 32"
-                  className="h-11 sm:h-9"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Gender <span className="text-destructive">*</span></Label>
-                <Select value={guestGender} onValueChange={setGuestGender}>
-                  <SelectTrigger className="h-11 sm:h-9" aria-label="Gender"><SelectValue placeholder="Select gender" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground sm:col-span-2">
-                Guest walk-in — these details are saved on this appointment, not as a patient account.
-              </p>
-            </div>
-          ) : (
-            /* Account: the existing-patient picker, unchanged. */
-            <div className="space-y-1.5">
-              <Label className="block text-xs text-muted-foreground">Patient</Label>
-              <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={patientPickerOpen}
-                    className="h-11 sm:h-9 w-full sm:w-96 justify-between font-normal"
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                      <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                      {patientName || "Search for a patient account"}
-                    </span>
-                    <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  <Command>
-                    <CommandInput placeholder="Type a name..." />
-                    <CommandList>
-                      <CommandEmpty>
-                        No matching patient account. Switch to <span className="font-medium">No account</span> for a guest.
-                      </CommandEmpty>
-                      <CommandGroup heading="Existing patients">
-                        {patients.map(p => (
-                          <CommandItem
-                            key={p.id}
-                            value={p.name}
-                            onSelect={() => {
-                              setPatientName(p.name);
-                              setPatientId(p.id);
-                              setPatientPickerOpen(false);
-                            }}
-                          >
-                            <Check className={cn("mr-2 w-4 h-4", patientId === p.id ? "opacity-100" : "opacity-0")} />
-                            {p.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {patientId && (
-                <p className="text-xs text-muted-foreground mt-1">Linked to existing patient account — will appear in their full history.</p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Service</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="w-full sm:w-56">
-                {/* Always shows its placeholder: picking an option adds to the list beside
-                    it rather than replacing a single selection. */}
-                <Select
-                  value=""
-                  disabled={!patientReady || remaining.length === 0}
-                  onValueChange={(v) => setChosen(prev => [...prev, v])}
+                <Label className="text-xs text-muted-foreground">Does the patient have an account?</Label>
+                <ToggleGroup
+                  type="single"
+                  value={mode}
+                  onValueChange={(v) => switchMode(v as "account" | "guest")}
+                  className="justify-start gap-2"
                 >
-                  <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
-                    <SelectValue placeholder={
-                      !patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
-                        : remaining.length === 0 ? "All services added"
-                        : chosen.length === 0 ? "Select service"
-                        : "Add another service"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
+                  <ToggleGroupItem
+                    value="account"
+                    aria-label="Patient has an account"
+                    className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
+                  >
+                    <Search className="w-4 h-4 mr-2" /> Has account
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="guest"
+                    aria-label="Patient has no account"
+                    className="h-9 px-3 border data-[state=on]:gradient-primary data-[state=on]:text-primary-foreground data-[state=on]:border-transparent"
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" /> No account
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
-              {chosen.length === 0 ? (
-                <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
+
+              {isGuest ? (
+                /* Guest: capture the essentials before booking, since nothing is stored under
+                   an account. These ride along on the appointment record itself. */
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-dashed p-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Full Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={patientName}
+                      onChange={(e) => setPatientName(e.target.value)}
+                      placeholder="Patient's full name"
+                      className="h-11 sm:h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Contact Number <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={guestContact}
+                      onChange={(e) => setGuestContact(e.target.value)}
+                      inputMode="tel"
+                      placeholder="e.g. 0917 123 4567"
+                      className="h-11 sm:h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Age <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={guestAge}
+                      onChange={(e) => setGuestAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                      inputMode="numeric"
+                      placeholder="e.g. 32"
+                      className="h-11 sm:h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Gender <span className="text-destructive">*</span></Label>
+                    <Select value={guestGender} onValueChange={setGuestGender}>
+                      <SelectTrigger className="h-11 sm:h-9" aria-label="Gender"><SelectValue placeholder="Select gender" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">
+                    Guest walk-in — these details are saved on this appointment, not as a patient account.
+                  </p>
+                </div>
               ) : (
-                chosen.map(s => (
-                  <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
-                    <span className="truncate">{s}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${s}`}
-                      className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
-                      onClick={() => setChosen(prev => prev.filter(c => c !== s))}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </Badge>
-                ))
+                /* Account: the existing-patient picker, unchanged. */
+                <div className="space-y-1.5">
+                  <Label className="block text-xs text-muted-foreground">Patient</Label>
+                  <Popover open={patientPickerOpen} onOpenChange={setPatientPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={patientPickerOpen}
+                        className="h-11 sm:h-9 w-full sm:max-w-md justify-between font-normal"
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                          {patientName || "Search for a patient account"}
+                        </span>
+                        <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                      <Command>
+                        <CommandInput placeholder="Type a name..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            No matching patient account. Switch to <span className="font-medium">No account</span> for a guest.
+                          </CommandEmpty>
+                          <CommandGroup heading="Existing patients">
+                            {patients.map(p => (
+                              <CommandItem
+                                key={p.id}
+                                value={p.name}
+                                onSelect={() => {
+                                  setPatientName(p.name);
+                                  setPatientId(p.id);
+                                  setPatientPickerOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 w-4 h-4", patientId === p.id ? "opacity-100" : "opacity-0")} />
+                                {p.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {patientId && (
+                    <p className="text-xs text-muted-foreground mt-1">Linked to existing patient account — will appear in their full history.</p>
+                  )}
+                </div>
               )}
             </div>
-          </div>
+            <div className="space-y-4 min-w-0 lg:border-l lg:pl-8">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Service</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="w-full lg:w-56">
+                    {/* Always shows its placeholder: picking an option adds to the list beside
+                        it rather than replacing a single selection. */}
+                    <Select
+                      value=""
+                      disabled={!patientReady || remaining.length === 0}
+                      onValueChange={(v) => setChosen(prev => [...prev, v])}
+                    >
+                      <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
+                        <SelectValue placeholder={
+                          !patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
+                            : remaining.length === 0 ? "All services added"
+                            : chosen.length === 0 ? "Select service"
+                            : "Add another service"
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  {chosen.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
+                  ) : (
+                    chosen.map(s => (
+                      <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
+                        <span className="truncate">{s}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${s}`}
+                          className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
+                          onClick={() => setChosen(prev => prev.filter(c => c !== s))}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Assign Dentist</Label>
-            <div className="w-full sm:w-64">
-              <Select
-                value={dentistId}
-                disabled={chosen.length === 0 || loadingDentists}
-                onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
-              >
-                <SelectTrigger className="h-11 sm:h-9" aria-label="Assign dentist"><SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Select dentist"} /></SelectTrigger>
-                <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Assign Dentist</Label>
+                <div className="w-full lg:w-64">
+                  <Select
+                    value={dentistId}
+                    disabled={chosen.length === 0 || loadingDentists}
+                    onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
+                  >
+                    <SelectTrigger className="h-11 sm:h-9" aria-label="Assign dentist"><SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Select dentist"} /></SelectTrigger>
+                    <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                {/* Which days exist at all on the calendar below — worth reading, so it
+                    doesn't sit in hint grey. */}
+                <p className="text-xs min-h-5 leading-tight"
+                   title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
+                  {!loadingDentists && dentists.length === 0 ? (
+                    <span className="font-medium text-destructive">No dentists are available.</span>
+                  ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
+                    : dentistId && schedule && schedule.days.length === 0 ? (
+                      <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
+                    ) : schedule && schedule.days.length > 0 ? (
+                      <span className="flex items-start gap-1.5 text-foreground">
+                        <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                        <span className="line-clamp-2 sm:line-clamp-none">
+                          <span className="font-semibold">Working hours:</span>{" "}
+                          <span className="font-medium">{scheduleSummary}</span>
+                        </span>
+                      </span>
+                    ) : ""}
+                </p>
+              </div>
             </div>
-            {/* Which days exist at all on the calendar below — worth reading, so it
-                doesn't sit in hint grey. */}
-            <p className="text-xs min-h-5 leading-tight"
-               title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
-              {!loadingDentists && dentists.length === 0 ? (
-                <span className="font-medium text-destructive">No dentists are available.</span>
-              ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
-                : dentistId && schedule && schedule.days.length === 0 ? (
-                  <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
-                ) : schedule && schedule.days.length > 0 ? (
-                  <span className="flex items-start gap-1.5 text-foreground">
-                    <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
-                    <span className="line-clamp-2 sm:line-clamp-none">
-                      <span className="font-semibold">Working hours:</span>{" "}
-                      <span className="font-medium">{scheduleSummary}</span>
-                    </span>
-                  </span>
-                ) : ""}
-            </p>
           </div>
 
           {/* When — the month and the free times side by side, so picking a day and seeing
-              what is left at the desk is one glance rather than two dropdowns. */}
-          <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto md:mx-0", !dentistId && "opacity-60")}>
+              what is left at the desk is one glance rather than two dropdowns. On a tablet,
+              where the sidebar leaves too little room, the times go under the month. */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto lg:mx-0", !dentistId && "opacity-60")}>
               <Calendar
                 mode="single"
                 selected={date}
@@ -542,7 +550,7 @@ export default function AdminAppointments() {
                 <div
                   role="group"
                   aria-label="Available time slots"
-                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:max-h-56 md:overflow-y-auto md:pr-1"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 lg:max-h-56 lg:overflow-y-auto lg:pr-1"
                 >
                   {slots.map(s => (
                     <Button
@@ -605,7 +613,7 @@ export default function AdminAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Patient</SortableHead>
+                <SortableHead {...headProps(0)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(1)}>Service</SortableHead>
                 <SortableHead {...headProps(2)}>Dentist</SortableHead>
                 <SortableHead {...headProps(3)}>Date</SortableHead>
@@ -621,7 +629,7 @@ export default function AdminAppointments() {
                   ref={registerRow(w.id)}
                   className={highlightedKey === w.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="font-medium whitespace-normal break-words">{w.patientName}</TableCell>
+                  <TableCell className={`font-medium whitespace-normal break-words ${PIN_COL}`}>{w.patientName}</TableCell>
                   <TableCell className="whitespace-normal break-words">{w.service}</TableCell>
                   <TableCell className="whitespace-normal break-words">{w.dentistName}</TableCell>
                   <TableCell>{w.date}</TableCell>

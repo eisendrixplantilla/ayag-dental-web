@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -412,7 +413,7 @@ export default function AdminPatients() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Name</SortableHead>
+                <SortableHead {...headProps(0)} className={PIN_COL}>Name</SortableHead>
                 <SortableHead {...headProps(1)}>Age</SortableHead>
                 <SortableHead {...headProps(2)}>Phone</SortableHead>
                 <SortableHead {...headProps(3)}>Email</SortableHead>
@@ -426,7 +427,7 @@ export default function AdminPatients() {
                 const p = r.patient;
                 return (
                   <TableRow key={r.key}>
-                    <TableCell className={WRAP_CELL}>
+                    <TableCell className={`${WRAP_CELL} ${PIN_COL}`}>
                       {p ? (
                         <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{r.name}</button>
                       ) : (
@@ -435,7 +436,7 @@ export default function AdminPatients() {
                     </TableCell>
                     <TableCell>{r.age}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.phone}</TableCell>
-                    <TableCell className={WRAP_CELL}>{r.email}</TableCell>
+                    <TableCell><CollapsedEmail email={r.email} /></TableCell>
                     <TableCell>
                       {p ? (
                         <Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge>

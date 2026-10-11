@@ -15,7 +15,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
 import { FilePlus2, FileEdit, Eye, Loader2, Plus, X, Printer } from "lucide-react";
 import {
@@ -260,7 +260,7 @@ export default function DentistRecords() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)}>Date</SortableHead>
-                <SortableHead {...headProps(1)}>Patient</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(2)}>Procedures</SortableHead>
                 <SortableHead {...headProps(3)}>Tooth No.</SortableHead>
                 <SortableHead {...headProps(4)}>Diagnosis</SortableHead>
@@ -283,7 +283,7 @@ export default function DentistRecords() {
                     className={highlightedKey === r.id ? HIGHLIGHT_ROW_CLASS : undefined}
                   >
                     <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
-                    <TableCell className={`font-medium ${WRAP_CELL}`}>{r.patientName ?? "—"}</TableCell>
+                    <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{r.patientName ?? "—"}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                     <TableCell>{r.toothNumber || "—"}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>

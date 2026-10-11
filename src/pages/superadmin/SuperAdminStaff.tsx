@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Archive, Edit, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
@@ -305,7 +306,7 @@ export default function SuperAdminStaff() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)}>Employee ID</SortableHead>
-                <SortableHead {...headProps(1)}>Full Name</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Full Name</SortableHead>
                 <SortableHead {...headProps(2)}>Email Address</SortableHead>
                 <SortableHead {...headProps(3)}>Contact Number</SortableHead>
                 <SortableHead {...headProps(4)}>Role</SortableHead>
@@ -321,8 +322,8 @@ export default function SuperAdminStaff() {
               ) : paged.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-sm">{s.employeeId ?? "—"}</TableCell>
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{s.name}</TableCell>
-                  <TableCell className={WRAP_CELL}>{s.email}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{s.name}</TableCell>
+                  <TableCell><CollapsedEmail email={s.email} /></TableCell>
                   <TableCell>{s.contact ?? "—"}</TableCell>
                   <TableCell><Badge variant="outline" className="bg-secondary text-secondary-foreground">{roleLabel(s.role)}</Badge></TableCell>
                   <TableCell>

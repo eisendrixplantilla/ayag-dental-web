@@ -177,7 +177,7 @@ export default function PatientBook() {
   }
 
   return (
-    <div className="space-y-4 w-full max-w-5xl">
+    <div className="space-y-4 w-full">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground">Book Appointment</h1>
@@ -198,7 +198,7 @@ export default function PatientBook() {
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Service</Label>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="w-full sm:w-56">
+                <div className="w-full lg:w-56">
                   {/* Always shows its placeholder: picking an option adds to the list beside
                       it rather than replacing a single selection. */}
                   <Select
@@ -238,7 +238,7 @@ export default function PatientBook() {
 
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Dentist</Label>
-              <div className="w-full sm:w-64">
+              <div className="w-full lg:w-64">
                 <Select
                   value={dentistId}
                   disabled={chosen.length === 0 || loadingDentists}
@@ -275,9 +275,10 @@ export default function PatientBook() {
           </div>
 
           {/* When — the month and the free times side by side, so picking a day and seeing
-              what is left is one glance rather than two dropdowns. */}
-          <div className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto md:mx-0", !dentistId && "opacity-60")}>
+              what is left is one glance rather than two dropdowns. On a tablet,
+              where the sidebar leaves too little room, the times go under the month. */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto lg:mx-0", !dentistId && "opacity-60")}>
               <Calendar
                 mode="single"
                 selected={date}
@@ -322,7 +323,7 @@ export default function PatientBook() {
                 <div
                   role="group"
                   aria-label="Available time slots"
-                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:max-h-56 md:overflow-y-auto md:pr-1"
+                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 lg:max-h-56 lg:overflow-y-auto lg:pr-1"
                 >
                   {slots.map(s => (
                     <Button

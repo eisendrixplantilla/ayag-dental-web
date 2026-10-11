@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArchiveRestore, Eye, Loader2, Printer } from "lucide-react";
@@ -157,7 +157,7 @@ export default function SuperAdminArchives() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)}>ID</SortableHead>
-                <SortableHead {...headProps(1)}>Full Name</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Full Name</SortableHead>
                 <SortableHead {...headProps(2)}>Account Type</SortableHead>
                 <SortableHead {...headProps(3)}>Date Archived</SortableHead>
                 <SortableHead {...headProps(4)}>Archived By</SortableHead>
@@ -179,7 +179,7 @@ export default function SuperAdminArchives() {
               ) : paged.map(r => (
                 <TableRow key={`${r.type}-${r.id}`}>
                   <TableCell className="font-mono text-sm">{r.id}</TableCell>
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{r.name}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{r.name}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="bg-secondary text-secondary-foreground">{r.type}</Badge>
                   </TableCell>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Package, Plus, AlertTriangle, Edit } from "lucide-react";
@@ -166,7 +166,7 @@ export default function AdminInventory() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)}>ID</SortableHead>
-                <SortableHead {...headProps(1)}>Item</SortableHead>
+                <SortableHead {...headProps(1)} className={PIN_COL}>Item</SortableHead>
                 <SortableHead {...headProps(2)}>Category</SortableHead>
                 <SortableHead {...headProps(3)}>Quantity</SortableHead>
                 <SortableHead {...headProps(4)}>Min Stock</SortableHead>
@@ -178,7 +178,7 @@ export default function AdminInventory() {
               {paged.map(item => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-sm">{item.id}</TableCell>
-                  <TableCell className={`font-medium ${WRAP_CELL}`}>{item.name}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{item.name}</TableCell>
                   <TableCell className={WRAP_CELL}>{item.category}</TableCell>
                   <TableCell>{item.quantity} {item.unit}</TableCell>
                   <TableCell>{item.minStock} {item.unit}</TableCell>
