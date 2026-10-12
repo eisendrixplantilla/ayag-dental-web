@@ -175,6 +175,11 @@ export default function AdminInventory() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {paged.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No items found</TableCell>
+                </TableRow>
+              )}
               {paged.map(item => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-sm">{item.id}</TableCell>

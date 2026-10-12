@@ -42,7 +42,22 @@ export function matchesReportFilter(row: string[], f: ReportFilter): boolean {
 
   const q = f.value.trim().toLowerCase();
   if (!q) return true;
-  return (col < 0 ? row.join(" ") : row[col] ?? "").toLowerCase().includes(q);
+  const cells = col < 0 ? row : [row[col] ?? ""];
+  return cells.map(searchableText).join(" ").toLowerCase().includes(q);
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** A cell as it can be searched for. Rows carry dates as "2026-09-25", but pages show
+ * them as "Sep 25, 2026", and people type what they see, so a date also matches its
+ * written-out forms. */
+function searchableText(cell: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(cell);
+  if (!m) return cell;
+  const month = MONTHS[Number(m[2]) - 1];
+  if (!month) return cell;
+  const day = Number(m[3]);
+  return `${cell} ${month.slice(0, 3)} ${day}, ${m[1]} ${month} ${day}, ${m[1]}`;
 }
 
 export function filterReportRows(rows: string[][], f: ReportFilter): string[][] {
