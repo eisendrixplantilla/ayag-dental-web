@@ -320,7 +320,7 @@ export default function AdminAppointments() {
               <Clock3 className="w-3.5 h-3.5" /> About {formatDuration(visitMinutes)} in the chair
             </Badge>
           )}
-          <Button onClick={handlePrint} variant="outline" size="sm" className="print:hidden">
+          <Button onClick={handlePrint} disabled={loading} variant="outline" size="sm" className="print:hidden">
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
         </div>

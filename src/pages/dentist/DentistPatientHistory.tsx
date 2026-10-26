@@ -192,7 +192,7 @@ export default function DentistPatientHistory() {
         </div>
         <div className="flex items-center gap-2 print:hidden">
           {selected && (
-            <Button onClick={handlePrint} variant="outline">
+            <Button onClick={handlePrint} disabled={loading} variant="outline">
               <Printer className="w-4 h-4 mr-2" /> Print
             </Button>
           )}

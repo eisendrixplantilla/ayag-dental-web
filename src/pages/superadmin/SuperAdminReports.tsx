@@ -20,7 +20,7 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } 
 import { toast } from "sonner";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { DAY_NAMES, getAllSchedules, getStaff, type DentistScheduleData, type StaffMember } from "@/lib/api/staff";
-import { getLeave, leaveHours, type LeaveRequest } from "@/lib/api/leave";
+import { getLeave, leaveHours, shortRange, type LeaveRequest } from "@/lib/api/leave";
 import { formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { groupGuests } from "@/lib/guests";
@@ -193,12 +193,12 @@ export default function SuperAdminReports() {
         a.patientName, a.service, a.dentistName ?? "—", a.date, formatTimeRange(a.time, a.endTime), statusLabel(a),
       ]);
     } else if (type === "accounts") {
-      rows = patients.map((p) => [p.name, p.code ?? "—", p.email, p.status === "active" ? "Active" : "Deactivated", p.createdAt?.slice(0, 10) ?? "—"]);
+      rows = patients.map((p) => [p.name, p.code ?? "—", p.email || "—", p.status === "active" ? "Active" : "Deactivated", p.createdAt?.slice(0, 10) ?? "—"]);
     } else if (type === "records") {
       // Account holders, then guests booked at the desk with no account.
       rows = [
         ...patients.map((p) => [
-          p.name, p.code ?? "—", p.age != null ? String(p.age) : "—", p.phone || "—", p.email, capitalize(p.status),
+          p.name, p.code ?? "—", p.age != null ? String(p.age) : "—", p.phone || "—", p.email || "—", capitalize(p.status),
           appointments.some((a) => a.patientId === p.id && a.type === "walk-in") ? "Yes" : "No",
         ]),
         ...groupGuests(appointments).map((g) => [g.name, "—", "—", g.contact || "—", g.visits.find((a) => a.email)?.email ?? "—", "No account", "Yes"]),
@@ -225,8 +225,8 @@ export default function SuperAdminReports() {
     } else if (type === "leave") {
       rows = [...leave].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((l) => [
         l.dentistName, roleLabel[l.role] ?? l.role,
-        (l.startDate === l.endDate ? l.startDate : `${l.startDate} to ${l.endDate}`)
-          + (l.removedDates.length ? ` (${l.removedDates.length} day${l.removedDates.length === 1 ? "" : "s"} removed)` : ""),
+        shortRange(l.startDate, l.endDate)
+          + (l.removedDates.length ? ` (${l.removedDates.length} removed)` : ""),
         leaveHours(l) ?? "Whole day",
         l.reason,
         formatManilaStamp(l.createdAt),
@@ -241,7 +241,7 @@ export default function SuperAdminReports() {
       const accountRows = patients.map((p) => {
         const patientAppointments = appointments.filter((a) => a.patientId === p.id);
         const patientRecords = records.filter((r) => r.patientId === p.id);
-        return [p.name, p.code ?? "—", p.phone || "—", p.email, "Registered", String(patientAppointments.length), latestOf(patientRecords)];
+        return [p.name, p.code ?? "—", p.phone || "—", p.email || "—", "Registered", String(patientAppointments.length), latestOf(patientRecords)];
       });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,

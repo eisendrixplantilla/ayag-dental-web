@@ -126,7 +126,7 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, {user?.name}</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} disabled={loading} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print Summary
         </Button>
       </div>

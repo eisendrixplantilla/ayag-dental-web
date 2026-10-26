@@ -314,7 +314,7 @@ export default function SuperAdminSettings() {
           <h1 className="text-2xl font-bold font-heading text-foreground">System Settings</h1>
           <p className="text-muted-foreground">Configure clinic hours, services, and pricing</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} disabled={loading} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
         </Button>
       </div>

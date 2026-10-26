@@ -187,7 +187,7 @@ export default function SuperAdminStaff() {
             shown={filtered.length}
             noun="account(s)"
             actions={
-              <Button variant="outline" size="sm" onClick={handlePrint}>
+              <Button variant="outline" size="sm" onClick={handlePrint} disabled={loading}>
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }

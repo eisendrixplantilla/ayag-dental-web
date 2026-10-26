@@ -358,3 +358,29 @@ describe("the clinic's alignment rules on paper", () => {
     expect(bodyRows(html)[0]).toMatch(/<td class="[^"]*al-r">32<\/td><td class="[^"]*al-c">Active<\/td>/);
   });
 });
+
+describe("what the print tour turned up", () => {
+  it("reads Account as a word, not a count, and a weekday column as a date", async () => {
+    const { columnKind } = await import("@/lib/tableClass");
+    expect(columnKind("Account")).toBe("code");
+    expect(columnKind("Visit Count")).toBe("number");
+    expect(columnKind("Mon Oct 26")).toBe("code");
+  });
+
+  it("keeps IDs and 'No account' on one line, and lets a Dates range wrap", () => {
+    expect(["Patient ID", "Employee ID", "Account"].map(columnFit)).toEqual(["nowrap", "nowrap", "nowrap"]);
+    expect(columnFit("Dates")).toBe("");
+  });
+
+  it("leaves the count off a heading that asks for it, like a week's seven days", () => {
+    const html = buildReportHtml({
+      ...doc(0),
+      tables: [
+        { heading: "Weekly Schedule", showCount: false, columns: ["Day"], rows: [["Monday"], ["Tuesday"]] },
+        { heading: "Leave", columns: ["Dates"], rows: [["Nov 2"]] },
+      ],
+    });
+    expect(html).toContain("<h3>Weekly Schedule</h3>");
+    expect(html).toContain("<h3>Leave — 1</h3>");
+  });
+});

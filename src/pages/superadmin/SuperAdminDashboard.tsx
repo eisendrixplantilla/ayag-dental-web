@@ -95,7 +95,7 @@ export default function SuperAdminDashboard() {
           <h1 className="text-2xl font-bold font-heading text-foreground">Super Admin Dashboard</h1>
           <p className="text-muted-foreground">System overview and analytics</p>
         </div>
-        <Button onClick={handlePrint} variant="outline" className="print:hidden">
+        <Button onClick={handlePrint} disabled={loading} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print Summary
         </Button>
       </div>

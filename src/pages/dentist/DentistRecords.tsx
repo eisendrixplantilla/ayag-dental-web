@@ -249,7 +249,7 @@ export default function DentistRecords() {
             shown={visible.length}
             noun="record(s)"
             actions={
-              <Button onClick={handlePrint} variant="outline" size="sm">
+              <Button onClick={handlePrint} disabled={loading} variant="outline" size="sm">
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
             }

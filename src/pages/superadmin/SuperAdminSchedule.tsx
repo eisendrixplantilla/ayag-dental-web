@@ -123,6 +123,7 @@ export default function SuperAdminSchedule() {
       ],
       tables: [{
         heading: "Weekly Schedule",
+        showCount: false,
         columns: ["Name", "Role", ...week.map((d) => format(d, "EEE MMM d"))],
         rows: shown.map((s) => [s.name, s.role === "dentist" ? "Dentist" : "Admin", ...week.map((d) => cellText(cellFor(schedules?.[s.id], d)))]),
         emptyText: "No staff to show.",

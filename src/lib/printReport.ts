@@ -43,6 +43,8 @@ export interface ReportTable {
   rows: string[][];
   /** What to print in place of the rows when there are none. */
   emptyText?: string;
+  /** false: no "— N" after the heading, where the count says nothing (a week's seven days). */
+  showCount?: boolean;
 }
 
 /** The clinic's details under its name on every sheet. Missing parts are left off. */
@@ -272,7 +274,8 @@ const STYLES = `
 export function columnFit(column: string): "nowrap" | "name" | "breakable" | "" {
   if (/email/i.test(column)) return "breakable";
   if (/name|^patient$|^dentist$|prescribed by|archived by/i.test(column)) return "name";
-  if (/date|^time$|contact|phone|^status$|registered|booked on|^age$|amount|price|^count$|^id$|employee id/i.test(column)) return "nowrap";
+  if (/^dates$/i.test(column)) return ""; // a range, with a note: it may take two lines
+  if (/date|^time$|contact|phone|^status$|registered|booked on|^age$|amount|price|^count$|\bid$|employee id|^account$/i.test(column)) return "nowrap";
   return "";
 }
 
@@ -329,7 +332,7 @@ export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk
 
     const heading = table.heading
       ? `<h3>${esc(table.heading)}${continued ? " (continued)" : ""}${
-          rows.length && !continued ? ` — ${table.rows.length}` : ""}</h3>`
+          rows.length && !continued && table.showCount !== false ? ` — ${table.rows.length}` : ""}</h3>`
       : "";
 
     return `${heading}<table>

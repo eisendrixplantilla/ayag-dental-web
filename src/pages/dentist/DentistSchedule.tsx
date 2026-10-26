@@ -81,6 +81,7 @@ export default function DentistSchedule() {
       tables: [
         {
           heading: "Weekly Schedule",
+          showCount: false,
           columns: ["Day", "Date", "Working Hours", "Lunch Break", "Leave"],
           rows: week.map((date) => {
             const d = days.find((x) => x.dayOfWeek === date.getDay());
@@ -116,7 +117,7 @@ export default function DentistSchedule() {
         </div>
         {/* Nothing to print until the schedule is there to print. */}
         {days.length > 0 && (
-          <Button onClick={handlePrint} variant="outline" className="print:hidden">
+          <Button onClick={handlePrint} disabled={loading} variant="outline" className="print:hidden">
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
         )}
