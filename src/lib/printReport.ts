@@ -18,10 +18,11 @@ import { columnKind } from "@/lib/tableClass";
  * for real, `printReport` measures the rows instead and fills each sheet to its foot. */
 export const ROWS_PER_PAGE = 15;
 
-/** How much of a sheet the content may fill, in CSS px. A sheet is 255mm (see `.sheet`);
- * the few mm held back absorb rounding between the screen layout the rows are measured
- * in and the printer's, so a full sheet never spills its footer onto a page of its own. */
-export const SHEET_BUDGET_PX = (250 * 96) / 25.4;
+/** How much of a sheet the content may fill, in CSS px. A sheet is 263mm (see `.sheet`)
+ * of the 269mm inside A4's margins; the few mm held back absorb rounding between the
+ * screen layout the rows are measured in and the printer's, so a full sheet never spills
+ * its footer onto a page of its own, while the rows still run close to the foot. */
+export const SHEET_BUDGET_PX = (259 * 96) / 25.4;
 
 /** Heights measured from a rendering of the document, in CSS px. */
 export interface SheetMetrics {
@@ -225,10 +226,11 @@ const STYLES = `
   /* Sized in pt, not px: a printer works in points, and the px sizes this used to carry
      came out around 7.5pt — far below the 10-11pt a document is normally set in. */
   body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 11pt; }
-  /* A4 leaves 269mm inside the margins, but browsers don't all measure it alike: Firefox
-     finds a little less, and a sheet that fills all 269mm spills its footer onto a page
-     of its own, leaving every other page blank. The slack keeps one sheet to one page. */
-  .sheet { display: flex; flex-direction: column; min-height: 255mm; break-after: page; }
+  /* A4 leaves 269mm inside the margins, but browsers don't all measure it alike, and a
+     sheet that fills all 269mm can spill its footer onto a page of its own, leaving every
+     other page blank. 6mm of slack keeps one sheet to one page, with the footer near the
+     bottom rather than floating above a band of empty paper. */
+  .sheet { display: flex; flex-direction: column; min-height: 263mm; break-after: page; }
   .sheet:last-of-type { break-after: auto; }
   .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #0f766e; padding-bottom: 8px; }
   .letterhead img { width: 46px; height: 46px; object-fit: contain; }
@@ -243,7 +245,7 @@ const STYLES = `
   .meta dd { margin: 0; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; font-size: 10pt; }
   table + h3 { margin-top: 12px; }
-  th, td { border: 1px solid #d1d5db; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 8px; line-height: 1.3; text-align: left; vertical-align: top; }
   /* Headings in normal case: capitals at 10pt made words like "Appointments" too wide to
      fit a six-column table across A4. */
   th { background: #f3f4f6; font-size: 10pt; }
@@ -252,8 +254,10 @@ const STYLES = `
   /* Short values (dates, numbers, statuses) stay on one line, and long unbroken ones
      (emails) may break, so the width goes to the columns that need it: names. */
   td.nowrap { white-space: nowrap; }
-  td.name, th.name { min-width: 30mm; }
-  td.breakable, th.breakable { min-width: 36mm; overflow-wrap: anywhere; }
+  /* Names get the room to stay on one line: "Eisen Drix Plantilla", not three lines. */
+  td.name, th.name { min-width: 34mm; }
+  /* Emails break before the "@" (see emailBreak), not mid-word. */
+  td.breakable, th.breakable { min-width: 40mm; overflow-wrap: break-word; }
   /* The clinic's alignment rules: numbers right, codes, dates and statuses centered. */
   td.al-r, th.al-r { text-align: right; }
   td.al-c, th.al-c { text-align: center; }
@@ -270,12 +274,24 @@ const STYLES = `
   html.measuring .sheet { min-height: 0; }
 `;
 
+/** A value whose times never split from their AM/PM ("11:00 AM", not "11:00" / "AM"),
+ * so a time range wraps only after its dash: "11:00 AM –" over "11:30 AM". */
+function keepTimes(value: string): string {
+  return esc(value).replace(/(\d) (AM|PM)\b/g, "$1&nbsp;$2").replace(/ – /g, "&nbsp;– ");
+}
+
+/** An email that may break before its "@" (allenestrella2715 / @gmail.com) rather than
+ * anywhere in the middle of a word. */
+function emailBreak(value: string): string {
+  return esc(value).replace("@", "<wbr>@");
+}
+
 /** How a column sits in the table, judged by its heading. */
 export function columnFit(column: string): "nowrap" | "name" | "breakable" | "" {
   if (/email/i.test(column)) return "breakable";
   if (/name|^patient$|^dentist$|prescribed by|archived by/i.test(column)) return "name";
   if (/^dates$/i.test(column)) return ""; // a range, with a note: it may take two lines
-  if (/date|^time$|contact|phone|^status$|registered|booked on|^age$|amount|price|^count$|\bid$|employee id|^account$/i.test(column)) return "nowrap";
+  if (/date|contact|phone|^status$|registered|booked on|requested|^age$|amount|price|^count$|\bid$|employee id|^account$/i.test(column)) return "nowrap";
   return "";
 }
 
@@ -327,7 +343,7 @@ export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk
     };
     const cls = (i: number) => classes(fits[i], aligns[i]);
     const body = rows.length
-      ? rows.map((r, n) => `<tr><td class="num">${start + n + 1}</td>${r.map((c, i) => `<td${cls(i)}>${esc(c)}</td>`).join("")}</tr>`).join("")
+      ? rows.map((r, n) => `<tr><td class="num">${start + n + 1}</td>${r.map((c, i) => `<td${cls(i)}>${fits[i] === "breakable" ? emailBreak(c) : keepTimes(c)}</td>`).join("")}</tr>`).join("")
       : `<tr><td class="empty" colspan="${table.columns.length + 1}">${esc(table.emptyText ?? "No records.")}</td></tr>`;
 
     const heading = table.heading

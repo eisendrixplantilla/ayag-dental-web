@@ -256,12 +256,14 @@ describe("columns left off paper", () => {
 describe("fitting a sheet and its columns", () => {
   it("leaves slack under a full A4 sheet, so a browser that measures the page smaller doesn't spill the footer onto a blank page", () => {
     const minHeight = Number(buildReportHtml(doc(1)).match(/\.sheet \{[^}]*min-height: (\d+)mm/)![1]);
-    expect(minHeight).toBeLessThanOrEqual(297 - 2 * 14 - 10);
+    expect(minHeight).toBeLessThanOrEqual(297 - 2 * 14 - 6); // 6mm of slack: no footer spills, and no band of empty paper
   });
 
   it("gives names room, keeps short values on one line, and lets emails break", () => {
     expect(["Patient Name", "Patient", "Dentist", "Full Name"].map(columnFit)).toEqual(["name", "name", "name", "name"]);
-    expect(["Appointment Date", "Time", "Contact Number", "Status", "Date Registered"].map(columnFit)).toEqual(Array(5).fill("nowrap"));
+    expect(["Appointment Date", "Booked On", "Contact Number", "Status", "Date Registered"].map(columnFit)).toEqual(Array(5).fill("nowrap"));
+    // A time range may take two lines, breaking at its dash, so names keep their width.
+    expect(columnFit("Time")).toBe("");
     expect(columnFit("Email Address")).toBe("breakable");
     expect(columnFit("Service")).toBe("");
   });
@@ -382,5 +384,16 @@ describe("what the print tour turned up", () => {
     });
     expect(html).toContain("<h3>Weekly Schedule</h3>");
     expect(html).toContain("<h3>Leave — 1</h3>");
+  });
+});
+
+describe("keeping a printed row readable", () => {
+  it("never splits a time from its AM/PM, and breaks an email before its @", () => {
+    const html = buildReportHtml({
+      ...doc(0),
+      tables: [{ columns: ["Time", "Email Address"], rows: [["11:00 AM – 11:30 AM", "allen@gmail.com"]] }],
+    });
+    expect(html).toContain("11:00&nbsp;AM&nbsp;– 11:30&nbsp;AM");
+    expect(html).toContain("allen<wbr>@gmail.com");
   });
 });
