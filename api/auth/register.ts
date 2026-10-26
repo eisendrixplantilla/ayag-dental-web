@@ -5,6 +5,7 @@ import { sendOtpEmail } from "../_lib/email.js";
 import { generateOtpCode, OTP_TTL_MS } from "../_lib/otp.js";
 import { isOtpFormatValid } from "../_lib/otp.js";
 import { signSession } from "../_lib/auth.js";
+import { assignCodes, ensureCodes } from "../_lib/codes.js";
 import { splitName, joinName } from "../_lib/name.js";
 
 async function verify(req: VercelRequest, res: VercelResponse) {
@@ -35,6 +36,7 @@ async function verify(req: VercelRequest, res: VercelResponse) {
   let name: string;
 
   if (role === "patient") {
+    await ensureCodes("patients");
     const inserted = await sql`
       INSERT INTO patients (email, password_hash, first_name, middle_name, last_name, birthdate, sex, address, contact_number, verified)
       VALUES (
@@ -46,6 +48,8 @@ async function verify(req: VercelRequest, res: VercelResponse) {
     `;
     userId = inserted[0].id;
     name = joinName(ticket.pending_first_name, ticket.pending_middle_name, ticket.pending_last_name);
+    // Their Patient ID; the account stands without it, and it's given on the next look if this fails.
+    await assignCodes("patients").catch((err) => console.error("Could not give the Patient ID", err));
   } else {
     const { firstName, lastName } = splitName(ticket.pending_name);
     const inserted = await sql`
@@ -55,6 +59,7 @@ async function verify(req: VercelRequest, res: VercelResponse) {
     `;
     userId = inserted[0].id;
     name = joinName(firstName, null, lastName);
+    await assignCodes("staff").catch((err) => console.error("Could not give the Employee ID", err));
   }
 
   await sql`DELETE FROM otp_codes WHERE email = ${normalizedEmail} AND purpose = 'register'`;

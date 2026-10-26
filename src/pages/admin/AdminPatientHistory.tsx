@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useReadableId } from "@/hooks/useReadableId";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { ArrowLeft, User, CalendarDays, FileText, Loader2, Printer } from "lucide-react";
-import { getPatient, type Patient } from "@/lib/api/patients";
+import { getPatient, getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { toast } from "sonner";
@@ -43,8 +44,23 @@ const recordRow = (r: DentalRecord) => [
   r.dentistName ?? "—",
 ];
 
+/** The link carries the Patient ID (PT-26100001); the page works from the patient's id. */
 export default function AdminPatientHistory() {
-  const { id } = useParams();
+  const navigate = useNavigate();
+  const { id, missing } = useReadableId(async (code) => (await getPatients()).find((p) => p.code === code)?.id);
+  if (missing) {
+    return (
+      <div className="py-20 text-center text-muted-foreground">
+        <p>No patient has that ID.</p>
+        <Button variant="link" onClick={() => navigate("/admin/patients")}>Back to Patients</Button>
+      </div>
+    );
+  }
+  if (!id) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  return <PatientHistory id={id} />;
+}
+
+function PatientHistory({ id }: { id: string }) {
   const navigate = useNavigate();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -182,23 +198,23 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...aptSort.headProps(0)} className={PIN_COL}>Date</SortableHead>
-                <SortableHead {...aptSort.headProps(1)}>Time</SortableHead>
+                <SortableHead {...aptSort.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
+                <SortableHead className={CODE_COL} {...aptSort.headProps(1)}>Time</SortableHead>
                 <SortableHead {...aptSort.headProps(2)}>Service</SortableHead>
                 <SortableHead {...aptSort.headProps(3)}>Dentist</SortableHead>
-                <SortableHead {...aptSort.headProps(4)}>Type</SortableHead>
-                <SortableHead {...aptSort.headProps(5)}>Status</SortableHead>
+                <SortableHead className={CODE_COL} {...aptSort.headProps(4)}>Type</SortableHead>
+                <SortableHead className={CODE_COL} {...aptSort.headProps(5)}>Status</SortableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {aptPages.paged.map(a => (
                 <TableRow key={a.id}>
-                  <TableCell className={PIN_COL}>{a.date}</TableCell>
-                  <TableCell>{toLabel(toMinutes(a.time))}</TableCell>
+                  <TableCell className={`${PIN_COL} ${CODE_COL}`}>{a.date}</TableCell>
+                  <TableCell className={CODE_COL}>{toLabel(toMinutes(a.time))}</TableCell>
                   <TableCell className={WRAP_CELL}>{a.service}</TableCell>
                   <TableCell className={WRAP_CELL}>{a.dentistName ?? "—"}</TableCell>
-                  <TableCell>{a.type === "walk-in" ? "Walk-in" : "Online"}</TableCell>
-                  <TableCell><Badge variant="outline" className={statusClass(a.status)}>{a.status}</Badge></TableCell>
+                  <TableCell className={CODE_COL}>{a.type === "walk-in" ? "Walk-in" : "Online"}</TableCell>
+                  <TableCell><Badge variant="outline" className={`${statusClass(a.status)} ${CODE_COL}`}>{a.status}</Badge></TableCell>
                 </TableRow>
               ))}
               {appointments.length === 0 && (
@@ -220,7 +236,7 @@ export default function AdminPatientHistory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...recordSort.headProps(0)} className={PIN_COL}>Date</SortableHead>
+                <SortableHead {...recordSort.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
                 <SortableHead {...recordSort.headProps(1)}>Procedures</SortableHead>
                 <SortableHead {...recordSort.headProps(2)}>Diagnosis</SortableHead>
                 <SortableHead {...recordSort.headProps(3)}>Dentist</SortableHead>
@@ -229,7 +245,7 @@ export default function AdminPatientHistory() {
             <TableBody>
               {recordPages.paged.map(r => (
                 <TableRow key={r.id}>
-                  <TableCell className={PIN_COL}>{r.date}</TableCell>
+                  <TableCell className={`${PIN_COL} ${CODE_COL}`}>{r.date}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.dentistName ?? "—"}</TableCell>

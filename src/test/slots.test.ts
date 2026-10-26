@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateAvailableSlots, type DentistScheduleData } from "@/lib/api/staff";
 import { formatDuration, totalServiceMinutes } from "@/lib/services";
 
@@ -92,5 +92,49 @@ describe("what each option says", () => {
   it("shows the start alone when no duration is given", () => {
     const [first] = generateAvailableSlots(schedule(), DATE, []);
     expect(first).toEqual({ value: "09:00", label: "9:00 AM" });
+  });
+});
+
+describe("booking a time today", () => {
+  afterEach(() => vi.useRealTimers());
+  // Monday, Jan 7 2030 at 10:05 AM in Manila (02:05 UTC).
+  const atFiveAfterTen = () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2030-01-07T02:05:00Z"));
+  };
+
+  it("offers any time still ahead when no lead time is asked for", () => {
+    atFiveAfterTen();
+    expect(starts(schedule(), DATE, [], 30)[0]).toBe("10:30");
+  });
+
+  it("keeps a patient's times at least an hour from now", () => {
+    atFiveAfterTen();
+    expect(starts(schedule(), DATE, [], 30, 60)[0]).toBe("11:30"); // 11:00 is only 55 minutes off
+  });
+
+  it("doesn't hold other days to it", () => {
+    atFiveAfterTen();
+    const tomorrow = new Date(2030, 0, 8);
+    expect(starts(schedule({ dayOfWeek: tomorrow.getDay() }), tomorrow, [], 30, 60)[0]).toBe("09:00");
+  });
+});
+
+describe("leave on the day", () => {
+  const away = (over: Partial<DentistScheduleData["unavailable"][number]> = {}) =>
+    ({ id: "u1", date: "2030-01-07", reason: "Personal", remarks: null, ...over });
+
+  it("closes the whole day when it's for the whole day", () => {
+    expect(starts({ ...schedule(), unavailable: [away()] }, DATE, [], 30)).toEqual([]);
+  });
+
+  it("closes only its hours when it's for part of the day", () => {
+    const free = starts({ ...schedule(), unavailable: [away({ startTime: "14:00", endTime: "16:00" })] }, DATE, [], 30);
+    expect(free).toContain("13:30");
+    expect(free).not.toContain("14:00");
+    expect(free).not.toContain("15:30");
+    expect(free).toContain("16:00");
+    // A longer visit can't run into the leave either.
+    expect(starts({ ...schedule(), unavailable: [away({ startTime: "14:00", endTime: "16:00" })] }, DATE, [], 60)).not.toContain("13:30");
   });
 });

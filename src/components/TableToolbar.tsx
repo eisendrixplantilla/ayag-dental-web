@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { ALL_FIELDS, EMPTY_FILTER, filterIsActive, isDateColumn, type ReportFilter } from "@/lib/reportFilter";
+import { DatePicker } from "@/components/DatePicker";
 
 /** The filter bar above a table, and the one the generated reports use.
  *
@@ -82,22 +83,22 @@ export default function TableToolbar({
           <div className="w-full sm:w-auto">
             <Label className="text-xs text-muted-foreground">{fieldName} between</Label>
             <div className="flex items-center gap-2">
-              <Input
-                type="date"
+              <DatePicker
                 aria-label="From date"
                 className="sm:w-40"
+                placeholder="From"
                 max={filter.to || undefined}
                 value={filter.from}
-                onChange={(e) => setRange({ from: e.target.value })}
+                onChange={(v) => setRange({ from: v })}
               />
               <span className="text-sm text-muted-foreground shrink-0">to</span>
-              <Input
-                type="date"
+              <DatePicker
                 aria-label="To date"
                 className="sm:w-40"
+                placeholder="To"
                 min={filter.from || undefined}
                 value={filter.to}
-                onChange={(e) => setRange({ to: e.target.value })}
+                onChange={(v) => setRange({ to: v })}
               />
             </div>
           </div>

@@ -4,8 +4,10 @@ import { getSessionFromRequest } from "./_lib/auth.js";
 import { sendAppointmentEmail } from "./_lib/email.js";
 import { displayService } from "./_lib/services.js";
 import { joinName } from "./_lib/name.js";
-import { manilaDateStr } from "./_lib/date.js";
+import { manilaDateStr, manilaNowMinutes } from "./_lib/date.js";
 import { MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink } from "./_lib/guestMatch.js";
+import { notOffered, outsideServiceHours, overLimit, servicesOf } from "./_lib/bookingLimits.js";
+import { assignCodes, ensureCodes } from "./_lib/codes.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
@@ -15,6 +17,16 @@ const HOLDING = ["pending", "confirmed", "rescheduled"];
 const APPROVED = ["confirmed", "rescheduled"];
 
 const SLOT_TAKEN = "That time slot has already been taken. Please choose another time.";
+
+/** How far ahead of now a patient has to book a time today, so they can get to the
+ * clinic. Matches BOOKING_LEAD_MINUTES on the booking pages. Staff aren't held to it. */
+const LEAD_MINUTES = 60;
+const TOO_SOON = "Please choose a time at least 1 hour from now, so you have time to get to the clinic.";
+/** Whether a time today is within the lead time from now. Other days are left alone. */
+const tooSoon = (date: string, time: string) =>
+  date === manilaDateStr(new Date()) && toMinutes(time) < manilaNowMinutes() + LEAD_MINUTES;
+
+const SAME_DAY = "Please choose a different day. A reschedule has to move your appointment to another date.";
 
 const isoDate = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
 
@@ -81,6 +93,8 @@ function ensureGuestColumns() {
 function mapRow(r: any) {
   return {
     id: r.id,
+    /** The appointment's reference: APT-261000001 (see codes.ts). */
+    reference: r.reference ?? null,
     patientId: r.patient_id,
     patientName: r.patient_name,
     contact: r.contact,
@@ -104,18 +118,72 @@ function mapRow(r: any) {
   };
 }
 
+/** Why a request was closed by the clock rather than by staff. */
+export const EXPIRED_REASON = "Expired: not approved before the appointment time.";
+
+/**
+ * A request still pending when its start time comes is closed: it can no longer be
+ * approved for a moment already gone, and it stops holding the dentist's time. There's no
+ * scheduled job, so this runs as appointments are looked at, before anything is answered.
+ */
+async function expireOverduePending() {
+  const today = manilaDateStr(new Date());
+  const now = toTime(manilaNowMinutes());
+  await sql`
+    UPDATE appointments /* expire-pending */
+    SET status = 'rejected', reason = ${EXPIRED_REASON}, updated_at = now()
+    WHERE status = 'pending' AND (date < ${today}::date OR (date = ${today}::date AND time <= ${now}))`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = getSessionFromRequest(req);
   if (!session) return res.status(401).json({ error: "Unauthorized" });
 
+  // Never in the way of the request itself: at worst an overdue one waits for the next.
+  await expireOverduePending().catch((err) => console.error("Expiring overdue requests failed:", err));
+
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
 
   if (req.method === "GET") {
+    // Bookings from before references get theirs before any is shown.
+    await ensureCodes("appointments");
+    const q = (k: string) => (typeof req.query[k] === "string" && req.query[k] ? String(req.query[k]) : null);
+
+    // What a booking calendar needs to show how full each day of a month is: per date,
+    // the spans already taken and how many of each service are booked. Like bookedSlots,
+    // never a patient's detail, so any signed-in user may ask.
+    if (req.query.availability) {
+      const from = q("from");
+      const to = q("to");
+      const dentistId = q("dentistId");
+      const dentistName = q("dentistName");
+      const excludeId = q("excludeId");
+      const DAY = /^\d{4}-\d{2}-\d{2}$/;
+      if (!from || !to || !DAY.test(from) || !DAY.test(to) || (!dentistId && !dentistName)) {
+        return res.status(400).json({ error: "from, to and dentistId or dentistName are required" });
+      }
+      if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 62) {
+        return res.status(400).json({ error: "Ask for at most two months at a time" });
+      }
+      const rows = await sql`
+        SELECT date, time, end_time, service /* month-availability */ FROM appointments
+        WHERE date BETWEEN ${from} AND ${to}
+          AND status = ANY(${HOLDING}::text[])
+          AND (dentist_id = ${dentistId} OR dentist_name = ${dentistName})
+          AND (${excludeId}::uuid IS NULL OR id <> ${excludeId}::uuid)`;
+      const days: Record<string, { slots: { time: string; endTime: string | null }[]; services: Record<string, number> }> = {};
+      for (const r of rows as { date: unknown; time: string; end_time: string | null; service: string }[]) {
+        const day = (days[isoDate(r.date)] ??= { slots: [], services: {} });
+        day.slots.push({ time: r.time, endTime: r.end_time });
+        for (const name of new Set(servicesOf(r.service))) day.services[name] = (day.services[name] ?? 0) + 1;
+      }
+      return res.status(200).json({ days });
+    }
+
     // Patients only ever see their own appointments, so they can't tell from that list
     // which times someone else already holds. This returns just the taken times — no
     // names or details — so any signed-in user can see what's free.
     if (req.query.bookedSlots) {
-      const q = (k: string) => (typeof req.query[k] === "string" && req.query[k] ? String(req.query[k]) : null);
       const date = q("date");
       const dentistId = q("dentistId");
       const dentistName = q("dentistName");
@@ -176,18 +244,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const patientId = session.role === "patient" ? session.sub : (req.body?.patientId ?? null);
     const status = type === "walk-in" ? "confirmed" : "pending";
     const createdBy = session.role === "patient" ? "patient" : session.role;
+    if (session.role === "patient" && tooSoon(date, time)) return res.status(409).json({ error: TOO_SOON });
     // The booking pages only offer free slots, but two people can pick the same one at
     // once, and the API can be called directly — so the server has the final word.
     if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null })) {
       return res.status(409).json({ error: SLOT_TAKEN });
     }
+    // The dentist has to offer the service, and takes only so many of some in a day.
+    const unoffered = await notOffered({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, service });
+    if (unoffered) return res.status(409).json({ error: unoffered });
+    const full = await overLimit({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, service });
+    if (full) return res.status(409).json({ error: full });
+    // Some services are kept for certain days or hours (e.g. Veneers only Mon & Wed mornings).
+    const offHours = await outsideServiceHours({
+      dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null, service,
+    });
+    if (offHours) return res.status(409).json({ error: offHours });
     await ensureGuestColumns();
+    await ensureCodes("appointments");
     const inserted = await sql`
       INSERT INTO appointments (patient_id, patient_name, contact, email, age, gender, dentist_id, dentist_name, service, date, time, end_time, type, status, reason, created_by)
       VALUES (${patientId}, ${patientName}, ${contact ?? null}, ${email ?? null}, ${age ?? null}, ${gender ?? null}, ${dentistId ?? null}, ${dentistName ?? null}, ${service}, ${date}, ${time}, ${endTime ?? null}, ${type}, ${status}, ${reason ?? null}, ${createdBy})
       RETURNING *
     `;
-    return res.status(201).json({ appointment: mapRow(inserted[0]) });
+    // Its reference, numbered after the month's bookings so far; the booking stands without it if this fails.
+    const codes = await assignCodes("appointments").catch((err) => {
+      console.error("Could not give the appointment its reference", err);
+      return new Map<string, string>();
+    });
+    return res.status(201).json({ appointment: mapRow({ ...inserted[0], reference: codes.get(inserted[0].id) ?? null }) });
   }
 
   // A guest who walked in without an account has since made one: staff move that guest's
@@ -288,6 +373,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? toTime(toMinutes(time) + (toMinutes(existing.end_time) - toMinutes(existing.time)))
         : null);
 
+    // A request whose time came and went unapproved is closed for good: the patient books again.
+    if (status === "confirmed" && existing.status === "rejected" && existing.reason === EXPIRED_REASON) {
+      return res.status(409).json({
+        error: "This request's time passed before it was approved, so it can't be approved now. Ask the patient to book again.",
+      });
+    }
+
     // Completing means the consultation happened, which must not happen before the
     // clinic has approved the booking.
     if (status === "completed" && !APPROVED.includes(existing.status)) {
@@ -304,6 +396,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const moving = next.date !== isoDate(existing.date) || next.time !== existing.time
       || next.dentistId !== existing.dentist_id || next.dentistName !== existing.dentist_name;
     const approving = next.status === "confirmed" && existing.status === "pending";
+    // A patient moving their appointment has to move it to another day.
+    if (patientRescheduling && next.date === isoDate(existing.date)) {
+      return res.status(409).json({ error: SAME_DAY });
+    }
+    if (session.role === "patient" && moving && tooSoon(next.date, next.time)) {
+      return res.status(409).json({ error: TOO_SOON });
+    }
     if (HOLDING.includes(next.status) && (moving || approving)) {
       const taken = await slotTaken({
         dentistId: next.dentistId, dentistName: next.dentistName, date: next.date, time: next.time,
@@ -317,6 +416,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(409).json({
           error: moving ? SLOT_TAKEN : "Another approved appointment already holds this time slot. Reject this request or ask the patient to reschedule.",
         });
+      }
+      // Moving onto another day (or dentist) needs room for its procedures there too.
+      // An approval leaves the day's count as it was: a pending request already counts.
+      const changesDay = next.date !== isoDate(existing.date)
+        || next.dentistId !== existing.dentist_id || next.dentistName !== existing.dentist_name;
+      // Handing it to another dentist: they have to offer what it's for.
+      if (next.dentistId !== existing.dentist_id || next.dentistName !== existing.dentist_name) {
+        const unoffered = await notOffered({ dentistId: next.dentistId, dentistName: next.dentistName, service: existing.service });
+        if (unoffered) return res.status(409).json({ error: unoffered });
+      }
+      if (changesDay) {
+        const full = await overLimit({
+          dentistId: next.dentistId, dentistName: next.dentistName, date: next.date,
+          service: existing.service, excludeId: id,
+        });
+        if (full) return res.status(409).json({ error: full });
+      }
+      if (moving) {
+        const offHours = await outsideServiceHours({
+          dentistId: next.dentistId, dentistName: next.dentistName, date: next.date, time: next.time,
+          endTime: nextEndTime ?? existing.end_time ?? null, service: existing.service,
+        });
+        if (offHours) return res.status(409).json({ error: offHours });
       }
     }
 

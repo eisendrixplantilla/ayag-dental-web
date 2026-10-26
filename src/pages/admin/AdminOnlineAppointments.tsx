@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ALL_FIELDS, EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import { IconAction, RowActions } from "@/components/RowActions";
 
 const COLUMNS = [
   "Reference", "Patient Name", "Service", "Assigned Dentist", "Date", "Time", "Booked On", "Type", "Status",
@@ -86,7 +87,7 @@ export default function AdminOnlineAppointments() {
   // filter, the count and the printed document alike.
   const rows = useMemo(
     () => ordered.map(a => [
-      appointmentRef(a.id),
+      appointmentRef(a),
       a.patientName,
       a.service,
       a.dentistName ?? "—",
@@ -103,7 +104,7 @@ export default function AdminOnlineAppointments() {
       // A pasted full appointment id finds its row too, though only the short
       // reference is on screen.
       matchesReportFilter(row, filter) ||
-      (filter.field === ALL_FIELDS && !!filter.value.trim() && matchesRef(apt.id, filter.value))),
+      (filter.field === ALL_FIELDS && !!filter.value.trim() && matchesRef(apt, filter.value))),
     [ordered, rows, filter],
   );
   const { sorted: shown, sortKey, headProps } = useTableSort(matched, s => s.row);
@@ -219,16 +220,16 @@ export default function AdminOnlineAppointments() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)} className="hidden lg:table-cell">Reference</SortableHead>
+                <SortableHead {...headProps(0)} className={`hidden lg:table-cell ${CODE_COL}`}>Reference</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Patient Name</SortableHead>
                 <SortableHead {...headProps(2)} className="hidden sm:table-cell">Service</SortableHead>
                 <SortableHead {...headProps(3)} className="hidden md:table-cell">Assigned Dentist</SortableHead>
-                <SortableHead {...headProps(4)}>Date</SortableHead>
-                <SortableHead {...headProps(5)}>Time</SortableHead>
-                <SortableHead {...headProps(6)} className="hidden lg:table-cell">Booked On</SortableHead>
-                <SortableHead {...headProps(7)} className="hidden md:table-cell">Type</SortableHead>
-                <SortableHead {...headProps(8)}>Status</SortableHead>
-                <TableHead className="text-right print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Date</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(5)}>Time</SortableHead>
+                <SortableHead {...headProps(6)} className={`hidden lg:table-cell ${CODE_COL}`}>Booked On</SortableHead>
+                <SortableHead {...headProps(7)} className={`hidden md:table-cell ${CODE_COL}`}>Type</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(8)}>Status</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -238,28 +239,25 @@ export default function AdminOnlineAppointments() {
                   ref={registerRow(apt.id)}
                   className={highlightedKey === apt.id ? HIGHLIGHT_ROW_CLASS : undefined}
                 >
-                  <TableCell className="hidden lg:table-cell font-mono text-xs whitespace-nowrap">{appointmentRef(apt.id)}</TableCell>
+                  <TableCell className={`hidden lg:table-cell font-mono text-xs whitespace-nowrap ${CODE_COL}`}>{appointmentRef(apt)}</TableCell>
                   <TableCell className={`font-medium whitespace-normal break-words ${PIN_COL}`}>{apt.patientName}</TableCell>
                   <TableCell className="hidden sm:table-cell whitespace-normal break-words">{apt.service}</TableCell>
                   <TableCell className="hidden md:table-cell whitespace-normal break-words">{apt.dentistName}</TableCell>
-                  <TableCell className="whitespace-nowrap">{apt.date}</TableCell>
-                  <TableCell className="whitespace-normal">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
-                  <TableCell className="hidden lg:table-cell whitespace-normal text-xs text-muted-foreground">{formatManilaStamp(apt.createdAt)}</TableCell>
-                  <TableCell className="hidden md:table-cell"><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className={`whitespace-nowrap ${CODE_COL}`}>{apt.date}</TableCell>
+                  <TableCell className={`whitespace-normal ${CODE_COL}`}>{formatTimeRange(apt.time, apt.endTime)}</TableCell>
+                  <TableCell className={`hidden lg:table-cell whitespace-normal text-xs text-muted-foreground ${CODE_COL}`}>{formatManilaStamp(apt.createdAt)}</TableCell>
+                  <TableCell className={`hidden md:table-cell ${CODE_COL}`}><Badge variant="secondary">{apt.type === "walk-in" ? "Walk-in" : "Online"}</Badge></TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={`whitespace-normal ${statusColors[apt.status]}`}>
                       {apt.status === "pending" && apt.rescheduleCount > 0 ? "reschedule request" : apt.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="print:hidden text-right">
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
                     {/* One way in: everything about an appointment, including approving or
                         rejecting it, lives behind View. */}
-                    <Button size="sm" variant="outline" className="hidden lg:inline-flex" onClick={() => openDetails(apt)}>
-                      <Eye className="w-4 h-4 mr-1" /> View
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 lg:hidden" aria-label="View details" title="View details" onClick={() => openDetails(apt)}>
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                    <RowActions>
+                      <IconAction label="View details" icon={Eye} onClick={() => openDetails(apt)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -288,7 +286,7 @@ export default function AdminOnlineAppointments() {
           </DialogHeader>
           {selectedLive && (
             <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-1.5 text-sm">
-              <p><span className="font-semibold text-foreground">Reference:</span> <span className="font-mono">{appointmentRef(selectedLive.id)}</span></p>
+              <p><span className="font-semibold text-foreground">Reference:</span> <span className="font-mono">{appointmentRef(selectedLive)}</span></p>
               <p><span className="font-semibold text-foreground">Patient Name:</span> {selectedLive.patientName}</p>
               <p><span className="font-semibold text-foreground">Contact Number:</span> {selectedLive.contact}</p>
               <p><span className="font-semibold text-foreground">Email Address:</span> {selectedLive.email}</p>

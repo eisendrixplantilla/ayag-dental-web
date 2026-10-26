@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { getLetterhead, type ClinicInfo } from "@/lib/api/settings";
 import { describeClinicHours } from "@/lib/clinicHours";
+import { getDentistProfiles, type DentistProfile } from "@/lib/api/booking";
+import { describeServiceHours, describeWorkingDays } from "@/lib/workingDays";
+import DentistAvatar from "@/components/DentistAvatar";
 
 const services = [
   { name: "Orthodontics (Braces)", icon: Smile },
@@ -43,6 +46,15 @@ export default function Landing() {
   // are simply left out rather than showing details that may be wrong.
   const [clinic, setClinic] = useState<{ info: ClinicInfo | null; hours: string[] } | null>(null);
   const [clinicFailed, setClinicFailed] = useState(false);
+  // The dentists and what each offers. The section only appears once there are some.
+  const [dentists, setDentists] = useState<DentistProfile[]>([]);
+  useEffect(() => {
+    let live = true;
+    getDentistProfiles()
+      .then((d) => { if (live) setDentists(Array.isArray(d) ? d : []); })
+      .catch(() => {/* the section just doesn't show */});
+    return () => { live = false; };
+  }, []);
   useEffect(() => {
     let live = true;
     getLetterhead()
@@ -70,6 +82,7 @@ export default function Landing() {
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#services" className="hover:text-foreground transition-colors">Services</a>
             <a href="#about" className="hover:text-foreground transition-colors">About</a>
+            {dentists.length > 0 && <a href="#dentists" className="hover:text-foreground transition-colors">Dentists</a>}
             <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
             <a href="#contact" className="hover:text-foreground transition-colors">Contact</a>
           </nav>
@@ -87,6 +100,7 @@ export default function Landing() {
           <div className="max-w-7xl mx-auto px-4 h-10 flex items-center justify-between text-sm text-muted-foreground">
             <a href="#services" className="hover:text-foreground transition-colors">Services</a>
             <a href="#about" className="hover:text-foreground transition-colors">About</a>
+            {dentists.length > 0 && <a href="#dentists" className="hover:text-foreground transition-colors">Dentists</a>}
             <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
             <a href="#contact" className="hover:text-foreground transition-colors">Contact</a>
           </div>
@@ -173,6 +187,57 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Our dentists: what each offers and when they work, so a visitor can pick before booking. */}
+      {dentists.length > 0 && (
+        <section id="dentists" className="scroll-mt-[6.5rem] md:scroll-mt-16 py-20">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold font-heading text-foreground">Our Dentists</h2>
+              <p className="mt-3 text-muted-foreground">See what each dentist offers and when they're in, then book with the one you prefer.</p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {dentists.map((d, i) => (
+                <motion.div key={d.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}>
+                  <Card className="shadow-card h-full">
+                    <CardContent className="p-6 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <DentistAvatar d={d} className="w-14 h-14 text-base" />
+                        <div className="min-w-0">
+                          <h3 className="font-heading font-semibold text-lg text-foreground truncate">{d.name}</h3>
+                          <p className="text-sm text-muted-foreground">Dentist</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(d.services ?? ["All services"]).map((sv) => (
+                          <span key={sv} className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-xs text-foreground">{sv}</span>
+                        ))}
+                      </div>
+                      {d.days.length > 0 && (
+                        <div className="space-y-1 text-sm text-muted-foreground">
+                          {describeWorkingDays(d.days).map((line) => (
+                            <p key={line} className="flex items-start gap-2"><Clock className="w-4 h-4 mt-0.5 shrink-0 text-primary" />{line}</p>
+                          ))}
+                          {(d.hours ?? []).filter((h) => !d.services || d.services.includes(h.service)).map((h) => (
+                            <p key={h.service} className="pl-6 text-xs">{h.service}: {describeServiceHours(h)}</p>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+            <div className="mt-10 text-center">
+              <Link to="/register">
+                <Button size="lg" className="gradient-primary text-primary-foreground">
+                  <CalendarPlus className="w-4 h-4 mr-2" /> Book with your dentist
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* About */}
       <section id="about" className="scroll-mt-[6.5rem] md:scroll-mt-16 py-20 bg-muted/30">

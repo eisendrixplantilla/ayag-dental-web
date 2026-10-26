@@ -10,6 +10,7 @@
  * thing to show (a patient's appointments and their dental records) passes `tables`;
  * a plain list passes `columns`/`rows`.
  */
+import { columnKind } from "@/lib/tableClass";
 
 /** Records on one sheet when the real rows can't be measured (no layout to measure in,
  * e.g. under test). Sized for the worst case: the last sheet, with the signature block
@@ -251,6 +252,9 @@ const STYLES = `
   td.nowrap { white-space: nowrap; }
   td.name, th.name { min-width: 30mm; }
   td.breakable, th.breakable { min-width: 36mm; overflow-wrap: anywhere; }
+  /* The clinic's alignment rules: numbers right, codes, dates and statuses centered. */
+  td.al-r, th.al-r { text-align: right; }
+  td.al-c, th.al-c { text-align: center; }
   .empty { text-align: center; color: #6b7280; padding: 20px; font-style: italic; }
   .sign { margin-top: 18px; }
   .sign .line { border-bottom: 1px solid #1f2937; width: 220px; height: 24px; }
@@ -313,7 +317,12 @@ export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk
 
   const chunkHtml = ({ table, rows, start, continued }: TableChunk) => {
     const fits = table.columns.map(columnFit);
-    const cls = (i: number) => (fits[i] ? ` class="${fits[i]}"` : "");
+    const aligns = table.columns.map((c) => ({ number: "al-r", code: "al-c", text: "" })[columnKind(c)]);
+    const classes = (...names: (string | undefined)[]) => {
+      const list = names.filter(Boolean).join(" ");
+      return list ? ` class="${list}"` : "";
+    };
+    const cls = (i: number) => classes(fits[i], aligns[i]);
     const body = rows.length
       ? rows.map((r, n) => `<tr><td class="num">${start + n + 1}</td>${r.map((c, i) => `<td${cls(i)}>${esc(c)}</td>`).join("")}</tr>`).join("")
       : `<tr><td class="empty" colspan="${table.columns.length + 1}">${esc(table.emptyText ?? "No records.")}</td></tr>`;
@@ -324,7 +333,7 @@ export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk
       : "";
 
     return `${heading}<table>
-      <thead><tr><th class="num">#</th>${table.columns.map((c, i) => `<th${fits[i] === "nowrap" ? "" : cls(i)}>${esc(c)}</th>`).join("")}</tr></thead>
+      <thead><tr><th class="num">#</th>${table.columns.map((c, i) => `<th${fits[i] === "nowrap" ? classes(aligns[i]) : cls(i)}>${esc(c)}</th>`).join("")}</tr></thead>
       <tbody>${body}</tbody>
     </table>`;
   };

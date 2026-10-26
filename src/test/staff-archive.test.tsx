@@ -65,6 +65,9 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
+// The row's other actions sit behind ▾; a plain menu stands in for Radix's in jsdom.
+vi.mock("@/components/ui/dropdown-menu", () => import("./plainDropdown"));
+
 import SuperAdminStaff from "@/pages/superadmin/SuperAdminStaff";
 import SuperAdminArchives from "@/pages/superadmin/SuperAdminArchives";
 import { archiveStaff } from "@/lib/api/staff";
@@ -100,7 +103,9 @@ beforeEach(() => {
 
 const openArchiveDialog = async () => {
   render(<MemoryRouter><SuperAdminStaff /></MemoryRouter>);
-  fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+  // Archive is in the row's ▾ menu, beside Edit (and Schedule, for a dentist).
+  fireEvent.click(await screen.findByRole("button", { name: "More options" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /Archive/ }));
   await screen.findByText("Archive Staff Account");
 };
 const reasonBox = () => screen.getByLabelText("Reason for archiving");
@@ -140,7 +145,8 @@ describe("archiving an admin or dentist asks why", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     await waitFor(() => expect(screen.queryByText("Archive Staff Account")).toBeNull());
-    fireEvent.click(screen.getAllByRole("button", { name: "Archive" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "More options" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Archive/ }));
     await screen.findByText("Archive Staff Account");
     expect(reasonBox()).toHaveValue("");
     expect(confirmButton()).toBeDisabled();

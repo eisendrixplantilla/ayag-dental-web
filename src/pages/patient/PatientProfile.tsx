@@ -14,6 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { manilaTodayDateStr } from "@/lib/formatDate";
 import { toast } from "sonner";
 import { z } from "zod";
+import MobileInput from "@/components/MobileInput";
+import { PasswordLengthCheck, PasswordMatchCheck } from "@/components/PasswordChecks";
+import { passwordsReady } from "@/lib/inputRules";
+import { formatMobile, PH_MOBILE } from "@/lib/inputRules";
 import {
   User as UserIcon,
   Camera,
@@ -34,6 +38,10 @@ import {
   BadgeCheck,
   Pencil,
 } from "lucide-react";
+import { DatePicker } from "@/components/DatePicker";
+
+/** The server's minimum for changing a password. */
+const MIN_PASSWORD = 8;
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 /** Radix Select can't hold an empty value, so "I don't know" needs a stand-in that the
@@ -44,14 +52,14 @@ const profileSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^\+?[\d\s-]{7,15}$/, "Enter a valid contact number"),
+    .regex(PH_MOBILE, "Enter an 11-digit mobile number starting with 09"),
   address: z.string().trim().min(1, "Address is required"),
 });
 
 const passwordSchema = z
   .object({
     current: z.string().min(1, "Enter your current password"),
-    next: z.string().min(8, "New password must be at least 8 characters"),
+    next: z.string().min(MIN_PASSWORD, `New password must be at least ${MIN_PASSWORD} characters`),
     confirm: z.string(),
   })
   .refine((v) => v.next === v.confirm, {
@@ -87,7 +95,7 @@ export default function PatientProfile() {
     getPatient(user.id)
       .then((p) => {
         setRecord(p);
-        setPhone(p.phone ?? "");
+        setPhone(formatMobile(p.phone ?? ""));
         setAddress(p.address ?? "");
         setPhoto(p.photoUrl ?? null);
       })
@@ -270,7 +278,7 @@ export default function PatientProfile() {
                   <div>
                     <p className="text-xs text-muted-foreground">Patient ID</p>
                     <p className="font-medium text-foreground">
-                      {record ? patientRef(record.id) : "—"}
+                      {record ? patientRef(record) : user?.patientCode ?? "—"}
                     </p>
                   </div>
                 </div>
@@ -313,12 +321,12 @@ export default function PatientProfile() {
                   <Label htmlFor="birthdate" className="flex items-center gap-1">
                     <Cake className="w-3.5 h-3.5" /> Date of Birth
                   </Label>
-                  <Input
+                  <DatePicker
                     id="birthdate"
-                    type="date"
                     value={details.birthdate}
                     max={manilaTodayDateStr()}
-                    onChange={(e) => setDetails({ ...details, birthdate: e.target.value })}
+                    placeholder="Pick your birthday"
+                    onChange={(v) => setDetails({ ...details, birthdate: v })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -416,10 +424,10 @@ export default function PatientProfile() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Contact Number</Label>
-              <Input
+              <MobileInput
                 id="phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onValueChange={setPhone}
                 disabled={loadingProfile}
                 placeholder={loadingProfile ? "Loading..." : undefined}
               />
@@ -467,6 +475,7 @@ export default function PatientProfile() {
                 value={pw.next}
                 onChange={(e) => setPw({ ...pw, next: e.target.value })}
               />
+              <PasswordLengthCheck password={pw.next} minLength={MIN_PASSWORD} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-pw">Confirm New Password</Label>
@@ -476,12 +485,13 @@ export default function PatientProfile() {
                 value={pw.confirm}
                 onChange={(e) => setPw({ ...pw, confirm: e.target.value })}
               />
+              <PasswordMatchCheck password={pw.next} confirm={pw.confirm} />
             </div>
             <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
               <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} className="accent-primary" />
               {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />} Show passwords
             </label>
-            <Button onClick={submitPasswordChange} variant="secondary" className="w-full" disabled={changingPw}>
+            <Button onClick={submitPasswordChange} variant="secondary" className="w-full" disabled={changingPw || !pw.current || !passwordsReady(pw.next, pw.confirm, MIN_PASSWORD)}>
               {changingPw ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />} Update Password
             </Button>
           </CardContent>

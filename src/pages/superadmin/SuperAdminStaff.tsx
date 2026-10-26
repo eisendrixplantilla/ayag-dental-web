@@ -7,19 +7,15 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Archive, Edit, Eye, Loader2, CalendarClock, Trash2, Printer } from "lucide-react";
+import { Plus, Archive, Edit, Eye, Loader2, CalendarClock, Printer } from "lucide-react";
 import { toast } from "sonner";
-import {
-  getStaff, updateStaff, archiveStaff, type StaffMember,
-  getDentistSchedule, saveDentistScheduleDays, addDentistUnavailable, removeDentistUnavailable,
-  generateAvailableSlots, DAY_NAMES, type ScheduleDay, type UnavailableDate,
-} from "@/lib/api/staff";
+import { getStaff, updateStaff, archiveStaff, type StaffMember } from "@/lib/api/staff";
+import { getLeave } from "@/lib/api/leave";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -28,25 +24,15 @@ import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
+import MobileInput from "@/components/MobileInput";
+import { PasswordLengthCheck } from "@/components/PasswordChecks";
+import { cleanName, formatMobile, formatName, PH_MOBILE } from "@/lib/inputRules";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import { IconAction, MoreActions, RowActions } from "@/components/RowActions";
 
 const COLUMNS = ["Employee ID", "Full Name", "Email Address", "Contact Number", "Role", "Account Status"];
 
 const roleLabel = (r: string) => (r === "dentist" ? "Dentist" : "Admin");
-
-interface DayConfig {
-  enabled: boolean;
-  start: string;
-  end: string;
-  lunchStart: string;
-  lunchEnd: string;
-  duration: number;
-  maxPatients: number;
-}
-
-const emptyDayConfig = (): DayConfig => ({
-  enabled: false, start: "09:00", end: "17:00", lunchStart: "12:00", lunchEnd: "13:00", duration: 30, maxPatients: 20,
-});
 
 export default function SuperAdminStaff() {
   const navigate = useNavigate();
@@ -63,14 +49,6 @@ export default function SuperAdminStaff() {
   const [archiveReason, setArchiveReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [scheduleFor, setScheduleFor] = useState<StaffMember | null>(null);
-  const [scheduleLoading, setScheduleLoading] = useState(false);
-  const [savingSchedule, setSavingSchedule] = useState(false);
-  const [dayConfigs, setDayConfigs] = useState<DayConfig[]>(Array.from({ length: 7 }, emptyDayConfig));
-  const [unavailableList, setUnavailableList] = useState<UnavailableDate[]>([]);
-  const [leaveDate, setLeaveDate] = useState("");
-  const [leaveReason, setLeaveReason] = useState("");
-
   const load = () => {
     setLoading(true);
     getStaff()
@@ -80,6 +58,14 @@ export default function SuperAdminStaff() {
   };
 
   useEffect(load, []);
+
+  // Dentists waiting on a leave decision, so the superadmin sees whose schedule to open.
+  const [onLeaveRequest, setOnLeaveRequest] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    getLeave()
+      .then((l) => setOnLeaveRequest(new Set((Array.isArray(l) ? l : []).filter((x) => x.status === "pending").map((x) => x.dentistId))))
+      .catch(() => {});
+  }, []);
 
   const rows = useMemo(
     () => staff.map(s => [
@@ -108,21 +94,29 @@ export default function SuperAdminStaff() {
 
   const openEdit = (s: StaffMember) => {
     setEditing(s);
-    setEditForm({ name: s.name, email: s.email, contact: s.contact ?? "", password: "", status: s.status });
+    setEditForm({ name: s.name, email: s.email, contact: formatMobile(s.contact ?? ""), password: "", status: s.status });
   };
 
   const saveEdit = async () => {
     if (!editing) return;
-    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.contact.trim()) {
+    if (!cleanName(editForm.name) || !editForm.email.trim() || !editForm.contact.trim()) {
       toast.error("Full name, email, and contact number are required");
+      return;
+    }
+    if (!PH_MOBILE.test(editForm.contact)) {
+      toast.error("Enter an 11-digit mobile number starting with 09");
+      return;
+    }
+    if (editForm.password && editForm.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
     setSaving(true);
     try {
       await updateStaff(editing.id, {
-        name: editForm.name.trim(),
+        name: cleanName(editForm.name),
         email: editForm.email.trim(),
-        contact: editForm.contact.trim(),
+        contact: editForm.contact,
         password: editForm.password.trim() || undefined,
         status: editForm.status,
       });
@@ -158,105 +152,6 @@ export default function SuperAdminStaff() {
       toast.error(err instanceof Error ? err.message : "Failed to archive staff account");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const openSchedule = (s: StaffMember) => {
-    setScheduleFor(s);
-    setScheduleLoading(true);
-    setLeaveDate("");
-    setLeaveReason("");
-    getDentistSchedule(s.id)
-      .then((data) => {
-        const configs = Array.from({ length: 7 }, emptyDayConfig);
-        for (const d of data.days) {
-          configs[d.dayOfWeek] = {
-            enabled: true,
-            start: d.start,
-            end: d.end,
-            lunchStart: d.lunchStart ?? "",
-            lunchEnd: d.lunchEnd ?? "",
-            duration: d.duration,
-            maxPatients: d.maxPatients,
-          };
-        }
-        setDayConfigs(configs);
-        setUnavailableList(data.unavailable);
-      })
-      .catch(() => toast.error("Failed to load schedule"))
-      .finally(() => setScheduleLoading(false));
-  };
-
-  const updateDay = (i: number, patch: Partial<DayConfig>) => {
-    setDayConfigs((cfgs) => cfgs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
-  };
-
-  const previewDay = useMemo(() => dayConfigs.findIndex((c) => c.enabled), [dayConfigs]);
-  const previewSlots = useMemo(() => {
-    if (previewDay === -1) return [];
-    const cfg = dayConfigs[previewDay];
-    const days: ScheduleDay[] = [{
-      dayOfWeek: previewDay, start: cfg.start, end: cfg.end,
-      lunchStart: cfg.lunchStart || null, lunchEnd: cfg.lunchEnd || null,
-      duration: cfg.duration, maxPatients: cfg.maxPatients,
-    }];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      if (d.getDay() === previewDay) {
-        return generateAvailableSlots({ days, unavailable: [] }, d, []);
-      }
-    }
-    return [];
-  }, [dayConfigs, previewDay]);
-
-  const saveSchedule = async () => {
-    if (!scheduleFor) return;
-    const enabledDays = dayConfigs
-      .map((c, i) => ({ c, i }))
-      .filter(({ c }) => c.enabled);
-    if (enabledDays.length === 0) return toast.error("Select at least one working day");
-    for (const { c } of enabledDays) {
-      if (c.duration < 10) return toast.error("Appointment duration must be at least 10 minutes");
-      if (c.maxPatients < 1) return toast.error("Maximum patients per day must be at least 1");
-    }
-    const days: ScheduleDay[] = enabledDays.map(({ c, i }) => ({
-      dayOfWeek: i, start: c.start, end: c.end,
-      lunchStart: c.lunchStart || null, lunchEnd: c.lunchEnd || null,
-      duration: c.duration, maxPatients: c.maxPatients,
-    }));
-    setSavingSchedule(true);
-    try {
-      await saveDentistScheduleDays(scheduleFor.id, days);
-      toast.success("Schedule saved — appointment slots regenerated system-wide");
-      setScheduleFor(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save schedule");
-    } finally {
-      setSavingSchedule(false);
-    }
-  };
-
-  const addLeave = async () => {
-    if (!scheduleFor) return;
-    if (!leaveDate) return toast.error("Select a date first");
-    try {
-      const entry = await addDentistUnavailable(scheduleFor.id, { date: leaveDate, reason: leaveReason || undefined });
-      setUnavailableList((list) => [...list, entry].sort((a, b) => a.date.localeCompare(b.date)));
-      setLeaveDate("");
-      toast.success("Unavailable date added — dentist is now excluded from booking that day");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add unavailable date");
-    }
-  };
-
-  const removeLeave = async (id: string) => {
-    try {
-      await removeDentistUnavailable(id);
-      setUnavailableList((list) => list.filter((u) => u.id !== id));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove unavailable date");
     }
   };
 
@@ -305,13 +200,13 @@ export default function SuperAdminStaff() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Employee ID</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(0)}>Employee ID</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Full Name</SortableHead>
                 <SortableHead {...headProps(2)}>Email Address</SortableHead>
-                <SortableHead {...headProps(3)}>Contact Number</SortableHead>
-                <SortableHead {...headProps(4)}>Role</SortableHead>
-                <SortableHead {...headProps(5)}>Account Status</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Contact Number</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Role</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(5)}>Account Status</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -321,33 +216,37 @@ export default function SuperAdminStaff() {
                 </TableRow>
               ) : paged.map(s => (
                 <TableRow key={s.id}>
-                  <TableCell className="font-mono text-sm">{s.employeeId ?? "—"}</TableCell>
-                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{s.name}</TableCell>
+                  <TableCell className={`font-mono text-sm ${CODE_COL}`}>{s.employeeId ?? "—"}</TableCell>
+                  <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>
+                    {s.name}
+                    {onLeaveRequest.has(s.id) && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/superadmin/staff/${s.employeeId ?? s.id}/schedule`, { state: { id: s.id } })}
+                        className="ml-2 inline-flex print:hidden"
+                        aria-label={`Open ${s.name}'s leave request`}
+                      >
+                        <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 whitespace-nowrap">Leave request</Badge>
+                      </button>
+                    )}
+                  </TableCell>
                   <TableCell><CollapsedEmail email={s.email} /></TableCell>
-                  <TableCell>{s.contact ?? "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className="bg-secondary text-secondary-foreground">{roleLabel(s.role)}</Badge></TableCell>
-                  <TableCell>
+                  <TableCell className={CODE_COL}>{s.contact ?? "—"}</TableCell>
+                  <TableCell className={CODE_COL}><Badge variant="outline" className="bg-secondary text-secondary-foreground">{roleLabel(s.role)}</Badge></TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={s.status === "active" ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20"}>
                       {s.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="print:hidden">
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="View" onClick={() => setViewing(s)}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(s)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      {s.role === "dentist" && (
-                        <Button variant="ghost" size="sm" className="h-8 text-primary" title="Schedule" onClick={() => openSchedule(s)}>
-                          <CalendarClock className="w-4 h-4 mr-1" />Schedule
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-warning" title="Archive" onClick={() => openArchive(s)}>
-                        <Archive className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction label="View" icon={Eye} onClick={() => setViewing(s)} />
+                      <MoreActions actions={[
+                        { label: "Edit", icon: Edit, onClick: () => openEdit(s) },
+                        { label: "Schedule", icon: CalendarClock, onClick: () => navigate(`/superadmin/staff/${s.employeeId ?? s.id}/schedule`, { state: { id: s.id } }) },
+                        { label: "Archive", icon: Archive, onClick: () => openArchive(s), danger: true },
+                      ]} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -392,10 +291,10 @@ export default function SuperAdminStaff() {
                 <Label>Employee ID</Label>
                 <Input value={editing.employeeId ?? "—"} readOnly disabled className="font-mono" />
               </div>
-              <div><Label>Full Name</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
-              <div><Label>Contact Number</Label><Input value={editForm.contact} onChange={e => setEditForm(f => ({ ...f, contact: e.target.value }))} /></div>
+              <div><Label>Full Name</Label><Input autoCapitalize="words" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: formatName(e.target.value) }))} onBlur={() => setEditForm(f => ({ ...f, name: cleanName(f.name) }))} /></div>
+              <div><Label>Contact Number</Label><MobileInput value={editForm.contact} onValueChange={v => setEditForm(f => ({ ...f, contact: v }))} /></div>
               <div><Label>Email Address</Label><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
-              <div><Label>Password</Label><PasswordInput placeholder="Leave blank to keep current" value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} /></div>
+              <div className="space-y-1"><Label>Password</Label><PasswordInput autoComplete="new-password" placeholder="Leave blank to keep current" value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} />{editForm.password && <PasswordLengthCheck password={editForm.password} minLength={6} />}</div>
               <div>
                 <Label>Account Status</Label>
                 <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
@@ -453,96 +352,6 @@ export default function SuperAdminStaff() {
         </DialogContent>
       </Dialog>
 
-      {/* Dentist schedule configuration */}
-      <Dialog open={!!scheduleFor} onOpenChange={o => !o && setScheduleFor(null)}>
-        <DialogContent className="max-w-3xl bg-background max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-heading">Dentist Schedule Configuration</DialogTitle>
-            <DialogDescription>{scheduleFor?.name} — appointment slots are generated automatically from this setup.</DialogDescription>
-          </DialogHeader>
-
-          {scheduleLoading ? (
-            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : (
-          <div className="space-y-5">
-            <div className="overflow-x-auto">
-              <Table className={COMPACT_TABLE}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Day</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>End</TableHead>
-                    <TableHead>Lunch Start</TableHead>
-                    <TableHead>Lunch End</TableHead>
-                    <TableHead>Duration (min)</TableHead>
-                    <TableHead>Max/Day</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dayConfigs.map((c, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <label className="flex items-center gap-2 text-sm font-medium">
-                          <Checkbox checked={c.enabled} onCheckedChange={(checked) => updateDay(i, { enabled: !!checked })} />
-                          {DAY_NAMES[i].slice(0, 3)}
-                        </label>
-                      </TableCell>
-                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.start} onChange={e => updateDay(i, { start: e.target.value })} /></TableCell>
-                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.end} onChange={e => updateDay(i, { end: e.target.value })} /></TableCell>
-                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.lunchStart} onChange={e => updateDay(i, { lunchStart: e.target.value })} /></TableCell>
-                      <TableCell><Input type="time" className="w-28" disabled={!c.enabled} value={c.lunchEnd} onChange={e => updateDay(i, { lunchEnd: e.target.value })} /></TableCell>
-                      <TableCell><Input type="number" min={10} step={5} className="w-20" disabled={!c.enabled} value={c.duration} onChange={e => updateDay(i, { duration: Number(e.target.value) })} /></TableCell>
-                      <TableCell><Input type="number" min={1} className="w-20" disabled={!c.enabled} value={c.maxPatients} onChange={e => updateDay(i, { maxPatients: Number(e.target.value) })} /></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="rounded-lg border p-3 bg-muted/30">
-              <p className="text-sm font-medium mb-2">Automatically generated slots (preview of {previewDay >= 0 ? DAY_NAMES[previewDay] : "—"})</p>
-              {previewSlots.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {previewSlots.map(s => (
-                    <Badge key={s.value} variant="outline" className="bg-background">{s.label}</Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No slots can be generated with the current setup.</p>
-              )}
-            </div>
-
-            <div>
-              <Label className="mb-2 block">Unavailable Dates</Label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} className="sm:w-48" />
-                <Input value={leaveReason} onChange={e => setLeaveReason(e.target.value)} placeholder="Reason (optional)" className="sm:w-52" />
-                <Button variant="outline" onClick={addLeave}>Add Date</Button>
-              </div>
-              <div className="mt-3 space-y-2">
-                {unavailableList.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No unavailable dates.</p>
-                ) : unavailableList.map(u => (
-                  <div key={u.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                    <span>{u.date}{u.reason ? <Badge variant="outline" className="ml-2 bg-secondary text-secondary-foreground">{u.reason}</Badge> : null}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeLeave(u.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleFor(null)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={saveSchedule} disabled={savingSchedule || scheduleLoading}>
-              {savingSchedule && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Schedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

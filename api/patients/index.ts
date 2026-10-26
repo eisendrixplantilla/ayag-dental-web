@@ -5,10 +5,13 @@ import { sql } from "../_lib/db.js";
 import { getSessionFromRequest } from "../_lib/auth.js";
 import { splitName, joinName } from "../_lib/name.js";
 import { manilaDateStr } from "../_lib/date.js";
+import { assignCodes, ensureCodes } from "../_lib/codes.js";
 
 function mapPatient(p: any, counts?: { appointmentsCount: number; dentalRecordsCount: number }) {
   return {
     id: p.id,
+    /** The Patient ID: PT-26100001 (see codes.ts). */
+    code: p.patient_code ?? null,
     email: p.email,
     name: joinName(p.first_name, p.middle_name, p.last_name),
     firstName: p.first_name,
@@ -62,6 +65,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // a patient reads their own and nobody else's. Only the Profile page asks as a patient.
     const isClinician = session.role === "admin" || session.role === "superadmin" || session.role === "dentist";
     if (!isClinician && session.sub !== id) return res.status(403).json({ error: "Forbidden" });
+    // Patients from before Patient IDs get theirs before any is shown.
+    await ensureCodes("patients");
 
     if (id) {
       const rows = await sql`SELECT * FROM patients WHERE id = ${id}`;
@@ -99,12 +104,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { firstName, lastName } = splitName(name);
     const passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10);
+    await ensureCodes("patients");
     const inserted = await sql`
       INSERT INTO patients (email, password_hash, first_name, last_name, contact_number, address, age, sex, blood_type, allergies, verified)
       VALUES (${normalizedEmail}, ${passwordHash}, ${firstName}, ${lastName}, ${phone ?? null}, ${address ?? null}, ${age ?? null}, ${gender ?? null}, ${bloodType ?? null}, ${allergies ?? null}, TRUE)
       RETURNING *
     `;
-    return res.status(201).json({ patient: mapPatient(inserted[0]) });
+    // The patient is saved either way; without an ID now, they get one on the next look.
+    const codes = await assignCodes("patients").catch((err) => {
+      console.error("Could not give the Patient ID", err);
+      return new Map<string, string>();
+    });
+    return res.status(201).json({ patient: mapPatient({ ...inserted[0], patient_code: codes.get(inserted[0].id) ?? null }) });
   }
 
   if (!id) return res.status(400).json({ error: "Missing id" });

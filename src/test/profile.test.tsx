@@ -90,6 +90,7 @@ afterEach(cleanup);
 
 const PATIENT_ROW = {
   id: "3f9c2a1b-0000-4000-8000-000000000000",
+  code: "PT-26100012" as string | null,
   email: "maria@example.com",
   name: "Maria Lourdes Santos",
   firstName: "Maria",
@@ -134,9 +135,9 @@ describe("the patient's profile", () => {
     expect(screen.queryByText("stale@example.com")).not.toBeInTheDocument();
   });
 
-  it("shows a short Patient ID taken from the row's id, not the raw uuid", async () => {
+  it("shows the Patient ID the clinic gave, not the raw uuid", async () => {
     await renderPatient();
-    expect(screen.getByText("PT-3F9C2A")).toBeInTheDocument();
+    expect(screen.getByText("PT-26100012")).toBeInTheDocument();
     expect(screen.queryByText(/3f9c2a1b-0000/i)).not.toBeInTheDocument();
   });
 
@@ -162,7 +163,8 @@ describe("the patient's profile", () => {
 
   it("puts the saved contact number and address into the editable fields", async () => {
     await renderPatient();
-    expect(screen.getByLabelText("Contact Number")).toHaveValue("0917 555 1234");
+    // Shown as the 11 digits the field takes, however it was saved.
+    expect(screen.getByLabelText("Contact Number")).toHaveValue("09175551234");
     expect(screen.getByLabelText(/Address/)).toHaveValue("12 Rizal St, Cabanatuan");
   });
 });
@@ -305,9 +307,9 @@ describe("a staff member's profile", () => {
 });
 
 describe("the patient reference helpers", () => {
-  it("builds the same short reference every time from the id", () => {
-    expect(patientRef("3f9c2a1b-0000-4000-8000-000000000000")).toBe("PT-3F9C2A");
-    expect(patientRef("3f9c2a1b-0000-4000-8000-000000000000")).toBe(patientRef("3f9c2a1b-0000-4000-8000-000000000000"));
+  it("reads the Patient ID the server gave, or a dash until it has one", () => {
+    expect(patientRef({ code: "PT-26100012" })).toBe("PT-26100012");
+    expect(patientRef({ code: null })).toBe("—");
   });
 
   it("counts age in whole years, and not a year early before the birthday", () => {

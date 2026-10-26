@@ -80,9 +80,9 @@ afterEach(cleanup);
 beforeEach(() => {
   printed.calls = [];
   h.patients = [
-    { id: "p1", name: "Maria Santos", email: "maria@example.com", status: "active", createdAt: "2026-09-20",
+    { id: "p1", code: "PT-26090001", name: "Maria Santos", email: "maria@example.com", status: "active", createdAt: "2026-09-20",
       phone: "0917", age: 30, appointmentsCount: 0, dentalRecordsCount: 0 },
-    { id: "p2", name: "Pedro Reyes", email: "pedro@example.com", status: "inactive", createdAt: "2026-09-25",
+    { id: "p2", code: "PT-26090002", name: "Pedro Reyes", email: "pedro@example.com", status: "inactive", createdAt: "2026-09-25",
       phone: "0918", age: 41, appointmentsCount: 2, dentalRecordsCount: 1 },
   ];
   h.staff = [
@@ -153,8 +153,8 @@ describe("a list page prints the clinic's report document", () => {
 
     expect(doc().title).toBe("Patient Accounts Report");
     expect(doc().rows).toEqual([
-      ["Maria Santos", "maria@example.com", "Active", "2026-09-20"],
-      ["Pedro Reyes", "pedro@example.com", "Deactivated", "2026-09-25"],
+      ["Maria Santos", "PT-26090001", "maria@example.com", "Active", "2026-09-20"],
+      ["Pedro Reyes", "PT-26090002", "pedro@example.com", "Deactivated", "2026-09-25"],
     ]);
     expect(doc().filters).toBeUndefined(); // nothing was filtered
   });
@@ -164,7 +164,7 @@ describe("a list page prints the clinic's report document", () => {
     await screen.findByText("Maria Santos");
 
     // Picking the date column turns the value box into a range.
-    filterBy("3"); // Date Registered
+    filterBy("4"); // Date Registered
     await waitFor(() => expect(screen.getByLabelText("From date")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-22" } });
     await waitFor(() => expect(screen.queryByText("Maria Santos")).toBeNull());

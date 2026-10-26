@@ -108,6 +108,29 @@ vi.mock("@/components/ui/calendar", async () => {
       React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
   };
 });
+vi.mock("@/components/BookingCalendar", async () => {
+  const React = await import("react");
+  return {
+    default: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
+});
+
+// The dentist cards are a dialog; here the picker is a plain <select> of the one dentist.
+vi.mock("@/components/DentistPicker", async () => {
+  const React = await import("react");
+  return {
+    default: ({ label = "Choose a dentist", disabled, selectedId, onChoose }: any) =>
+      React.createElement(
+        "select",
+        { "aria-label": label, disabled, value: selectedId ?? "", onChange: (e: any) => onChoose(e.target.value) },
+        [
+          React.createElement("option", { key: "", value: "" }, ""),
+          React.createElement("option", { key: "dr-mike", value: "dr-mike" }, "Dr. Mike Johnson"),
+        ],
+      ),
+  };
+});
 
 import AdminAppointments from "@/pages/admin/AdminAppointments";
 
@@ -118,67 +141,60 @@ beforeAll(() => {
 afterEach(cleanup);
 beforeEach(() => { h.schedule = { days: [], unavailable: [] }; });
 
-const picker = () => screen.getByLabelText("Add a service") as HTMLSelectElement;
+const picker = () => screen.getByLabelText("Choose a service") as HTMLSelectElement;
 const options = () => within(picker()).getAllByRole("option").map(o => o.textContent).filter(Boolean);
 const chips = () => screen.getAllByRole("button", { name: /^Remove / }).map(b => b.getAttribute("aria-label"));
 
 const renderPage = async () => {
   render(<MemoryRouter><AdminAppointments /></MemoryRouter>);
-  await screen.findByLabelText("Add a service");
+  await screen.findByLabelText("Choose a service");
 };
 // Identify the walk-in as a guest with no account, filling the details the form now
 // requires before it will offer any services.
 const nameWalkIn = () => {
   fireEvent.click(screen.getByRole("button", { name: /no account/i }));
   fireEvent.change(screen.getByPlaceholderText("Patient's full name"), { target: { value: "Rosa Mendoza" } });
-  fireEvent.change(screen.getByPlaceholderText("e.g. 0917 123 4567"), { target: { value: "09171234567" } });
+  fireEvent.change(screen.getByPlaceholderText("09171234567"), { target: { value: "09171234567" } });
   fireEvent.change(screen.getByPlaceholderText("e.g. 32"), { target: { value: "32" } });
   fireEvent.change(screen.getByLabelText("Gender"), { target: { value: "Female" } });
 };
 
-describe("walk-in appointments cover more than one service", () => {
-  it("waits for a patient name before offering services", async () => {
+/** Names the walk-in, then assigns the dentist, which opens up the services. */
+const nameAndAssign = async () => {
+  nameWalkIn();
+  await waitFor(() => expect(screen.getByLabelText("Assign dentist")).not.toBeDisabled());
+  fireEvent.change(screen.getByLabelText("Assign dentist"), { target: { value: "dr-mike" } });
+  await waitFor(() => expect(picker()).not.toBeDisabled());
+};
+
+describe("one service per walk-in", () => {
+  it("waits for a patient name, then a dentist, before offering services", async () => {
     await renderPage();
+    expect(screen.getByLabelText("Assign dentist")).toBeDisabled();
     expect(picker()).toBeDisabled();
 
     nameWalkIn();
+    await waitFor(() => expect(screen.getByLabelText("Assign dentist")).not.toBeDisabled());
+    expect(picker()).toBeDisabled(); // still needs the dentist
+
+    fireEvent.change(screen.getByLabelText("Assign dentist"), { target: { value: "dr-mike" } });
     await waitFor(() => expect(picker()).not.toBeDisabled());
   });
 
-  it("adds each pick to the visit and stops offering it again", async () => {
+  it("takes one service; picking another replaces it", async () => {
     await renderPage();
-    nameWalkIn();
-    await waitFor(() => expect(picker()).not.toBeDisabled());
+    await nameAndAssign();
 
     fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral"]));
-    expect(options()).not.toContain("Oral");
-
+    await waitFor(() => expect(picker().value).toBe("Oral"));
     fireEvent.change(picker(), { target: { value: "Veneers" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veneers"]));
-    expect(options()).toContain("Restoration"); // the rest are still on offer
-  });
-
-  it("takes a service back off the visit, and gates the dentist on having one", async () => {
-    await renderPage();
-    nameWalkIn();
-    await waitFor(() => expect(picker()).not.toBeDisabled());
-
-    const dentist = screen.getByLabelText("Assign dentist") as HTMLSelectElement;
-    expect(dentist).toBeDisabled();
-
-    fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(dentist).not.toBeDisabled());
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove Oral" }));
-    await waitFor(() => expect(dentist).toBeDisabled());
-    expect(options()).toContain("Oral"); // back on offer
+    await waitFor(() => expect(picker().value).toBe("Veneers"));
   });
 });
 
 describe("what the walk-in list lets you do", () => {
   const walkIn = {
-    id: "3f9c2a10-0000-4000-8000-00000000000a",
+    id: "3f9c2a10-0000-4000-8000-00000000000a", reference: "APT-261000001",
     patientId: null,
     patientName: "Rosa Mendoza",
     contact: "09171234567",
@@ -228,7 +244,7 @@ describe("what the walk-in list lets you do", () => {
 
     // The row behind the dialog shows the same names, so look inside the dialog.
     const dialog = within(document.querySelector("[role=dialog]") as HTMLElement);
-    expect(dialog.getByText("APT-3F9C2A")).toBeInTheDocument();
+    expect(dialog.getByText("APT-261000001")).toBeInTheDocument();
     expect(dialog.getByText("09171234567")).toBeInTheDocument();
     expect(dialog.getByText("32")).toBeInTheDocument();
     expect(dialog.getByText("Female")).toBeInTheDocument();
@@ -272,11 +288,8 @@ describe("what the walk-in form tells you about the date you are picking", () =>
   const pickVisit = async () => {
     h.schedule = FULL_WEEK;
     await renderPage();
-    nameWalkIn();
-    await waitFor(() => expect(picker()).not.toBeDisabled());
+    await nameAndAssign();
     fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(screen.getByLabelText("Assign dentist")).not.toBeDisabled());
-    fireEvent.change(screen.getByLabelText("Assign dentist"), { target: { value: "dr-mike" } });
     await screen.findByText("Working hours:");
     fireEvent.click(screen.getByRole("button", { name: "Pick Mar 10" }));
     await waitFor(() => expect(within(slotGroup()).getAllByRole("button").length).toBeGreaterThan(0));
@@ -310,6 +323,22 @@ describe("what the walk-in form tells you about the date you are picking", () =>
     expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|March 10th, 2027|9:00 AM – 9:30 AM/)
       .every(el => /font-semibold/.test(el.className))).toBe(true);
     expect(readback.className).toContain("bg-primary/5");
+  });
+
+  it("keeps the patient and dentist after adding one, ready for another service, until Done", async () => {
+    await pickVisit();
+    fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
+    fireEvent.click(screen.getByRole("button", { name: /Add Walk-in/ }));
+
+    const note = (await screen.findByText(/Choose another service below for the same patient/)).closest("p")!;
+    expect(note.textContent).toMatch(/Added Oral on Wed, Mar 10 at 9:00 AM – 9:30 AM for Rosa Mendoza with Dr. Mike Johnson/);
+    expect((screen.getByPlaceholderText("Patient's full name") as HTMLInputElement).value).toBe("Rosa Mendoza");
+    expect((screen.getByLabelText("Assign dentist") as HTMLSelectElement).value).toBe("dr-mike");
+    expect(picker().value).toBe(""); // the next service starts empty
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByText(/Choose another service below/)).toBeNull());
+    expect((screen.getByPlaceholderText("Patient's full name") as HTMLInputElement).value).toBe("");
   });
 
   it("says walk-ins need no approval until there is a booking to read back", async () => {

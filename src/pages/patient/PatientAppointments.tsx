@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
+import BookingCalendar from "@/components/BookingCalendar";
+import { SERVICE_SEPARATOR } from "@/lib/services";
 import { Eye, Edit, X, Info, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -13,8 +14,8 @@ import { cn } from "@/lib/utils";
 import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, getBookedSlots, rescheduleAppointment, cancelAppointment, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
-import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
-import { formatManilaDate, manilaTodayAsLocalDate } from "@/lib/formatDate";
+import { getDentistSchedule, generateAvailableSlots, forServices, BOOKING_LEAD_MINUTES, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
+import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { appointmentRef } from "@/lib/appointmentRef";
@@ -22,6 +23,7 @@ import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import Hint from "@/components/Hint";
 
 const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status", "When"];
 /** Still ahead of the patient — the clinic hasn't finished with it, so it can still
@@ -30,7 +32,7 @@ const LIVE = ["pending", "confirmed", "rescheduled"];
 const isUpcoming = (apt: Appointment) => LIVE.includes(apt.status);
 // One text row per appointment: it drives the filter, the count and the printout alike.
 const aptRow = (apt: Appointment) => [
-  appointmentRef(apt.id),
+  appointmentRef(apt),
   apt.service,
   apt.dentistName ?? "—",
   apt.date,
@@ -62,6 +64,8 @@ export default function PatientAppointments() {
   const [cancelApt, setCancelApt] = useState<Appointment | null>(null);
   const [newDate, setNewDate] = useState<Date>();
   const [newTime, setNewTime] = useState("");
+  // Stable, so the calendar can let go of a day that fills up without looping.
+  const pickNewDate = useCallback((d: Date | undefined) => { setNewDate(d); setNewTime(""); }, []);
   const [saving, setSaving] = useState(false);
 
   // `silent` is for background refreshes: no spinner over the table and no error
@@ -94,6 +98,12 @@ export default function PatientAppointments() {
     ? toMinutes(rescheduleApt.endTime) - toMinutes(rescheduleApt.time)
     : undefined;
 
+  // The moved visit's procedures, whose daily limits the new day must have room for.
+  const rescheduleServices = useMemo(
+    () => (rescheduleApt ? rescheduleApt.service.split(SERVICE_SEPARATOR) : []),
+    [rescheduleApt],
+  );
+
   useEffect(() => {
     if (!rescheduleApt?.dentistId || !newDate || !schedule) { setSlots([]); return; }
     setLoadingSlots(true);
@@ -101,10 +111,10 @@ export default function PatientAppointments() {
       dentistId: rescheduleApt.dentistId, dentistName: rescheduleApt.dentistName,
       date: toKey(newDate), excludeId: rescheduleApt.id,
     })
-      .then((booked) => setSlots(generateAvailableSlots(schedule, newDate, booked, visitMinutes)))
+      .then((booked) => setSlots(generateAvailableSlots(forServices(schedule, rescheduleServices), newDate, booked, visitMinutes, BOOKING_LEAD_MINUTES)))
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
-  }, [rescheduleApt, newDate, schedule, visitMinutes]);
+  }, [rescheduleApt, newDate, schedule, visitMinutes, rescheduleServices]);
 
   // Which days the calendar in the reschedule dialog will offer at all — rather than
   // leaving the greyed-out dates to explain themselves.
@@ -272,9 +282,11 @@ export default function PatientAppointments() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                         <div className="flex items-center gap-2 flex-wrap print:hidden">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details" onClick={() => setDetailsApt(apt)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                          <Hint label="View Details">
+                            <Button aria-label="View Details" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailsApt(apt)}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Hint>
                           {canReschedule && (
                             <Button variant="outline" size="sm" onClick={() => openReschedule(apt)}>
                               <Edit className="w-4 h-4 mr-1" /> Reschedule
@@ -351,7 +363,8 @@ export default function PatientAppointments() {
           <DialogHeader><DialogTitle className="font-heading">Reschedule Appointment</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {rescheduleApt?.service} with {rescheduleApt?.dentistName}. You can reschedule only once,
+              {rescheduleApt?.service} with {rescheduleApt?.dentistName}. Choose a different day from{" "}
+              {rescheduleApt ? format(parseISO(rescheduleApt.date), "EEE, MMM d") : ""}. You can reschedule only once,
               and the clinic has to approve the new time before it's confirmed.
             </p>
             {/* Same shape as booking: the month, then that day's free times. */}
@@ -368,17 +381,19 @@ export default function PatientAppointments() {
                   </span>
                 </p>
               )}
-              <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
-                <Calendar
-                  mode="single"
+              <div className="rounded-md border w-full max-w-[26rem] mx-auto sm:mx-0">
+                <BookingCalendar
+                  compact
+                  schedule={schedule}
+                  dentistId={rescheduleApt?.dentistId ?? null}
+                  dentistName={rescheduleApt?.dentistName}
+                  services={rescheduleServices}
+                  visitMinutes={visitMinutes}
+                  leadMinutes={BOOKING_LEAD_MINUTES}
+                  excludeId={rescheduleApt?.id}
+                  currentDate={rescheduleApt?.date}
                   selected={newDate}
-                  onSelect={(d) => { setNewDate(d); setNewTime(""); }}
-                  className="p-2 pointer-events-auto"
-                  disabled={(d) => {
-                    if (d < manilaTodayAsLocalDate()) return true;
-                    if (!schedule) return true;
-                    return !isDentistAvailableOn(schedule, d);
-                  }}
+                  onSelect={pickNewDate}
                 />
               </div>
             </div>

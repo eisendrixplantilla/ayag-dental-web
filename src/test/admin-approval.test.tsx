@@ -115,7 +115,7 @@ describe("admin approve / reject", () => {
     await renderPage();
     for (const name of ["Allen Estrella", "Pedro Reyes"]) {
       const row = within(rowOf(name));
-      expect(row.getAllByRole("button", { name: /View/ })).toHaveLength(2); // labelled + phone icon
+      expect(row.getAllByRole("button", { name: /View/ })).toHaveLength(1); // one eye icon, at every width
       expect(row.queryByRole("button", { name: /Approve|Confirm/ })).toBeNull();
       expect(row.queryByRole("button", { name: /Reject/ })).toBeNull();
     }
@@ -279,26 +279,27 @@ describe("the appointments list", () => {
     await waitFor(() => expect(names()).toHaveLength(3));
   });
 
-  it("gives each appointment a short reference, and finds it by that", async () => {
+  it("shows each appointment's reference, and finds it by that", async () => {
     h.appts = [
-      apt({ id: "3f9c2a10-0000-4000-8000-000000000001", patientName: "Allen Estrella" }),
-      apt({ id: "b7d41e55-0000-4000-8000-000000000002", patientName: "Pedro Reyes" }),
+      apt({ id: "3f9c2a10-0000-4000-8000-000000000001", reference: "APT-261000001", patientName: "Allen Estrella" }),
+      apt({ id: "b7d41e55-0000-4000-8000-000000000002", reference: "APT-261000012", patientName: "Pedro Reyes" }),
     ];
     await renderPage();
 
-    expect(within(rowOf("Allen Estrella")).getByText("APT-3F9C2A")).toBeInTheDocument();
-    expect(within(rowOf("Pedro Reyes")).getByText("APT-B7D41E")).toBeInTheDocument();
+    expect(within(rowOf("Allen Estrella")).getByText("APT-261000001")).toBeInTheDocument();
+    expect(within(rowOf("Pedro Reyes")).getByText("APT-261000012")).toBeInTheDocument();
 
-    searchAll("apt-3f9c2a");
+    searchAll("apt-261000001");
     await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
     expect(screen.getByText("Allen Estrella")).toBeInTheDocument();
 
-    // The bare reference works too, as does the full id somebody pasted in.
-    searchAll("b7d41e");
+    // Without the prefix too; the old id-based references no longer find anything.
+    searchAll("261000012");
     await waitFor(() => expect(screen.getByText("Pedro Reyes")).toBeInTheDocument());
-    searchAll("3f9c2a10-0000-4000-8000-000000000001");
-    await waitFor(() => expect(screen.getByText("Allen Estrella")).toBeInTheDocument());
-    expect(screen.queryByText("Pedro Reyes")).toBeNull();
+    expect(screen.queryByText("Allen Estrella")).toBeNull();
+    searchAll("3f9c2a");
+    await waitFor(() => expect(screen.queryByText("Pedro Reyes")).toBeNull());
+    expect(screen.queryByText("Allen Estrella")).toBeNull();
   });
 
   it("marks a patient's reschedule as a request, not just another pending booking", async () => {

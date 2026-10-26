@@ -8,6 +8,18 @@
       "port": 8000
     },
     {
+      "name": "api-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "scripts/local-api.mts"],
+      "port": 3010
+    },
+    {
+      "name": "print-previews",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8099", "--directory", "C:/Users/Mikuu4u/AppData/Local/Temp/claude/C--xampp-htdocs-bright-grin-care-main/99766e64-9d1a-4393-ad21-ab0f5bfb6a86/scratchpad/print"],
+      "port": 8099
+    },
+    {
       "name": "vite",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],

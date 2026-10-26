@@ -5,14 +5,16 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarCheck, CalendarDays, Plus, UserPlus, Trash2, Loader2, Printer, Search, Check, ChevronsUpDown, X, Clock3, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
+import BookingCalendar from "@/components/BookingCalendar";
+import DentistPicker from "@/components/DentistPicker";
+import { getDentistProfiles, type DentistProfile } from "@/lib/api/booking";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
@@ -20,10 +22,10 @@ import { toKey, toLabel, toMinutes, formatTimeRange } from "@/lib/dentistSchedul
 import { getAppointments, getBookedSlots, createAppointment, deleteAppointment, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import {
-  getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
+  getDentistDirectory, getDentistSchedule, generateAvailableSlots, forServices,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
-import { formatManilaDate, formatManilaStamp, manilaTodayAsLocalDate } from "@/lib/formatDate";
+import { formatManilaDate, formatManilaStamp } from "@/lib/formatDate";
 import { appointmentRef } from "@/lib/appointmentRef";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -34,6 +36,10 @@ import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
+import MobileInput from "@/components/MobileInput";
+import { cleanName, formatName, PH_MOBILE } from "@/lib/inputRules";
+import Hint from "@/components/Hint";
+import { IconAction, RowActions } from "@/components/RowActions";
 
 
 // What the walk-in table shows, sorts by and prints.
@@ -72,6 +78,8 @@ export default function AdminAppointments() {
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("");
+  // Stable, so the calendar can let go of a day that fills up without looping.
+  const pickDate = useCallback((d: Date | undefined) => { setDate(d); setTime(""); }, []);
   const [walkIns, setWalkIns] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,14 +93,36 @@ export default function AdminAppointments() {
   const [slotsVersion, setSlotsVersion] = useState(0);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
+  // What each dentist offers. The dentist is chosen first, and the services list then
+  // holds only what they do.
+  const [profiles, setProfiles] = useState<DentistProfile[]>([]);
+  useEffect(() => {
+    getDentistProfiles().then((p) => setProfiles(Array.isArray(p) ? p : [])).catch(() => {/* every service stays offered */});
+  }, []);
+  const offeredBy = (id: string) => profiles.find((p) => p.id === id)?.services ?? null;
   const serviceLabel = chosen.join(SERVICE_SEPARATOR);
   const selectedLabel = slots.find((s) => s.value === time)?.label ?? "";
-  const remaining = services.filter((s) => !chosen.includes(s));
+  const theirServices = dentistId && offeredBy(dentistId) ? services.filter((s) => offeredBy(dentistId)!.includes(s)) : services;
+  // Set once a walk-in is added: the patient and dentist stay on the form, ready for
+  // another service, until Done.
+  const [justAdded, setJustAdded] = useState<{ what: string; who: string; dentist: string } | null>(null);
+  // Changing dentist keeps only the services the new one also does.
+  const chooseDentist = (id: string) => {
+    const offers = offeredBy(id);
+    setDentistId(id);
+    setDate(undefined);
+    setTime("");
+    if (offers) setChosen((prev) => prev.filter((s) => offers.includes(s)));
+  };
+  const chooseService = (service: string) => { setChosen([service]); setDate(undefined); setTime(""); };
+  const doneWithPatient = () => {
+    resetPatient(); setChosen([]); setDentistId(""); setDate(undefined); setTime(""); setJustAdded(null);
+  };
 
   const isGuest = mode === "guest";
   // A guest needs the essentials captured; an account walk-in needs an existing patient
   // actually selected (a linked id), not just a typed name.
-  const guestReady = !!patientName.trim() && !!guestContact.trim() && !!guestAge.trim() && !!guestGender;
+  const guestReady = !!cleanName(patientName) && PH_MOBILE.test(guestContact) && !!guestAge.trim() && !!guestGender;
   const patientReady = isGuest ? guestReady : !!patientId;
 
   // Clear everything the patient section holds — used when switching modes and after a
@@ -141,13 +171,17 @@ export default function AdminAppointments() {
   // free, without re-running this whole effect every time the patient picks one.
   const timeRef = useRef(time);
   timeRef.current = time;
+  // While a walk-in is being added, its own time is about to be held by it: a refresh
+  // landing then would call it "just taken".
+  const addingRef = useRef(false);
 
   const loadSlots = useCallback((silent = false) => {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
     if (!silent) setLoadingSlots(true);
     getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
       .then((booked) => {
-        const free = generateAvailableSlots(schedule, date, booked, visitMinutes);
+        if (silent && addingRef.current) return;
+        const free = generateAvailableSlots(forServices(schedule, chosen), date, booked, visitMinutes);
         setSlots(free);
         const picked = timeRef.current;
         if (picked && !free.some(s => s.value === picked)) {
@@ -159,7 +193,7 @@ export default function AdminAppointments() {
       })
       .catch(() => { if (!silent) toast.error("Failed to load available time slots"); })
       .finally(() => { if (!silent) setLoadingSlots(false); });
-  }, [dentistId, date, schedule, dentist, visitMinutes]);
+  }, [dentistId, date, schedule, dentist, visitMinutes, chosen]);
 
   useEffect(() => { loadSlots(); }, [loadSlots, slotsVersion]);
   // Someone else can book the same slot while this form sits open, so keep what's
@@ -194,12 +228,13 @@ export default function AdminAppointments() {
       return;
     }
     setSaving(true);
+    addingRef.current = true;
     try {
       await createAppointment({
         patientId: isGuest ? undefined : (patientId || undefined),
-        patientName: patientName.trim(),
+        patientName: isGuest ? cleanName(patientName) : patientName.trim(),
         // Guest details ride along on the appointment; an account walk-in carries none.
-        contact: isGuest ? guestContact.trim() : undefined,
+        contact: isGuest ? guestContact : undefined,
         age: isGuest ? Number(guestAge) : undefined,
         gender: isGuest ? guestGender : undefined,
         dentistId,
@@ -210,7 +245,13 @@ export default function AdminAppointments() {
         endTime: endTimeFor(time, visitMinutes),
         type: "walk-in",
       });
-      resetPatient(); setChosen([]); setDentistId(""); setDate(undefined); setTime("");
+      // The patient and dentist stay, so another service can be added straight away.
+      setJustAdded({
+        what: `${chosen.join(SERVICE_SEPARATOR)} on ${format(date, "EEE, MMM d")} at ${selectedLabel}`,
+        who: isGuest ? cleanName(patientName) : patientName.trim(),
+        dentist,
+      });
+      setChosen([]); setDate(undefined); setTime("");
       toast.success("Walk-in appointment confirmed!");
       load();
     } catch (err) {
@@ -219,6 +260,7 @@ export default function AdminAppointments() {
       setTime("");
       setSlotsVersion((v) => v + 1);
     } finally {
+      addingRef.current = false;
       setSaving(false);
     }
   };
@@ -291,6 +333,16 @@ export default function AdminAppointments() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-4">
+          {justAdded && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-md border border-success/30 bg-success/10 px-3 py-2.5 text-sm">
+              <p className="flex-1 min-w-0 text-foreground">
+                <Check className="w-4 h-4 inline mr-1.5 -mt-0.5 text-success" />
+                Added <span className="font-semibold">{justAdded.what}</span> for <span className="font-semibold">{justAdded.who}</span> with{" "}
+                <span className="font-semibold">{justAdded.dentist}</span>. Choose another service below for the same patient, or finish.
+              </p>
+              <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={doneWithPatient}>Done</Button>
+            </div>
+          )}
           {/* Who on the left, what and with whom on the right: on a wide screen the form
               fills the card instead of running down one narrow column. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
@@ -330,18 +382,18 @@ export default function AdminAppointments() {
                     <Label className="text-xs text-muted-foreground">Full Name <span className="text-destructive">*</span></Label>
                     <Input
                       value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
+                      onChange={(e) => setPatientName(formatName(e.target.value))}
+                      onBlur={() => setPatientName(cleanName(patientName))}
+                      autoCapitalize="words"
                       placeholder="Patient's full name"
                       className="h-11 sm:h-9"
                     />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Contact Number <span className="text-destructive">*</span></Label>
-                    <Input
+                    <MobileInput
                       value={guestContact}
-                      onChange={(e) => setGuestContact(e.target.value)}
-                      inputMode="tel"
-                      placeholder="e.g. 0917 123 4567"
+                      onValueChange={setGuestContact}
                       className="h-11 sm:h-9"
                     />
                   </div>
@@ -424,78 +476,58 @@ export default function AdminAppointments() {
             </div>
             <div className="space-y-4 min-w-0 lg:border-l lg:pl-8">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Service</Label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="w-full lg:w-56">
-                    {/* Always shows its placeholder: picking an option adds to the list beside
-                        it rather than replacing a single selection. */}
-                    <Select
-                      value=""
-                      disabled={!patientReady || remaining.length === 0}
-                      onValueChange={(v) => setChosen(prev => [...prev, v])}
-                    >
-                      <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
-                        <SelectValue placeholder={
-                          !patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
-                            : remaining.length === 0 ? "All services added"
-                            : chosen.length === 0 ? "Select service"
-                            : "Add another service"
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  {chosen.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">Add as many as this visit needs.</span>
-                  ) : (
-                    chosen.map(s => (
-                      <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
-                        <span className="truncate">{s}</span>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${s}`}
-                          className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
-                          onClick={() => setChosen(prev => prev.filter(c => c !== s))}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Assign Dentist</Label>
                 <div className="w-full lg:w-64">
-                  <Select
-                    value={dentistId}
-                    disabled={chosen.length === 0 || loadingDentists}
-                    onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
-                  >
-                    <SelectTrigger className="h-11 sm:h-9" aria-label="Assign dentist"><SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Select dentist"} /></SelectTrigger>
-                    <SelectContent>{dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <DentistPicker
+                    label="Assign dentist"
+                    value={dentist}
+                    placeholder={!patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
+                      : loadingDentists ? "Loading dentists..." : "Select dentist"}
+                    disabled={!patientReady || loadingDentists || dentists.length === 0}
+                    services={chosen}
+                    visitMinutes={visitMinutes}
+                    selectedId={dentistId}
+                    onChoose={chooseDentist}
+                    recentFor={isGuest ? undefined : patientId || undefined}
+                  />
                 </div>
                 {/* Which days exist at all on the calendar below — worth reading, so it
                     doesn't sit in hint grey. */}
-                <p className="text-xs min-h-5 leading-tight"
-                   title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
-                  {!loadingDentists && dentists.length === 0 ? (
-                    <span className="font-medium text-destructive">No dentists are available.</span>
-                  ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
-                    : dentistId && schedule && schedule.days.length === 0 ? (
-                      <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
-                    ) : schedule && schedule.days.length > 0 ? (
-                      <span className="flex items-start gap-1.5 text-foreground">
-                        <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
-                        <span className="line-clamp-2 sm:line-clamp-none">
-                          <span className="font-semibold">Working hours:</span>{" "}
-                          <span className="font-medium">{scheduleSummary}</span>
+                <Hint label={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
+                  <p className="text-xs min-h-5 leading-tight">
+                    {!loadingDentists && dentists.length === 0 ? (
+                      <span className="font-medium text-destructive">No dentists are available.</span>
+                    ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
+                      : dentistId && schedule && schedule.days.length === 0 ? (
+                        <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
+                      ) : schedule && schedule.days.length > 0 ? (
+                        <span className="flex items-start gap-1.5 text-foreground">
+                          <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                          <span className="line-clamp-2 sm:line-clamp-none">
+                            <span className="font-semibold">Working hours:</span>{" "}
+                            <span className="font-medium">{scheduleSummary}</span>
+                          </span>
                         </span>
-                      </span>
-                    ) : ""}
-                </p>
+                      ) : ""}
+                  </p>
+                </Hint>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Service</Label>
+                <div className="w-full lg:w-64">
+                  <Select value={chosen[0] ?? ""} disabled={!patientReady || !dentistId || theirServices.length === 0} onValueChange={chooseService}>
+                    <SelectTrigger className="h-11 sm:h-9" aria-label="Choose a service">
+                      <SelectValue placeholder={
+                        !patientReady ? (isGuest ? "Fill in the patient details first" : "Select a patient first")
+                          : !dentistId ? "Choose a dentist first"
+                          : "Select service"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>{theirServices.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">One service per walk-in. Add another right after.</p>
               </div>
             </div>
           </div>
@@ -503,18 +535,16 @@ export default function AdminAppointments() {
           {/* When — the month and the free times side by side, so picking a day and seeing
               what is left at the desk is one glance rather than two dropdowns. On a tablet,
               where the sidebar leaves too little room, the times go under the month. */}
-          <div className="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto lg:mx-0", !dentistId && "opacity-60")}>
-              <Calendar
-                mode="single"
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-full max-w-[30rem] mx-auto lg:mx-0", !dentistId && "opacity-60")}>
+              <BookingCalendar
+                schedule={schedule}
+                dentistId={dentistId || null}
+                dentistName={dentist}
+                services={chosen}
+                visitMinutes={visitMinutes}
                 selected={date}
-                onSelect={(d) => { setDate(d); setTime(""); }}
-                className="p-2 pointer-events-auto"
-                disabled={(d) => {
-                  if (d < manilaTodayAsLocalDate()) return true;
-                  if (!schedule) return true;
-                  return !isDentistAvailableOn(schedule, d);
-                }}
+                onSelect={pickDate}
               />
             </div>
 
@@ -534,8 +564,8 @@ export default function AdminAppointments() {
               {!dentistId || !date ? (
                 <p className="text-sm text-muted-foreground py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
                   {!patientReady ? (isGuest ? "Fill in the patient's details to begin." : "Select a patient to begin.")
-                    : chosen.length === 0 ? "Add a service to begin."
                     : !dentistId ? "Assign a dentist to see their calendar."
+                    : chosen.length === 0 ? "Add a service, then pick a date."
                     : "Pick a date to see the free times."}
                 </p>
               ) : loadingSlots ? (
@@ -616,10 +646,10 @@ export default function AdminAppointments() {
                 <SortableHead {...headProps(0)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(1)}>Service</SortableHead>
                 <SortableHead {...headProps(2)}>Dentist</SortableHead>
-                <SortableHead {...headProps(3)}>Date</SortableHead>
-                <SortableHead {...headProps(4)}>Time</SortableHead>
-                <SortableHead {...headProps(5)}>Status</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Date</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Time</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(5)}>Status</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -632,20 +662,13 @@ export default function AdminAppointments() {
                   <TableCell className={`font-medium whitespace-normal break-words ${PIN_COL}`}>{w.patientName}</TableCell>
                   <TableCell className="whitespace-normal break-words">{w.service}</TableCell>
                   <TableCell className="whitespace-normal break-words">{w.dentistName}</TableCell>
-                  <TableCell>{w.date}</TableCell>
-                  <TableCell className="whitespace-nowrap">{formatTimeRange(w.time, w.endTime)}</TableCell>
-                  <TableCell><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
-                  <TableCell className="print:hidden">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      aria-label="View details"
-                      title="View details"
-                      onClick={() => setViewing(w)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                  <TableCell className={CODE_COL}>{w.date}</TableCell>
+                  <TableCell className={`whitespace-nowrap ${CODE_COL}`}>{formatTimeRange(w.time, w.endTime)}</TableCell>
+                  <TableCell className={CODE_COL}><Badge variant="outline" className="bg-success/10 text-success border-success/20">{w.status}</Badge></TableCell>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction label="View details" icon={Eye} onClick={() => setViewing(w)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -670,7 +693,7 @@ export default function AdminAppointments() {
         <DialogContent className="max-w-md bg-background max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Walk-in Appointment</DialogTitle>
-            <DialogDescription>{viewing ? appointmentRef(viewing.id) : ""}</DialogDescription>
+            <DialogDescription>{viewing ? appointmentRef(viewing) : ""}</DialogDescription>
           </DialogHeader>
           {viewing && (
             <div className="space-y-2 text-sm">

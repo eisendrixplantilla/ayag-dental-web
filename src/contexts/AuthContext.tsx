@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 export type UserRole = "admin" | "patient" | "superadmin" | "dentist";
 
@@ -8,7 +8,10 @@ export interface User {
   name: string;
   role: UserRole;
   verified: boolean;
+  /** Staff: DT-/AN-/SA-261001. */
   employeeId?: string | null;
+  /** Patients: PT-26100001. */
+  patientCode?: string | null;
 }
 
 export interface RegisterPatientInput {
@@ -167,6 +170,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserState(null);
     setPendingEmail(null);
   }, [setPendingEmail]);
+
+  // Signing in or out in another tab replaces the saved session, and every request from
+  // this tab sends the token saved there. Follow it here too, so this tab never shows one
+  // account's pages while asking the server as another (an admin on a superadmin page
+  // gets "Failed to load…"); the route guard then takes this tab to that account's home.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== USER_KEY && e.key !== TOKEN_KEY && e.key !== null) return;
+      try {
+        const stored = localStorage.getItem(USER_KEY);
+        setUserState(stored && localStorage.getItem(TOKEN_KEY) ? (JSON.parse(stored) as User) : null);
+      } catch {
+        setUserState(null);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const forgotPassword = useCallback(async (email: string) => {
     setIsLoading(true);

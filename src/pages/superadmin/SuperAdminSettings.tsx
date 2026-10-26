@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL, NUM_COL } from "@/lib/tableClass";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical } from "lucide-react";
+import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical, Save } from "lucide-react";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import {
@@ -20,6 +20,9 @@ import { formatManilaDate } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth, ApiError } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import Hint from "@/components/Hint";
+import { IconAction, RowActions } from "@/components/RowActions";
+import PriceInput from "@/components/PriceInput";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -430,13 +433,10 @@ export default function SuperAdminSettings() {
               </div>
               <div>
                 <Label htmlFor="service-price">Price (₱)</Label>
-                <Input
+                <PriceInput
                   id="service-price"
-                  type="number"
-                  min={0}
-                  step={100}
                   value={newService.price}
-                  onChange={(e) => setNewService((s) => ({ ...s, price: e.target.value }))}
+                  onValueChange={(price) => setNewService((s) => ({ ...s, price }))}
                   placeholder="0"
                 />
               </div>
@@ -479,6 +479,7 @@ export default function SuperAdminSettings() {
         </CardContent>
       </Card>
 
+
       <Card className="shadow-card">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -500,11 +501,11 @@ export default function SuperAdminSettings() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10 print:hidden"><span className="sr-only">Reorder</span></TableHead>
+                <TableHead className={`w-10 print:hidden ${CODE_COL}`}><span className="sr-only">Reorder</span></TableHead>
                 <TableHead className={PIN_COL}>Service</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Price (₱)</TableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <TableHead className={NUM_COL}>Duration</TableHead>
+                <TableHead className={NUM_COL}>Price (₱)</TableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -520,31 +521,32 @@ export default function SuperAdminSettings() {
                     overId === s.id && dragId !== s.id && "outline outline-2 -outline-offset-2 outline-primary",
                   )}
                 >
-                  <TableCell className="print:hidden">
-                    <button
-                      type="button"
-                      draggable
-                      onDragStart={(e) => {
-                        if (savingOrder) { e.preventDefault(); return; }
-                        e.dataTransfer.effectAllowed = "move";
-                        setDragId(s.id);
-                      }}
-                      onDragEnd={() => { setDragId(null); setOverId(null); }}
-                      onKeyDown={(e) => {
-                        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-                        e.preventDefault();
-                        nudge(s.id, e.key === "ArrowUp" ? -1 : 1);
-                      }}
-                      aria-busy={savingOrder}
-                      aria-label={`Reorder ${s.name}, position ${i + 1} of ${services.length}`}
-                      title="Drag to reorder, or use the arrow keys"
-                      className={cn("cursor-grab text-muted-foreground hover:text-foreground", savingOrder && "opacity-50")}
-                    >
-                      <GripVertical className="w-4 h-4" />
-                    </button>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <Hint label="Drag to reorder, or use the arrow keys">
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={(e) => {
+                          if (savingOrder) { e.preventDefault(); return; }
+                          e.dataTransfer.effectAllowed = "move";
+                          setDragId(s.id);
+                        }}
+                        onDragEnd={() => { setDragId(null); setOverId(null); }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                          e.preventDefault();
+                          nudge(s.id, e.key === "ArrowUp" ? -1 : 1);
+                        }}
+                        aria-busy={savingOrder}
+                        aria-label={`Reorder ${s.name}, position ${i + 1} of ${services.length}`}
+                        className={cn("cursor-grab text-muted-foreground hover:text-foreground", savingOrder && "opacity-50")}
+                      >
+                        <GripVertical className="w-4 h-4" />
+                      </button>
+                    </Hint>
                   </TableCell>
                   <TableCell className={`font-medium ${PIN_COL}`}>{s.name}</TableCell>
-                  <TableCell>
+                  <TableCell className={NUM_COL}>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -553,36 +555,31 @@ export default function SuperAdminSettings() {
                         aria-label={`Duration for ${s.name} in minutes`}
                         value={durationDrafts[s.id] ?? ""}
                         onChange={(e) => setDurationDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                        className="w-24"
+                        className="w-24 text-right"
                       />
                       <span className="text-sm text-muted-foreground">min</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
+                  <TableCell className={NUM_COL}>
+                    <PriceInput
                       aria-label={`Price for ${s.name}`}
                       value={priceDrafts[s.id] ?? ""}
-                      onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                      className="w-32"
+                      onValueChange={(price) => setPriceDrafts((prev) => ({ ...prev, [s.id]: price }))}
+                      className="w-32 text-right"
                     />
                   </TableCell>
-                  <TableCell className="print:hidden">
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => saveService(s)} disabled={savingServiceId === s.id}>
-                        {savingServiceId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        aria-label={`Remove ${s.name}`}
-                        title="Remove"
-                        onClick={() => openRemove(s)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction
+                        label="Save"
+                        ariaLabel={`Save ${s.name}`}
+                        icon={savingServiceId === s.id ? Loader2 : Save}
+                        className={cn("text-primary", savingServiceId === s.id && "[&_svg]:animate-spin")}
+                        disabled={savingServiceId === s.id}
+                        onClick={() => saveService(s)}
+                      />
+                      <IconAction label="Remove" ariaLabel={`Remove ${s.name}`} icon={Trash2} className="text-destructive" onClick={() => openRemove(s)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -605,35 +602,30 @@ export default function SuperAdminSettings() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className={PIN_COL}>Service</TableHead>
-                    <TableHead>Date Removed</TableHead>
+                    <TableHead className={CODE_COL}>Date Removed</TableHead>
                     <TableHead>Removed By</TableHead>
                     <TableHead>Reason</TableHead>
-                    <TableHead className="print:hidden">Actions</TableHead>
+                    <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {removedPages.paged.map((s) => (
                     <TableRow key={s.id} className="text-muted-foreground">
                       <TableCell className={`font-medium ${PIN_COL}`}>{s.name}</TableCell>
-                      <TableCell>{s.removedAt ?? "—"}</TableCell>
+                      <TableCell className={CODE_COL}>{s.removedAt ?? "—"}</TableCell>
                       <TableCell>{s.removedBy ?? "—"}</TableCell>
                       <TableCell className="max-w-[18rem] whitespace-normal break-words">{s.removedReason ?? "—"}</TableCell>
-                      <TableCell className="print:hidden">
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" aria-label={`Restore ${s.name}`} onClick={() => bringBack(s)}>
-                            <RotateCcw className="w-4 h-4 mr-1" /> Restore
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            aria-label={`Delete ${s.name} permanently`}
-                            title="Delete permanently"
+                      <TableCell className={`print:hidden ${CODE_COL}`}>
+                        <RowActions>
+                          <IconAction label="Restore" ariaLabel={`Restore ${s.name}`} icon={RotateCcw} onClick={() => bringBack(s)} />
+                          <IconAction
+                            label="Delete permanently"
+                            ariaLabel={`Delete ${s.name} permanently`}
+                            icon={Trash2}
+                            className="text-destructive"
                             onClick={() => setDeleting(s)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                          />
+                        </RowActions>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -29,7 +29,6 @@ export interface StaffMember {
 }
 
 export interface StaffInput {
-  employeeId?: string;
   name: string;
   email: string;
   contact?: string;
@@ -111,15 +110,62 @@ export interface UnavailableDate {
   date: string;
   reason: string | null;
   remarks: string | null;
+  /** Part of the day only ("HH:MM", from leave for some hours); absent or null = the whole day. */
+  startTime?: string | null;
+  endTime?: string | null;
 }
+
+/** Whether a day off takes the whole day (not just some hours of it). */
+export const isWholeDay = (u: Pick<UnavailableDate, "startTime" | "endTime">) => !u.startTime || !u.endTime;
 
 export interface DentistScheduleData {
   days: ScheduleDay[];
   unavailable: UnavailableDate[];
+  /** Days and hours the dentist keeps for particular services. */
+  serviceHours?: ServiceHours[];
+}
+
+/** When a dentist does one service: on these days of the week (0 = Sunday; none = any day
+ * they work), between these times ("HH:MM"; null = their whole working day), and how many
+ * of it they take on each of those days (by day number; a day left out has no limit). */
+export interface ServiceHours {
+  service: string;
+  days: number[];
+  start: string | null;
+  end: string | null;
+  dayLimits?: Record<string, number>;
+}
+
+/**
+ * The dentist's week as it stands for a visit covering `services`: days a service isn't
+ * done on are dropped, and each day's hours shrink to fit every service's hours. Slots,
+ * calendars and "next available" all read the result, so they only offer what fits.
+ */
+export function forServices(schedule: DentistScheduleData, services: string[]): DentistScheduleData {
+  const rules = (schedule.serviceHours ?? []).filter((h) => services.includes(h.service));
+  if (!rules.length) return schedule;
+  const days = schedule.days.flatMap((d) => {
+    let start = toMinutes(d.start);
+    let end = toMinutes(d.end);
+    for (const r of rules) {
+      if (r.days.length && !r.days.includes(d.dayOfWeek)) return [];
+      if (r.start) start = Math.max(start, toMinutes(r.start));
+      if (r.end) end = Math.min(end, toMinutes(r.end));
+    }
+    return start < end ? [{ ...d, start: toValue(start), end: toValue(end) }] : [];
+  });
+  return { ...schedule, days };
 }
 
 export async function getDentistSchedule(dentistId: string): Promise<DentistScheduleData> {
   return api<DentistScheduleData>(`/staff?schedule=true&dentistId=${encodeURIComponent(dentistId)}`);
+}
+
+/** Every dentist's and admin's schedule at once, by user id (superadmin only). Someone
+ * with no days set and no days off has no entry. */
+export async function getAllSchedules(): Promise<Record<string, DentistScheduleData>> {
+  const data = await api<{ schedules: Record<string, DentistScheduleData> }>("/staff?schedule=true&all=true");
+  return data.schedules ?? {};
 }
 
 export async function saveDentistScheduleDays(dentistId: string, days: ScheduleDay[]): Promise<void> {
@@ -144,17 +190,24 @@ export async function removeDentistUnavailable(id: string): Promise<void> {
   await api(`/staff?unavailable=true&id=${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+/** How far ahead of now a patient has to book a time today, so they can get to the clinic.
+ * The server holds patients to the same (LEAD_MINUTES in api/appointments.ts). */
+export const BOOKING_LEAD_MINUTES = 60;
+
 /** Generates bookable start times for a given date from a real dentist schedule, keeping
  * only those where a visit of `durationMinutes` fits: inside working hours, clear of
- * lunch, and clear of what's already booked. Enforces that day's max-patients cap. */
+ * lunch, and clear of what's already booked. Enforces that day's max-patients cap.
+ * Today, times have to be at least `leadMinutes` from now (any time still ahead when 0). */
 export function generateAvailableSlots(
   schedule: DentistScheduleData,
   date: Date,
   booked: (string | BookedSlot)[],
   durationMinutes?: number,
+  leadMinutes = 0,
 ): { value: string; label: string }[] {
   const key = toKey(date);
-  if (schedule.unavailable.some((u) => u.date === key)) return [];
+  const away = schedule.unavailable.filter((u) => u.date === key);
+  if (away.some(isWholeDay)) return [];
 
   const day = schedule.days.find((d) => d.dayOfWeek === date.getDay());
   if (!day) return [];
@@ -169,6 +222,8 @@ export function generateAvailableSlots(
     const end = typeof b === "string" ? null : b.endTime;
     return { from, to: end ? toMinutes(end) : from + day.duration };
   });
+  // Leave for some hours of the day closes those hours, like a booking would.
+  for (const u of away) held.push({ from: toMinutes(u.startTime!), to: toMinutes(u.endTime!) });
   const slots: { value: string; label: string }[] = [];
   const endMin = toMinutes(day.end);
   const lunchStart = day.lunchStart ? toMinutes(day.lunchStart) : null;
@@ -182,7 +237,7 @@ export function generateAvailableSlots(
     const slotEnd = t + needed;
     if (lunchStart != null && lunchEnd != null && t < lunchEnd && slotEnd > lunchStart) continue;
     if (held.some((b) => t < b.to && slotEnd > b.from)) continue;
-    if (isToday && t <= nowMinutes) continue;
+    if (isToday && t < nowMinutes + Math.max(leadMinutes, 1)) continue;
     // Once the visit's length is known, the option says when it would finish, so the
     // booker can see what the chosen services actually take up.
     const label = durationMinutes ? `${toLabel(t)} – ${toLabel(slotEnd)}` : toLabel(t);
@@ -195,6 +250,6 @@ export function generateAvailableSlots(
 /** Whether a dentist works at all on the given date (has a day row and isn't marked unavailable). */
 export function isDentistAvailableOn(schedule: DentistScheduleData, date: Date): boolean {
   const key = toKey(date);
-  if (schedule.unavailable.some((u) => u.date === key)) return false;
+  if (schedule.unavailable.some((u) => u.date === key && isWholeDay(u))) return false;
   return schedule.days.some((d) => d.dayOfWeek === date.getDay());
 }

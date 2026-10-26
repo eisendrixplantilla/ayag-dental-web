@@ -30,11 +30,35 @@ export const COMPACT_TABLE =
  * while the rest of the row swipes past, so the reader never loses track of the row.
  * It is the one column allowed to wrap there, and only up to about two-fifths of the
  * screen, so it can't crowd out what it is pinned beside. At every size it keeps a
- * minimum width, so a long email beside it can't squeeze a name to one word a line. */
+ * minimum width, so a long email beside it can't squeeze a name to one word a line. It
+ * reads left even when it isn't the first column. */
 export const PIN_COL =
+  // Reads left, like any text column.
+  "text-left [&>*]:mx-0 [&>.flex]:justify-start " +
   "min-w-[7.5rem] max-md:sticky max-md:left-0 max-md:z-10 max-md:bg-card max-md:!whitespace-normal " +
   "max-md:max-w-[40vw] max-md:shadow-[inset_-1px_0_0_hsl(var(--border))]";
 
 /** For a cell holding free text — a name, a service, a reason — that should wrap rather
  * than hold the table open at the width of its longest line. */
 export const WRAP_CELL = "whitespace-normal break-words";
+
+/**
+ * The clinic's alignment rules for a table column, on its heading and every cell:
+ *  - text (names, services, notes, emails): left, the default; nothing to add.
+ *  - numbers (counts, money, ages, quantities): NUM_COL, right, so the digits line up.
+ *  - short codes, dates, times and statuses (IDs, "Yes"/"No", "Pending"), and the row's
+ *    action buttons: CODE_COL, centered.
+ * Block contents (badges, button rows, inputs) move with the text.
+ */
+export const NUM_COL = "!text-right [&>*]:ml-auto [&>.flex]:justify-end";
+export const CODE_COL = "!text-center [&>*]:mx-auto [&>.flex]:justify-center";
+
+/** Which of the rules a column follows, from its heading: for tables whose columns are
+ * listed as data (the generated reports, the printed documents). */
+export function columnKind(column: string): "text" | "number" | "code" {
+  if (/^(Age|Quantity|Qty|Min Stock|Stock|Price|Amount|Subtotal|Total.*|.*Count|Patients|Appointments)$/i.test(column)) return "number";
+  if (/(\bID\b|Reference|Date|Dates|Time|Booked On|Requested|Registered|Status|Type|Walk-in|Account|^Day$|Phone|Contact Number|Tooth No|Hours|Lunch Break|Latest Consultation|Leave For|Role|Slot)/i.test(column)) return "code";
+  return "text";
+}
+/** columnKind as the class to put on that column's heading and cells. */
+export const alignFor = (column: string) => ({ number: NUM_COL, code: CODE_COL, text: "" })[columnKind(column)];

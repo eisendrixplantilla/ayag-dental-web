@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarCheck, CalendarPlus, Clock3, Loader2, X } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Clock3, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
+import BookingCalendar from "@/components/BookingCalendar";
+import DentistPicker from "@/components/DentistPicker";
+import { manilaTodayDateStr } from "@/lib/formatDate";
+import { getDentistProfiles, type DentistProfile } from "@/lib/api/booking";
 import { toKey, toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { manilaTodayAsLocalDate } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { createAppointment } from "@/lib/api/appointments";
 import { FALLBACK_SERVICES, SERVICE_SEPARATOR, endTimeFor, formatDuration, totalServiceMinutes } from "@/lib/services";
@@ -19,16 +22,18 @@ import { getServices } from "@/lib/api/dentalRecords";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { getBookedSlots } from "@/lib/api/appointments";
 import {
-  getDentistDirectory, getDentistSchedule, generateAvailableSlots, isDentistAvailableOn,
+  getDentistDirectory, getDentistSchedule, generateAvailableSlots, forServices, BOOKING_LEAD_MINUTES,
   DAY_NAMES, type DentistDirectoryEntry, type DentistScheduleData,
 } from "@/lib/api/staff";
+import Hint from "@/components/Hint";
 
 
 export default function PatientBook() {
   const { user } = useAuth();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  // A visit can cover several services, e.g. a cleaning and a filling in one sitting.
+  // One service per booking; another is booked straight after, with the same dentist.
+  // Kept as a list because the calendar, slots and limits all take one.
   const [chosen, setChosen] = useState<string[]>([]);
 
   // What the clinic offers, and how long each one takes — straight from the
@@ -40,7 +45,11 @@ export default function PatientBook() {
   const visitMinutes = totalServiceMinutes(chosen, durations);
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState<Date>();
+  // Times today have to be an hour off; the time list says so, so a shorter list makes sense.
+  const bookingToday = !!date && toKey(date) === manilaTodayDateStr();
   const [time, setTime] = useState("");
+  // Stable, so the calendar can let go of a day that fills up without looping.
+  const pickDate = useCallback((d: Date | undefined) => { setDate(d); setTime(""); }, []);
   // Bumped to re-fetch the free slots, e.g. after someone else took the chosen one.
   const [slotsVersion, setSlotsVersion] = useState(0);
   const [dentists, setDentists] = useState<DentistDirectoryEntry[]>([]);
@@ -51,7 +60,24 @@ export default function PatientBook() {
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   const dentist = dentists.find((d) => d.id === dentistId)?.name ?? "";
-  const remaining = services.filter((s) => !chosen.includes(s));
+  // What each dentist offers. The dentist is chosen first, and the services list then
+  // holds only what they do.
+  const [profiles, setProfiles] = useState<DentistProfile[]>([]);
+  useEffect(() => {
+    getDentistProfiles().then((p) => setProfiles(Array.isArray(p) ? p : [])).catch(() => {/* every service stays offered */});
+  }, []);
+  const offeredBy = (id: string) => profiles.find((p) => p.id === id)?.services ?? null;
+  const theirServices = dentistId && offeredBy(dentistId) ? services.filter((s) => offeredBy(dentistId)!.includes(s)) : services;
+
+  // Changing dentist keeps only the services the new one also does.
+  const chooseDentist = (id: string) => {
+    const offers = offeredBy(id);
+    setDentistId(id);
+    setDate(undefined);
+    setTime("");
+    if (offers) setChosen((prev) => prev.filter((s) => offers.includes(s)));
+  };
+  const chooseService = (service: string) => { setChosen([service]); setDate(undefined); setTime(""); };
   const serviceLabel = chosen.join(SERVICE_SEPARATOR);
 
   useEffect(() => {
@@ -82,13 +108,17 @@ export default function PatientBook() {
   // free, without re-running this whole effect every time the patient picks one.
   const timeRef = useRef(time);
   timeRef.current = time;
+  // While this patient's own booking is being sent, and after it went through, the time
+  // they picked is held by that booking: a refresh then would call it "just taken".
+  const bookingRef = useRef(false);
 
   const loadSlots = useCallback((silent = false) => {
     if (!dentistId || !date || !schedule) { setSlots([]); return; }
     if (!silent) setLoadingSlots(true);
     getBookedSlots({ dentistId, dentistName: dentist, date: toKey(date) })
       .then((booked) => {
-        const free = generateAvailableSlots(schedule, date, booked, visitMinutes);
+        if (silent && bookingRef.current) return;
+        const free = generateAvailableSlots(forServices(schedule, chosen), date, booked, visitMinutes, BOOKING_LEAD_MINUTES);
         setSlots(free);
         const picked = timeRef.current;
         if (picked && !free.some(s => s.value === picked)) {
@@ -100,7 +130,7 @@ export default function PatientBook() {
       })
       .catch(() => { if (!silent) toast.error("Failed to load available time slots"); })
       .finally(() => { if (!silent) setLoadingSlots(false); });
-  }, [dentistId, date, schedule, dentist, visitMinutes]);
+  }, [dentistId, date, schedule, dentist, visitMinutes, chosen]);
 
   useEffect(() => { loadSlots(); }, [loadSlots, slotsVersion]);
   // Someone else can book the same slot while this form sits open, so keep what's
@@ -119,6 +149,7 @@ export default function PatientBook() {
 
   const handleSubmit = async () => {
     if (chosen.length === 0 || !dentistId || !date || !time || !user) return;
+    bookingRef.current = true;
     setSubmitting(true);
     try {
       await createAppointment({
@@ -136,6 +167,7 @@ export default function PatientBook() {
       toast.success("Appointment request submitted — pending admin approval");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to submit appointment request");
+      bookingRef.current = false;
       // Most likely the slot was taken in the meantime: show what's actually free now.
       setTime("");
       setSlotsVersion((v) => v + 1);
@@ -159,18 +191,24 @@ export default function PatientBook() {
           <p className="text-sm text-muted-foreground mt-1">
             Your request is not confirmed yet. You will be notified once the clinic admin approves it.
           </p>
-          <Button
-            className="mt-6 gradient-primary text-primary-foreground"
-            onClick={() => {
-              setSubmitted(false);
-              setChosen([]);
-              setDentistId("");
-              setDate(undefined);
-              setTime("");
-            }}
-          >
-            Book Another
-          </Button>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-2">
+            {/* Another service, usually on another day, with the same dentist already chosen. */}
+            <Button
+              className="gradient-primary text-primary-foreground"
+              onClick={() => {
+                bookingRef.current = false;
+                setSubmitted(false);
+                setChosen([]);
+                setDate(undefined);
+                setTime("");
+              }}
+            >
+              <CalendarPlus className="w-4 h-4 mr-2" /> Book another service with {dentist}
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/patient/appointments">Done</Link>
+            </Button>
+          </div>
         </motion.div>
       </div>
     );
@@ -192,103 +230,74 @@ export default function PatientBook() {
 
       <Card className="shadow-card">
         <CardContent className="p-4 sm:p-5 space-y-4">
-          {/* What and who — one row, with the chosen services as chips beside the picker
-              so adding several doesn't push the rest of the form down. */}
+          {/* Who, then what: the dentist first, so their days and what they offer are seen
+              before anything else is picked; the services are then only theirs. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Service</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-full lg:w-56">
-                  {/* Always shows its placeholder: picking an option adds to the list beside
-                      it rather than replacing a single selection. */}
-                  <Select
-                    value=""
-                    disabled={remaining.length === 0}
-                    onValueChange={(v) => setChosen(prev => [...prev, v])}
-                  >
-                    <SelectTrigger className="h-11 sm:h-9" aria-label="Add a service">
-                      <SelectValue placeholder={
-                        remaining.length === 0 ? "All services added"
-                          : chosen.length === 0 ? "Choose a service"
-                          : "Add another service"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>{remaining.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {chosen.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">Add as many as you need.</span>
-                ) : (
-                  chosen.map(s => (
-                    <Badge key={s} variant="secondary" className="gap-1 py-1 pl-3 pr-1.5 font-normal max-w-full">
-                      <span className="truncate">{s}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${s}`}
-                        className="rounded-full p-1 -mr-0.5 hover:bg-foreground/10 shrink-0"
-                        onClick={() => setChosen(prev => prev.filter(c => c !== s))}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </div>
-
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Dentist</Label>
               <div className="w-full lg:w-64">
-                <Select
-                  value={dentistId}
-                  disabled={chosen.length === 0 || loadingDentists}
-                  onValueChange={(val) => { setDentistId(val); setDate(undefined); setTime(""); }}
-                >
-                  <SelectTrigger className="h-11 sm:h-9" aria-label="Choose a dentist">
-                    <SelectValue placeholder={chosen.length === 0 ? "Select a service first" : loadingDentists ? "Loading dentists..." : "Choose a dentist"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dentists.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <DentistPicker
+                  value={dentist}
+                  placeholder={loadingDentists ? "Loading dentists..." : "Choose a dentist"}
+                  disabled={loadingDentists || dentists.length === 0}
+                  services={chosen}
+                  visitMinutes={visitMinutes}
+                  selectedId={dentistId}
+                  onChoose={chooseDentist}
+                  recentFor="self"
+                  leadMinutes={BOOKING_LEAD_MINUTES}
+                />
               </div>
               {/* Which days exist at all on the calendar below — worth reading, so it
                   doesn't sit in hint grey. */}
-              <p className="text-xs min-h-5 leading-tight"
-                 title={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
-                {!loadingDentists && dentists.length === 0 ? (
-                  <span className="font-medium text-destructive">No dentists are available for booking right now.</span>
-                ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
-                  : dentistId && schedule && schedule.days.length === 0 ? (
-                    <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
-                  ) : schedule && schedule.days.length > 0 ? (
-                    <span className="flex items-start gap-1.5 text-foreground">
-                      <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
-                      <span className="line-clamp-2 sm:line-clamp-none">
-                        <span className="font-semibold">Working hours:</span>{" "}
-                        <span className="font-medium">{scheduleSummary}</span>
+              <Hint label={schedule && schedule.days.length > 0 ? scheduleSummary : undefined}>
+                <p className="text-xs min-h-5 leading-tight">
+                  {!loadingDentists && dentists.length === 0 ? (
+                    <span className="font-medium text-destructive">No dentists are available for booking right now.</span>
+                  ) : loadingSchedule ? <span className="text-muted-foreground">Loading schedule...</span>
+                    : dentistId && schedule && schedule.days.length === 0 ? (
+                      <span className="font-medium text-destructive">This dentist has no working schedule configured yet.</span>
+                    ) : schedule && schedule.days.length > 0 ? (
+                      <span className="flex items-start gap-1.5 text-foreground">
+                        <Clock3 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                        <span className="line-clamp-2 sm:line-clamp-none">
+                          <span className="font-semibold">Working hours:</span>{" "}
+                          <span className="font-medium">{scheduleSummary}</span>
+                        </span>
                       </span>
-                    </span>
-                  ) : ""}
-              </p>
+                    ) : <span className="text-muted-foreground">See each dentist's days and services before you choose.</span>}
+                </p>
+              </Hint>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Service</Label>
+              <div className="w-full lg:w-64">
+                <Select value={chosen[0] ?? ""} disabled={!dentistId || theirServices.length === 0} onValueChange={chooseService}>
+                  <SelectTrigger className="h-11 sm:h-9" aria-label="Choose a service">
+                    <SelectValue placeholder={!dentistId ? "Choose a dentist first" : "Choose a service"} />
+                  </SelectTrigger>
+                  <SelectContent>{theirServices.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">One service per booking. You can book another right after.</p>
             </div>
           </div>
 
           {/* When — the month and the free times side by side, so picking a day and seeing
               what is left is one glance rather than two dropdowns. On a tablet,
               where the sidebar leaves too little room, the times go under the month. */}
-          <div className="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-4 border-t pt-4">
-            <div className={cn("rounded-md border w-fit max-w-full overflow-x-auto mx-auto lg:mx-0", !dentistId && "opacity-60")}>
-              <Calendar
-                mode="single"
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)] gap-4 border-t pt-4">
+            <div className={cn("rounded-md border w-full max-w-[30rem] mx-auto lg:mx-0", !dentistId && "opacity-60")}>
+              <BookingCalendar
+                schedule={schedule}
+                dentistId={dentistId || null}
+                dentistName={dentist}
+                services={chosen}
+                visitMinutes={visitMinutes}
+                leadMinutes={BOOKING_LEAD_MINUTES}
                 selected={date}
-                onSelect={(d) => { setDate(d); setTime(""); }}
-                className="p-2 pointer-events-auto"
-                disabled={(d) => {
-                  if (d < manilaTodayAsLocalDate()) return true;
-                  if (!schedule) return true;
-                  return !isDentistAvailableOn(schedule, d);
-                }}
+                onSelect={pickDate}
               />
             </div>
 
@@ -307,8 +316,8 @@ export default function PatientBook() {
 
               {!dentistId || !date ? (
                 <p className="text-sm text-muted-foreground py-4 sm:py-6 px-3 text-center border border-dashed rounded-md">
-                  {chosen.length === 0 ? "Choose a service to begin."
-                    : !dentistId ? "Choose a dentist to see their calendar."
+                  {!dentistId ? "Choose a dentist to begin."
+                    : chosen.length === 0 ? "Choose a service, then pick a date."
                     : "Pick a date to see the free times."}
                 </p>
               ) : loadingSlots ? (
@@ -317,9 +326,14 @@ export default function PatientBook() {
                 </p>
               ) : slots.length === 0 ? (
                 <p className="text-sm text-destructive py-6 text-center border border-dashed rounded-md">
-                  Fully booked that day — please pick another date.
+                  {bookingToday ? "No more times today at least 1 hour from now — please pick another date."
+                    : "Fully booked that day — please pick another date."}
                 </p>
               ) : (
+                <>
+                {bookingToday && (
+                  <p className="text-xs text-muted-foreground">Today's times start at least 1 hour from now, so you have time to get here.</p>
+                )}
                 <div
                   role="group"
                   aria-label="Available time slots"
@@ -340,6 +354,7 @@ export default function PatientBook() {
                     </Button>
                   ))}
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -358,7 +373,7 @@ export default function PatientBook() {
               </p>
             ) : (
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Pick a service, a dentist, a date and a time to continue.
+                Pick a dentist, a service, a date and a time to continue.
               </p>
             )}
             <Button

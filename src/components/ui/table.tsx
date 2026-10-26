@@ -46,6 +46,8 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
     <th
       ref={ref}
       className={cn(
+        // Reads left like its column's text; a number column puts NUM_COL on it (right), a
+        // code, date, time or status column CODE_COL (centered). See lib/tableClass.ts.
         "h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className,
       )}
@@ -57,7 +59,19 @@ TableHead.displayName = "TableHead";
 
 const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
-    <td ref={ref} className={cn("p-4 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)} {...props} />
+    <td
+      ref={ref}
+      className={cn(
+        // Text reads left; a number column is NUM_COL (right), a code, date, time or status
+        // column CODE_COL (centered), on its heading and cells alike. A cell spanning the
+        // whole row ("No records found") is centered.
+        "p-4 align-middle whitespace-nowrap text-left",
+        "[&[colspan]]:text-center",
+        "[&:has([role=checkbox])]:pr-0",
+        className,
+      )}
+      {...props}
+    />
   ),
 );
 TableCell.displayName = "TableCell";

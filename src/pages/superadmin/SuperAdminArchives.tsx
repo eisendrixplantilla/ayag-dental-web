@@ -3,14 +3,16 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArchiveRestore, Eye, Loader2, Printer } from "lucide-react";
+import { IconAction, RowActions } from "@/components/RowActions";
 import { toast } from "sonner";
 import { getArchivedStaff, restoreStaff } from "@/lib/api/staff";
 import { getArchivedPatients, restorePatient } from "@/lib/api/patients";
 import { formatManilaDate } from "@/lib/formatDate";
+import { patientRef } from "@/lib/patientRef";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
 import TablePagination from "@/components/TablePagination";
@@ -23,6 +25,8 @@ const COLUMNS = ["ID", "Full Name", "Account Type", "Date Archived", "Archived B
 
 type ArchiveRow = {
   id: string;
+  /** The ID people know the account by: a staff member's Employee ID, a patient's Patient ID. */
+  ref: string;
   name: string;
   type: "Staff" | "Patient";
   email: string;
@@ -47,6 +51,7 @@ export default function SuperAdminArchives() {
       setRows([
         ...staff.map<ArchiveRow>((s) => ({
           id: s.id,
+          ref: s.employeeId ?? "—",
           name: s.name,
           type: "Staff",
           email: s.email,
@@ -58,6 +63,7 @@ export default function SuperAdminArchives() {
         })),
         ...patients.map<ArchiveRow>((p) => ({
           id: p.id,
+          ref: patientRef(p),
           name: p.name,
           type: "Patient",
           email: p.email,
@@ -79,7 +85,7 @@ export default function SuperAdminArchives() {
   }, [load]);
 
   const textRows = useMemo(
-    () => rows.map((r) => [r.id, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
+    () => rows.map((r) => [r.ref, r.name, r.type, r.archivedAt, r.archivedBy, r.reason]),
     [rows],
   );
   const matched = useMemo(
@@ -156,13 +162,13 @@ export default function SuperAdminArchives() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>ID</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(0)}>ID</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Full Name</SortableHead>
-                <SortableHead {...headProps(2)}>Account Type</SortableHead>
-                <SortableHead {...headProps(3)}>Date Archived</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(2)}>Account Type</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Date Archived</SortableHead>
                 <SortableHead {...headProps(4)}>Archived By</SortableHead>
                 <SortableHead {...headProps(5)}>Reason</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -178,23 +184,19 @@ export default function SuperAdminArchives() {
                 </TableRow>
               ) : paged.map(r => (
                 <TableRow key={`${r.type}-${r.id}`}>
-                  <TableCell className="font-mono text-sm">{r.id}</TableCell>
+                  <TableCell className={`font-mono text-sm ${CODE_COL}`}>{r.ref}</TableCell>
                   <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{r.name}</TableCell>
-                  <TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className="bg-secondary text-secondary-foreground">{r.type}</Badge>
                   </TableCell>
-                  <TableCell>{r.archivedAt}</TableCell>
+                  <TableCell className={CODE_COL}>{r.archivedAt}</TableCell>
                   <TableCell className={WRAP_CELL}>{r.archivedBy}</TableCell>
                   <TableCell className="max-w-[16rem] whitespace-normal break-words">{r.reason}</TableCell>
-                  <TableCell className="print:hidden">
-                    <div className="flex flex-wrap gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => setViewing(r)}>
-                        <Eye className="w-4 h-4 mr-1" /> View
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setRestoring(r)}>
-                        <ArchiveRestore className="w-4 h-4 mr-1" /> Restore
-                      </Button>
-                    </div>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction label="View" icon={Eye} onClick={() => setViewing(r)} />
+                      <IconAction label="Restore" icon={ArchiveRestore} onClick={() => setRestoring(r)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -217,7 +219,7 @@ export default function SuperAdminArchives() {
           </DialogHeader>
           {viewing && (
             <div className="space-y-3 text-sm">
-              <Row label={viewing.type === "Staff" ? "Employee ID" : "Patient ID"} value={viewing.id} />
+              <Row label={viewing.type === "Staff" ? "Employee ID" : "Patient ID"} value={viewing.ref} />
               <Row label="Full Name" value={viewing.name} />
               {viewing.type === "Staff" && <Row label="Role" value={viewing.role ?? "—"} />}
               <Row label="Email Address" value={viewing.email} />

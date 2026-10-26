@@ -248,8 +248,8 @@ describe("columns left off paper", () => {
     expect(html).not.toMatch(/<th>(Reference|Type)<\/th>/);
     expect(html).not.toContain("APT-1");
     expect(html).not.toContain("Walk-in");
-    expect(bodyRows(html)[0]).toContain('<td class="name">Rosa Mendoza</td><td class="nowrap">Completed</td></tr>');
-    expect(bodyRows(html)[1]).toContain('<td class="nowrap">2026-10-01</td></tr>');
+    expect(bodyRows(html)[0]).toContain('<td class="name">Rosa Mendoza</td><td class="nowrap al-c">Completed</td></tr>');
+    expect(bodyRows(html)[1]).toContain('<td class="nowrap al-c">2026-10-01</td></tr>');
   });
 });
 
@@ -343,5 +343,18 @@ describe("filling each sheet to its foot", () => {
     expect(sheets(html)).toBe(2);
     expect(html).toContain("Records 1–37 of 45");
     expect(html).toContain("Records 38–45 of 45");
+  });
+});
+
+describe("the clinic's alignment rules on paper", () => {
+  it("puts numbers right, codes, dates and statuses in the middle, and text left", () => {
+    const html = buildReportHtml({
+      ...doc(0),
+      tables: [{ columns: ["Patient Name", "Patient ID", "Age", "Status"], rows: [["Rosa Mendoza", "PT-26100001", "32", "Active"]] }],
+    });
+    expect(html).toContain('<th class="name">Patient Name</th>');
+    expect(html).toMatch(/<th class="[^"]*al-c">Patient ID<\/th>/);
+    expect(html).toMatch(/<th class="[^"]*al-r">Age<\/th>/);
+    expect(bodyRows(html)[0]).toMatch(/<td class="[^"]*al-r">32<\/td><td class="[^"]*al-c">Active<\/td>/);
   });
 });

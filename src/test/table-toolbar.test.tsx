@@ -179,7 +179,7 @@ describe("the pages filter by column", () => {
     render(<MemoryRouter><AdminAccounts /></MemoryRouter>);
     await screen.findByText("Maria Santos");
 
-    chooseField("3"); // Date Registered
+    chooseField("4"); // Date Registered
     await waitFor(() => expect(screen.getByLabelText("From date")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-09-22" } });
 
@@ -207,7 +207,7 @@ describe("patient records keeps walk-ins findable", () => {
     expect(cells("Maria Santos")).toContain("Yes");
     expect(cells("Pedro Reyes")).toContain("No");
 
-    chooseField("5"); // Walk-in
+    chooseField("6"); // Walk-in
     await waitFor(() => expect(screen.getByLabelText("Filter by Walk-in")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Filter by Walk-in"), { target: { value: "Yes" } });
 

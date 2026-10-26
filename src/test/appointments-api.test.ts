@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Runs the real api/appointments.ts handler. The database is a small in-memory table
 // that understands the handful of queries the handler makes; the session check and
@@ -8,6 +8,15 @@ const h = vi.hoisted(() => ({
   rows: [] as Row[],
   session: { sub: "admin-1", email: "admin@admin.com", role: "admin" } as { sub: string; email: string; role: string },
   accounts: [] as Row[],
+  /** dentist_service_limits rows: { dentist_id, service_name, daily_limit }. */
+  limits: [] as Row[],
+  /** dentist_services rows: { dentist_id, service_name }. */
+  offered: [] as Row[],
+  /** dentist_service_hours rows: { dentist_id, service_name, days, start_time, end_time }. */
+  hours: [] as Row[],
+  /** Whether overdue pending requests are closed. Off for the older tests, whose
+   * pending requests sit on dates that are past by now. */
+  expire: false,
   n: 0,
 }));
 
@@ -36,6 +45,21 @@ vi.mock("../../api/_lib/db.js", () => ({
         .map(r => ({ time: r.time, end_time: r.end_time }));
     }
     if (text.includes("guest-columns")) return [];
+    if (text.includes("booking-limits-table") || text.includes("calendar-style-column") || text.includes("dentist-services-table")
+      || text.includes("service-hours-table") || text.includes("service-day-limits-column")) return [];
+    if (text.includes("service-hours")) return h.hours.filter(r => r.dentist_id === v[0]);
+    if (text.includes("offered-services")) return h.offered.filter(o => o.dentist_id === v[0]);
+    if (text.includes("dentists-by-name")) return [];
+    if (text.includes("service-limits")) return h.limits.filter(l => l.dentist_id === v[0]);
+    if (text.includes("day-service-counts")) {
+      const [date, statuses, dentistId, dentistName, excludeId] = v;
+      return onThatDay(date, statuses, dentistId, dentistName, excludeId).map(r => ({ service: r.service }));
+    }
+    if (text.includes("month-availability")) {
+      const [from, to, statuses, dentistId, dentistName, excludeId] = v;
+      return h.rows.filter(r => r.date >= from && r.date <= to && statuses.includes(r.status)
+        && sameDentist(r, dentistId, dentistName) && r.id !== excludeId);
+    }
     if (text.includes("link-target")) return h.accounts.filter(a => a.id === v[0]);
     if (text.includes("link-guest-details")) {
       const [name, digits] = v;
@@ -55,6 +79,16 @@ vi.mock("../../api/_lib/db.js", () => ({
         created_at: "2026-09-23T00:00:00Z", updated_at: "2026-09-23T00:00:00Z" };
       h.rows.push(row);
       return [row];
+    }
+    if (text.includes("expire-pending")) {
+      if (!h.expire) return [];
+      const [reason, today, , now] = v;
+      for (const r of h.rows) {
+        if (r.status === "pending" && (r.date < today || (r.date === today && r.time <= now))) {
+          Object.assign(r, { status: "rejected", reason });
+        }
+      }
+      return [];
     }
     if (text.includes("UPDATE appointments")) {
       const [status, date, time, end_time, reason, remarks, dentist_id, dentist_name, inc, id] = v;
@@ -97,6 +131,10 @@ const booking = { patientName: "Maria", dentistId: DR, dentistName: "Dr. Mike Jo
 
 beforeEach(() => {
   h.rows = [];
+  h.limits = [];
+  h.offered = [];
+  h.hours = [];
+  h.expire = false;
   h.n = 0;
   h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
   sendAppointmentEmail.mockReset().mockResolvedValue(undefined);
@@ -304,6 +342,19 @@ describe("a patient rescheduling", () => {
     expect(res.body.appointment.endTime).toBe("10:00"); // keeps its length
   });
 
+  it("has to move it to another day", async () => {
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-25", time: "15:00" });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/different day/);
+    expect(h.rows[0].time).toBe("13:00"); // left as it was
+  });
+
+  it("leaves staff free to move it within the same day", async () => {
+    h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-25", time: "15:00" });
+    expect(res.code).toBe(200);
+  });
+
   it("still spends the patient's one move", async () => {
     const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
     expect(res.body.appointment.rescheduleCount).toBe(1);
@@ -452,5 +503,247 @@ describe("linking a guest's walk-ins to the account they made", () => {
     h.session = { sub: "dr-1", email: "dr@example.com", role: "dentist" };
     expect((await link({ patientName: "Rosa Mendoza", patientId: "acct-9" })).code).toBe(403);
     expect(unlinked()).toBe(3);
+  });
+});
+
+describe("a dentist's daily limit for a procedure", () => {
+  const veneers = (over: Row = {}) => row({ service: "Veneers", status: "confirmed", ...over });
+  beforeEach(() => { h.limits = [{ dentist_id: DR, service_name: "Veneers", daily_limit: 2 }]; });
+
+  it("takes bookings up to the limit, then refuses the next one that day", async () => {
+    h.rows = [veneers({ id: "v1", time: "09:00" })];
+    const second = await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-25", time: "10:00" } });
+    expect(second.code).toBe(201);
+    const third = await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-25", time: "11:00" } });
+    expect(third.code).toBe(409);
+    expect(third.body.error).toMatch(/Veneers is fully booked with Dr. Mike Johnson on that day \(2 per day\)/);
+  });
+
+  it("counts a visit with several services toward each one, and leaves unlimited ones alone", async () => {
+    h.rows = [veneers({ id: "v1", time: "09:00", service: "Oral, Veneers" }), veneers({ id: "v2", time: "10:00" })];
+    expect((await call("POST", { body: { ...booking, service: "Veneers, Oral", date: "2026-09-25", time: "11:00" } })).code).toBe(409);
+    expect((await call("POST", { body: { ...booking, service: "Oral", date: "2026-09-25", time: "11:00" } })).code).toBe(201);
+  });
+
+  it("doesn't count cancelled or rejected bookings, other days, or another dentist", async () => {
+    h.rows = [
+      veneers({ id: "v1", time: "09:00", status: "cancelled" }),
+      veneers({ id: "v2", time: "10:00", status: "rejected" }),
+      veneers({ id: "v3", time: "09:00", date: "2026-09-26" }),
+      veneers({ id: "v4", time: "09:00", dentist_id: "dr-other", dentist_name: "Aerhol Gocalin" }),
+    ];
+    expect((await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-25", time: "11:00" } })).code).toBe(201);
+  });
+
+  it("refuses moving a booking onto a day that's full for its procedure, but not within its own day", async () => {
+    h.rows = [
+      veneers({ id: "v1", time: "09:00", date: "2026-09-26" }),
+      veneers({ id: "v2", time: "10:00", date: "2026-09-26" }),
+      veneers({ id: "apt-1", time: "13:00" }),
+    ];
+    const move = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "15:00" });
+    expect(move.code).toBe(409);
+    expect(move.body.error).toMatch(/fully booked/);
+    const sameDay = await patch("apt-1", { status: "rescheduled", time: "15:00" });
+    expect(sameDay.code).toBe(200);
+  });
+});
+
+describe("a month of a dentist's bookings, for the calendar", () => {
+  it("gives each day's taken spans and how many of each service, without patient details", async () => {
+    h.rows = [
+      row({ id: "a", date: "2026-09-25", time: "09:00", end_time: "10:00", service: "Veneers, Oral", status: "pending" }),
+      row({ id: "b", date: "2026-09-25", time: "13:00", service: "Veneers", status: "confirmed" }),
+      row({ id: "c", date: "2026-09-26", time: "09:00", service: "Oral", status: "cancelled" }),
+    ];
+    const res = await call("GET", { query: { availability: "1", dentistId: DR, from: "2026-09-01", to: "2026-09-30" } });
+    expect(res.code).toBe(200);
+    expect(res.body.days).toEqual({
+      "2026-09-25": {
+        slots: [{ time: "09:00", endTime: "10:00" }, { time: "13:00", endTime: null }],
+        services: { Veneers: 2, Oral: 1 },
+      },
+    });
+    expect(JSON.stringify(res.body)).not.toMatch(/Allen|example\.com/);
+  });
+
+  it("leaves out the booking being moved", async () => {
+    h.rows = [row({ id: "a", date: "2026-09-25", service: "Veneers" })];
+    const res = await call("GET", { query: { availability: "1", dentistId: DR, from: "2026-09-01", to: "2026-09-30", excludeId: "a" } });
+    expect(res.body.days).toEqual({});
+  });
+
+  it("refuses a range of more than two months", async () => {
+    const res = await call("GET", { query: { availability: "1", dentistId: DR, from: "2026-01-01", to: "2026-12-31" } });
+    expect(res.code).toBe(400);
+  });
+});
+
+describe("the services a dentist offers", () => {
+  beforeEach(() => { h.offered = [{ dentist_id: DR, service_name: "Oral" }, { dentist_id: DR, service_name: "Veneers" }]; });
+
+  it("takes a booking for a service the dentist offers", async () => {
+    expect((await call("POST", { body: { ...booking, service: "Oral, Veneers", date: "2026-09-25", time: "10:00" } })).code).toBe(201);
+  });
+
+  it("refuses a service the dentist doesn't offer, and says which", async () => {
+    const res = await call("POST", { body: { ...booking, service: "Oral, Implant", date: "2026-09-25", time: "10:00" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe("Dr. Mike Johnson doesn't offer Implant. Please choose another dentist for it.");
+  });
+
+  it("treats a dentist with no services chosen as offering them all", async () => {
+    h.offered = [];
+    expect((await call("POST", { body: { ...booking, service: "Implant", date: "2026-09-25", time: "10:00" } })).code).toBe(201);
+  });
+
+  it("refuses handing a booking to a dentist who doesn't offer it", async () => {
+    h.offered = [{ dentist_id: "dr-other", service_name: "Oral" }];
+    h.rows = [row({ service: "Veneers", status: "confirmed" })];
+    const res = await patch("apt-1", { status: "rescheduled", dentistId: "dr-other", dentistName: "Aerhol Gocalin" });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/Aerhol Gocalin doesn't offer Veneers/);
+  });
+});
+
+describe("days and hours a dentist keeps for a service", () => {
+  // 2026-09-25 is a Friday; 2026-09-28 a Monday.
+  beforeEach(() => {
+    h.hours = [{ dentist_id: DR, service_name: "Veneers", days: [1, 3], start_time: "09:00", end_time: "12:00" }];
+  });
+
+  it("takes a booking inside them", async () => {
+    const res = await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-28", time: "10:00", endTime: "11:00" } });
+    expect(res.code).toBe(201);
+  });
+
+  it("refuses another day of the week, and says when it's done", async () => {
+    const res = await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-25", time: "10:00" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe("Veneers with Dr. Mike Johnson is only available Mon, Wed · 9:00 AM–12:00 PM. Please choose another date or time.");
+  });
+
+  it("refuses a visit that starts before or runs past its hours", async () => {
+    expect((await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-28", time: "08:30" } })).code).toBe(409);
+    expect((await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-28", time: "11:30", endTime: "12:30" } })).code).toBe(409);
+  });
+
+  it("applies to a visit that includes the service, and leaves other services alone", async () => {
+    expect((await call("POST", { body: { ...booking, service: "Oral, Veneers", date: "2026-09-25", time: "10:00" } })).code).toBe(409);
+    expect((await call("POST", { body: { ...booking, service: "Oral", date: "2026-09-25", time: "15:00" } })).code).toBe(201);
+  });
+
+  it("refuses moving the booking outside them", async () => {
+    h.rows = [row({ service: "Veneers", status: "confirmed", date: "2026-09-28", time: "09:00", end_time: "10:00" })];
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-25", time: "09:00" });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/only available Mon, Wed/);
+    expect((await patch("apt-1", { status: "rescheduled", date: "2026-09-30", time: "10:00" })).code).toBe(200);
+  });
+});
+
+describe("a different number of a service on each day", () => {
+  // 2026-09-28 is a Monday, 2026-09-30 a Wednesday.
+  beforeEach(() => {
+    h.hours = [{ dentist_id: DR, service_name: "Veneers", days: [1, 3], start_time: null, end_time: null, day_limits: { "1": 1, "3": 2 } }];
+  });
+
+  it("holds each day to its own number", async () => {
+    h.rows = [row({ id: "v1", service: "Veneers", status: "confirmed", date: "2026-09-28", time: "09:00" })];
+    const monday = await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-28", time: "10:00" } });
+    expect(monday.code).toBe(409);
+    expect(monday.body.error).toMatch(/Veneers is fully booked with Dr. Mike Johnson on that day \(1 on Mondays\)/);
+    h.rows = [row({ id: "v1", service: "Veneers", status: "confirmed", date: "2026-09-30", time: "09:00" })];
+    expect((await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-30", time: "10:00" } })).code).toBe(201);
+  });
+
+  it("puts no limit on a day without a number", async () => {
+    h.hours[0].day_limits = { "1": 1 };
+    h.rows = [1, 2, 3].map((n) => row({ id: `v${n}`, service: "Veneers", status: "confirmed", date: "2026-09-30", time: `0${n + 6}:00` }));
+    expect((await call("POST", { body: { ...booking, service: "Veneers", date: "2026-09-30", time: "13:00" } })).code).toBe(201);
+  });
+});
+
+describe("a patient booking a time today", () => {
+  // Sunday, Oct 25 2026 at 2:05 PM in Manila (06:05 UTC).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T06:05:00Z"));
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("is refused less than an hour from now", async () => {
+    const res = await call("POST", { body: { ...booking, date: "2026-10-25", time: "15:00", endTime: "15:30" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/at least 1 hour from now/);
+  });
+
+  it("goes through an hour or more from now", async () => {
+    const res = await call("POST", { body: { ...booking, date: "2026-10-25", time: "15:30", endTime: "16:00" } });
+    expect(res.code).toBe(201);
+  });
+
+  it("is refused when moving one to less than an hour from now", async () => {
+    h.rows = [row({ status: "confirmed", date: "2026-10-28", time: "13:00", end_time: "13:30" })];
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-10-25", time: "14:30" });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/at least 1 hour from now/);
+  });
+
+  it("doesn't hold the front desk to it", async () => {
+    h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
+    const res = await call("POST", { body: { ...booking, type: "walk-in", date: "2026-10-25", time: "14:30", endTime: "15:00" } });
+    expect(res.code).toBe(201);
+  });
+});
+
+describe("a request still pending when its time comes", () => {
+  // Monday, Oct 26 2026 at 10:05 AM in Manila (02:05 UTC).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T02:05:00Z"));
+    h.expire = true;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const pending = (id: string, date: string, time: string) => row({ id, status: "pending", date, time, end_time: null });
+
+  it("is closed once its start time has passed, and only then", async () => {
+    h.rows = [
+      pending("yesterday", "2026-10-25", "15:00"),
+      pending("earlier-today", "2026-10-26", "10:00"),
+      pending("later-today", "2026-10-26", "11:00"),
+      pending("tomorrow", "2026-10-27", "09:00"),
+      row({ id: "approved", status: "confirmed", date: "2026-10-25", time: "09:00" }),
+    ];
+    // Any request closes them; this one asks for a day's free times.
+    await call("GET", { query: { bookedSlots: "1", date: "2026-10-27", dentistId: DR } });
+    const status = Object.fromEntries(h.rows.map((r) => [r.id, r.status]));
+    expect(status).toEqual({
+      yesterday: "rejected", "earlier-today": "rejected", "later-today": "pending", tomorrow: "pending", approved: "confirmed",
+    });
+    expect(h.rows[0].reason).toMatch(/not approved before the appointment time/);
+  });
+
+  it("stops holding the dentist's time", async () => {
+    h.rows = [pending("earlier-today", "2026-10-26", "10:00")];
+    const res = await call("GET", { query: { bookedSlots: "1", date: "2026-10-26", dentistId: DR } });
+    expect(res.body.slots).toEqual([]);
+  });
+
+  it("can't be approved afterwards", async () => {
+    h.rows = [pending("yesterday", "2026-10-25", "15:00")];
+    const res = await patch("yesterday", { status: "confirmed" });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/time passed before it was approved/);
+    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+  });
+
+  it("can still be approved before its time", async () => {
+    h.rows = [pending("later-today", "2026-10-26", "11:00")];
+    const res = await patch("later-today", { status: "confirmed" });
+    expect(res.code).toBe(200);
+    expect(res.body.appointment.status).toBe("confirmed");
   });
 });

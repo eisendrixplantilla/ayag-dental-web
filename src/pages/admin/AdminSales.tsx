@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL, NUM_COL } from "@/lib/tableClass";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import StatCard from "@/components/StatCard";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { DollarSign, TrendingUp, Receipt, CreditCard, Plus, Printer } from "lucide-react";
+import { IconAction, RowActions } from "@/components/RowActions";
 import { toast } from "sonner";
 
 const mockSales = [
@@ -113,30 +114,30 @@ export default function AdminSales() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>ID</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(0)}>ID</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(2)}>Service</SortableHead>
-                <SortableHead {...headProps(3)}>Amount</SortableHead>
-                <SortableHead {...headProps(4)}>Date</SortableHead>
-                <SortableHead {...headProps(5)}>Status</SortableHead>
-                <TableHead>Actions</TableHead>
+                <SortableHead className={NUM_COL} {...headProps(3)}>Amount</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Date</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(5)}>Status</SortableHead>
+                <TableHead className={CODE_COL}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paged.map(s => (
                 <TableRow key={s.id}>
-                  <TableCell className="font-mono text-sm">{s.id}</TableCell>
+                  <TableCell className={`font-mono text-sm ${CODE_COL}`}>{s.id}</TableCell>
                   <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{s.patient}</TableCell>
                   <TableCell className={WRAP_CELL}>{s.service}</TableCell>
-                  <TableCell className="font-semibold">₱{s.amount.toLocaleString()}</TableCell>
-                  <TableCell>{s.date}</TableCell>
-                  <TableCell>
+                  <TableCell className={`font-semibold ${NUM_COL}`}>₱{s.amount.toLocaleString()}</TableCell>
+                  <TableCell className={CODE_COL}>{s.date}</TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={s.status === "paid" ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20"}>{s.status}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Print receipt ${s.id}`} onClick={() => printReceipt(s)}>
-                      <Printer className="w-4 h-4" />
-                    </Button>
+                  <TableCell className={CODE_COL}>
+                    <RowActions>
+                      <IconAction label="Print receipt" ariaLabel={`Print receipt ${s.id}`} icon={Printer} onClick={() => printReceipt(s)} />
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

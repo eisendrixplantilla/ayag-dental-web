@@ -184,9 +184,9 @@ export default function AdminDashboard() {
                 <th className={`py-2 pr-4 font-medium ${PIN_COL}`}>Patient</th>
                 <th className="py-2 pr-4 font-medium">Service</th>
                 <th className="py-2 pr-4 font-medium">Dentist</th>
-                <th className="py-2 pr-4 font-medium">Schedule</th>
-                <th className="py-2 pr-4 font-medium">Type</th>
-                <th className="py-2 font-medium">Status</th>
+                <th className="py-2 pr-4 font-medium text-center">Schedule</th>
+                <th className="py-2 pr-4 font-medium text-center">Type</th>
+                <th className="py-2 font-medium text-center">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -198,9 +198,9 @@ export default function AdminDashboard() {
                   <td className={`py-3 pr-4 font-medium text-foreground ${PIN_COL}`}>{apt.patientName}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{apt.service}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{apt.dentistName ?? "—"}</td>
-                  <td className="py-3 pr-4 text-muted-foreground">{format(parseISO(apt.date), "MMM d, yyyy")} • {toLabel(toMinutes(apt.time))}</td>
-                  <td className="py-3 pr-4 text-muted-foreground capitalize">{apt.type}</td>
-                  <td className="py-3">
+                  <td className="py-3 pr-4 text-muted-foreground text-center">{format(parseISO(apt.date), "MMM d, yyyy")} • {toLabel(toMinutes(apt.time))}</td>
+                  <td className="py-3 pr-4 text-muted-foreground capitalize text-center">{apt.type}</td>
+                  <td className="py-3 text-center">
                     <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                   </td>
                 </tr>

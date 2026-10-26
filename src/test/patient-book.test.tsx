@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The booking form runs for real; only the network and Radix's Select are replaced.
-const h = vi.hoisted(() => ({ posted: [] as any[], services: [] as any[], booked: [] as any[] }));
+const h = vi.hoisted(() => ({ posted: [] as any[], services: [] as any[], booked: [] as any[], profiles: [] as any[] }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "p1", name: "Allen Estrella", email: "allen@example.com", role: "patient", verified: true } }),
@@ -16,6 +16,7 @@ vi.mock("@/contexts/AuthContext", () => ({
     if (path.includes("bookedSlots")) return { times: h.booked.map((b: any) => b.time), slots: h.booked };
     // The clinic's own list, as the superadmin maintains it under Dental Services & Pricing.
     if (path.includes("services=true")) return { services: h.services };
+    if (path.includes("dentistProfiles=true")) return { dentists: h.profiles };
     return {};
   }),
 }));
@@ -48,6 +49,13 @@ vi.mock("@/components/ui/calendar", async () => {
   const React = await import("react");
   return {
     Calendar: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
+});
+vi.mock("@/components/BookingCalendar", async () => {
+  const React = await import("react");
+  return {
+    default: ({ onSelect }: any) =>
       React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
   };
 });
@@ -84,6 +92,22 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
+// The dentist cards are a dialog; here the picker is a plain <select> of the one dentist.
+vi.mock("@/components/DentistPicker", async () => {
+  const React = await import("react");
+  return {
+    default: ({ label = "Choose a dentist", disabled, selectedId, onChoose }: any) =>
+      React.createElement(
+        "select",
+        { "aria-label": label, disabled, value: selectedId ?? "", onChange: (e: any) => onChoose(e.target.value) },
+        [
+          React.createElement("option", { key: "", value: "" }, ""),
+          React.createElement("option", { key: "dr-mike", value: "dr-mike" }, "Dr. Mike Johnson"),
+        ],
+      ),
+  };
+});
+
 import PatientBook from "@/pages/patient/PatientBook";
 
 beforeAll(() => {
@@ -94,51 +118,53 @@ beforeEach(() => {
   h.posted = [];
   h.services = [];
   h.booked = [];
+  h.profiles = [];
   Object.values(toasts).forEach(fn => fn.mockClear());
 });
 afterEach(cleanup);
 
 const renderPage = async () => {
   render(<MemoryRouter><PatientBook /></MemoryRouter>);
-  await screen.findByLabelText("Add a service");
+  await screen.findByLabelText("Choose a service");
 };
-const picker = () => screen.getByLabelText("Add a service") as HTMLSelectElement;
+const picker = () => screen.getByLabelText("Choose a service") as HTMLSelectElement;
 const options = () => within(picker()).getAllByRole("option").map(o => o.textContent).filter(Boolean);
 const chips = () => screen.getAllByRole("button", { name: /^Remove / }).map(b => b.getAttribute("aria-label"));
 
-describe("booking more than one service", () => {
-  it("adds each pick to the visit and stops offering it again", async () => {
+const chooseMike = async () => {
+  await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
+  fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
+  await waitFor(() => expect(picker()).not.toBeDisabled());
+};
+
+describe("one service per booking", () => {
+  it("takes one service; picking another replaces it", async () => {
     await renderPage();
-    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+    await chooseMike();
 
     fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral"]));
-    expect(options()).not.toContain("Oral");
-
+    await waitFor(() => expect(picker().value).toBe("Oral"));
     fireEvent.change(picker(), { target: { value: "Veneers" } });
-    await waitFor(() => expect(chips()).toEqual(["Remove Oral", "Remove Veneers"]));
-    expect(options()).not.toContain("Veneers");
-    expect(options()).toContain("Restoration"); // the rest are still on offer
+    await waitFor(() => expect(picker().value).toBe("Veneers"));
+    expect(options()).toContain("Oral"); // still on offer, just not chosen
   });
 
-  it("takes a service back off the visit", async () => {
+  it("offers only the services the chosen dentist does", async () => {
+    h.profiles = [{ id: "dr-mike", name: "Dr. Mike Johnson", photoUrl: null, services: ["Oral", "Veneers"], days: [], limits: [], hours: [] }];
     await renderPage();
-    fireEvent.change(picker(), { target: { value: "Oral" } });
-    fireEvent.change(picker(), { target: { value: "Veneers" } });
-    await waitFor(() => expect(chips()).toHaveLength(2));
+    await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Oral" }));
-    await waitFor(() => expect(chips()).toEqual(["Remove Veneers"]));
-    expect(options()).toContain("Oral"); // back on offer
+    await waitFor(() => expect(options()).toEqual(["Oral", "Veneers"]));
   });
 
-  it("keeps the dentist step locked until at least one service is chosen", async () => {
+  it("asks for the dentist first, and only then offers services", async () => {
     await renderPage();
-    const dentist = screen.getByLabelText("Choose a dentist") as HTMLSelectElement;
-    expect(dentist).toBeDisabled();
+    expect(picker()).toBeDisabled();
+    await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
 
-    fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(dentist).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
+    await waitFor(() => expect(picker()).not.toBeDisabled());
   });
 });
 
@@ -159,7 +185,7 @@ describe("the services on offer", () => {
     expect(options()).not.toContain("Typo service");
   });
 
-  it("adds up those durations for the visit", async () => {
+  it("makes the visit as long as the service chosen", async () => {
     h.services = catalog;
     await renderPage();
     await waitFor(() => expect(options()).toContain("Braces"));
@@ -167,8 +193,9 @@ describe("the services on offer", () => {
     fireEvent.change(picker(), { target: { value: "Braces" } });
     await waitFor(() => expect(screen.getByText(/About 1 hr/)).toBeInTheDocument());
 
+    // One service at a time: the visit is as long as the one chosen.
     fireEvent.change(picker(), { target: { value: "Check-up" } });
-    await waitFor(() => expect(screen.getByText(/About 1 hr 30 min/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/About 30 min/)).toBeInTheDocument());
   });
 
   it("falls back to the built-in list when the clinic's can't be loaded", async () => {
@@ -207,6 +234,35 @@ describe("slots while the form sits open", () => {
     expect(slotOptions()).not.toContain("9:00 AM – 9:30 AM");
     expect(slotOptions()).not.toContain("9:30 AM – 10:00 AM"); // inside the same booking
     expect(slotOptions()[0]).toBe("10:00 AM – 10:30 AM");
+  });
+
+  it("offers another service with the same dentist once one is booked", async () => {
+    await pickVisit();
+    pickSlot("9:00 AM – 9:30 AM");
+    fireEvent.click(await screen.findByRole("button", { name: /Confirm Appointment/ }));
+
+    const another = await screen.findByRole("button", { name: "Book another service with Dr. Mike Johnson" });
+    expect(h.posted).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Done" })).toHaveAttribute("href", "/patient/appointments");
+    fireEvent.click(another);
+    // The dentist stays chosen; the service, date and time start over.
+    await waitFor(() => expect((screen.getByLabelText("Choose a dentist") as HTMLSelectElement).value).toBe("dr-mike"));
+    expect(picker().value).toBe("");
+  });
+
+  it("doesn't call the patient's own new booking 'just taken'", async () => {
+    await pickVisit();
+    pickSlot("9:00 AM – 9:30 AM");
+    fireEvent.click(await screen.findByRole("button", { name: /Confirm Appointment/ }));
+    await screen.findByText("Appointment Request Submitted");
+
+    // Their booking now holds the time; coming back to the tab refreshes the times.
+    h.booked = [{ time: "09:00", endTime: "09:30" }];
+    fireEvent(window, new Event("focus"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(toasts.info).not.toHaveBeenCalled();
+    expect(screen.getByText(/at 9:00 AM – 9:30 AM with Dr. Mike Johnson/)).toBeInTheDocument();
   });
 
   it("marks the time chosen, so it is obvious which one is held", async () => {
@@ -283,11 +339,11 @@ describe("what the form tells you about the date you are picking", () => {
     expect(readback.className).toContain("bg-primary/5");
 
     // Before a time is chosen it is a prompt, not a summary.
-    expect(screen.queryByText(/Pick a service, a dentist/)).toBeNull();
+    expect(screen.queryByText(/Pick a dentist, a service/)).toBeNull();
   });
 
   it("prompts for what is still missing until a time is chosen", async () => {
     await renderPage();
-    expect(screen.getByText(/Pick a service, a dentist, a date and a time to continue/)).toBeInTheDocument();
+    expect(screen.getByText(/Pick a dentist, a service, a date and a time to continue/)).toBeInTheDocument();
   });
 });

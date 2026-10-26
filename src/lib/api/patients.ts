@@ -1,6 +1,8 @@
 import { api, type User } from "@/contexts/AuthContext";
 
 export interface Patient extends User {
+  /** The Patient ID: PT-26100001. */
+  code?: string | null;
   firstName: string | null;
   middleName: string | null;
   lastName: string | null;

@@ -36,6 +36,8 @@ import PatientProfile from "./pages/patient/PatientProfile";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 import SuperAdminStaff from "./pages/superadmin/SuperAdminStaff";
 import SuperAdminAddStaff from "./pages/superadmin/SuperAdminAddStaff";
+import SuperAdminDentistSchedule from "./pages/superadmin/SuperAdminDentistSchedule";
+import SuperAdminSchedule from "./pages/superadmin/SuperAdminSchedule";
 import SuperAdminArchives from "./pages/superadmin/SuperAdminArchives";
 import SuperAdminSettings from "./pages/superadmin/SuperAdminSettings";
 import SuperAdminReports from "./pages/superadmin/SuperAdminReports";
@@ -79,6 +81,8 @@ function AppRoutes() {
       <Route path="/admin/patients" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminPatients /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/patients/:id" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminPatientHistory /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/accounts" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAccounts /></DashboardLayout></ProtectedRoute>} />
+      {/* The same My Schedule page dentists have: hours, approved leave, and asking for more. */}
+      <Route path="/admin/schedule" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><DentistSchedule /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/online-appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout wide><AdminOnlineAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/queue" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminQueue /></DashboardLayout></ProtectedRoute>} />
@@ -100,6 +104,8 @@ function AppRoutes() {
       <Route path="/superadmin" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminDashboard /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/staff" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminStaff /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/staff/new" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminAddStaff /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/schedule" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminSchedule /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/staff/:id/schedule" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminDentistSchedule /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/archives" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminArchives /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/settings" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminSettings /></DashboardLayout></ProtectedRoute>} />
       <Route path="/superadmin/reports" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdminReports /></DashboardLayout></ProtectedRoute>} />

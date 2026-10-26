@@ -11,14 +11,25 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { createStaff } from "@/lib/api/staff";
+import MobileInput from "@/components/MobileInput";
+import { PasswordLengthCheck, PasswordMatchCheck } from "@/components/PasswordChecks";
+import { passwordsReady } from "@/lib/inputRules";
+import { cleanName, formatName, PH_MOBILE } from "@/lib/inputRules";
+import { manilaTodayDateStr } from "@/lib/formatDate";
+
+/** What the new account's ID starts with: DT- or AN-, then this year and month (YYMM).
+ * Its number that month is given by the server when the account is saved. */
+const employeeIdStart = (role: string) => {
+  const [y, m] = manilaTodayDateStr().split("-");
+  return `${role === "admin" ? "AN" : role === "dentist" ? "DT" : "DT/AN"}-${y.slice(2)}${m}`;
+};
 
 const schema = z
   .object({
-    employeeId: z.string().trim().max(30).optional(),
     firstName: z.string().trim().min(1, "First name is required").max(60),
     middleName: z.string().trim().max(60).optional(),
     lastName: z.string().trim().min(1, "Last name is required").max(60),
-    contact: z.string().trim().min(7, "Contact number is required").max(20),
+    contact: z.string().trim().regex(PH_MOBILE, "Enter an 11-digit mobile number starting with 09"),
     email: z.string().trim().email("Enter a valid email address").max(255),
     role: z.enum(["admin", "dentist"], { errorMap: () => ({ message: "Role is required" }) }),
     password: z.string().min(6, "Password must be at least 6 characters").max(100),
@@ -34,7 +45,6 @@ export default function SuperAdminAddStaff() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    employeeId: "",
     firstName: "",
     middleName: "",
     lastName: "",
@@ -58,7 +68,6 @@ export default function SuperAdminAddStaff() {
     setSaving(true);
     try {
       await createStaff({
-        employeeId: d.employeeId || undefined,
         name: fullName,
         email: d.email,
         contact: d.contact,
@@ -91,18 +100,20 @@ export default function SuperAdminAddStaff() {
         <CardContent className="space-y-4">
           <div>
             <Label>Employee ID</Label>
-            <Input value={form.employeeId} onChange={e => set("employeeId", e.target.value)} className="font-mono" placeholder="Leave blank to assign automatically" />
+            <p className="mt-1 rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground">
+              {employeeIdStart(form.role)}<span className="text-muted-foreground">##</span>
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Leave this blank and the next ID in sequence (EMP-001, EMP-002, …) is assigned. Must be unique, and it
-              cannot be changed after the account is created.
+              Given automatically when the account is saved: DT for a dentist or AN for an admin, the year and month,
+              then its number among those made this month (01, 02…). It can't be changed later.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><Label>First Name *</Label><Input value={form.firstName} onChange={e => set("firstName", e.target.value)} /></div>
-            <div><Label>Middle Name</Label><Input value={form.middleName} onChange={e => set("middleName", e.target.value)} placeholder="Optional" /></div>
-            <div><Label>Last Name *</Label><Input value={form.lastName} onChange={e => set("lastName", e.target.value)} /></div>
+            <div><Label>First Name *</Label><Input autoCapitalize="words" value={form.firstName} onChange={e => set("firstName", formatName(e.target.value))} onBlur={() => set("firstName", cleanName(form.firstName))} /></div>
+            <div><Label>Middle Name</Label><Input autoCapitalize="words" value={form.middleName} onChange={e => set("middleName", formatName(e.target.value))} onBlur={() => set("middleName", cleanName(form.middleName))} placeholder="Optional" /></div>
+            <div><Label>Last Name *</Label><Input autoCapitalize="words" value={form.lastName} onChange={e => set("lastName", formatName(e.target.value))} onBlur={() => set("lastName", cleanName(form.lastName))} /></div>
           </div>
-          <div><Label>Contact Number *</Label><Input value={form.contact} onChange={e => set("contact", e.target.value)} placeholder="0917-555-0000" /></div>
+          <div><Label>Contact Number *</Label><MobileInput value={form.contact} onValueChange={v => set("contact", v)} /></div>
           <div><Label>Email Address *</Label><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@ayagdental.com" /></div>
           <div>
             <Label>Role *</Label>
@@ -115,11 +126,11 @@ export default function SuperAdminAddStaff() {
             </Select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><Label>Password *</Label><PasswordInput value={form.password} onChange={e => set("password", e.target.value)} /></div>
-            <div><Label>Confirm Password *</Label><PasswordInput value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} /></div>
+            <div className="space-y-1"><Label>Password *</Label><PasswordInput autoComplete="new-password" value={form.password} onChange={e => set("password", e.target.value)} /><PasswordLengthCheck password={form.password} minLength={6} /></div>
+            <div className="space-y-1"><Label>Confirm Password *</Label><PasswordInput autoComplete="new-password" value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} /><PasswordMatchCheck password={form.password} confirm={form.confirmPassword} /></div>
           </div>
           <div className="flex gap-2 pt-2">
-            <Button className="gradient-primary text-primary-foreground" onClick={submit} disabled={saving}>
+            <Button className="gradient-primary text-primary-foreground" onClick={submit} disabled={saving || !passwordsReady(form.password, form.confirmPassword, 6)}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save
             </Button>
             <Button variant="outline" onClick={() => setConfirmCancel(true)}>Cancel</Button>

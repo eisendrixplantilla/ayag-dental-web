@@ -7,7 +7,13 @@ import type { Appointment } from "@/lib/api/appointments";
 const h = vi.hoisted(() => ({
   user: null as null | { id: string; name: string; email: string; role: string; verified: boolean },
   appts: [] as Appointment[],
+  leave: [] as import("@/lib/api/leave").LeaveRequest[],
 }));
+
+vi.mock("@/lib/api/leave", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/leave")>();
+  return { ...actual, getLeave: vi.fn(async () => h.leave) };
+});
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: h.user, logout: vi.fn() }),
@@ -344,5 +350,167 @@ describe("each role is sent to its own module", () => {
   it("superadmin: everything to Reports & Analytics", async () => {
     const r = await routesFor({ ...ADMIN, id: "s1", name: "Super", role: "superadmin" });
     expect(new Set(Object.values(r))).toEqual(new Set(["/superadmin/reports"]));
+  });
+});
+
+describe("a request still pending on its day", () => {
+  function Titles() {
+    const { items } = useNotifications();
+    return <ul>{items.map(i => <li key={`${i.id}:${i.time}`}>{i.title}</li>)}</ul>;
+  }
+  const titlesFor = async (user: typeof ADMIN) => {
+    h.user = user;
+    render(<MemoryRouter><NotificationsProvider><Titles /></NotificationsProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0));
+    return screen.getAllByRole("listitem").map(li => li.textContent);
+  };
+
+  // Monday, Oct 26 2026 at 10:05 AM in Manila.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T02:05:00Z"));
+    h.appts = [
+      apt({ id: "later-today", patientName: "Jose", date: "2026-10-26", time: "14:00", service: "Oral" }),
+      apt({ id: "tomorrow", patientName: "Maria", date: "2026-10-27", time: "09:00" }),
+      apt({ id: "approved-today", patientName: "Ana", date: "2026-10-26", time: "15:00", status: "confirmed" }),
+      apt({
+        id: "expired", patientName: "Allen", date: "2026-10-25", time: "09:00", status: "rejected",
+        reason: "Expired: not approved before the appointment time.",
+      }),
+    ];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("reminds the admin to approve or reject it before its time", async () => {
+    const titles = await titlesFor(ADMIN);
+    expect(titles[0]).toBe("Still pending: Jose's request for today at 2:00 PM (Oral). Approve or reject it before then");
+    expect(titles.filter(t => t?.startsWith("Still pending"))).toHaveLength(1); // not tomorrow's, not the approved one
+  });
+
+  it("tells the dentist it's still waiting on their day", async () => {
+    const titles = await titlesFor({ ...ADMIN, id: "d1", name: "Dr. Mike Johnson", role: "dentist" });
+    expect(titles).toContain("Still awaiting approval: Jose's request for today at 2:00 PM (Oral)");
+  });
+
+  it("doesn't remind the patient", async () => {
+    const titles = await titlesFor({ ...ADMIN, id: "p1", name: "John Smith", role: "patient" });
+    expect(titles.some(t => t?.startsWith("Still"))).toBe(false);
+  });
+
+  it("drops the reminder once its time has come", async () => {
+    vi.setSystemTime(new Date("2026-10-26T06:00:00Z")); // 2:00 PM
+    const titles = await titlesFor(ADMIN);
+    expect(titles.some(t => t?.startsWith("Still"))).toBe(false);
+  });
+
+  it("leaves a request the clock closed out of the bell", async () => {
+    const titles = await titlesFor(ADMIN);
+    expect(titles.some(t => t?.includes("Allen"))).toBe(false);
+  });
+});
+
+describe("leave in the bell", () => {
+  function Titles() {
+    const { items } = useNotifications();
+    return <ul>{items.map(i => <li key={`${i.id}:${i.time}`} data-route={i.route}>{i.title}</li>)}</ul>;
+  }
+  const leave = (over: Partial<import("@/lib/api/leave").LeaveRequest>) => ({
+    id: "l1", dentistId: "dr-1", dentistName: "Aerhol Gocalin", role: "dentist" as const, startDate: "2026-11-03", endDate: "2026-11-05",
+    reason: "Vacation", note: null, status: "pending" as const, decidedBy: null, decidedAt: null, decisionReason: null, removedDates: [], changedBy: null, changedAt: null, startTime: null, endTime: null,
+    createdAt: "2026-10-26T01:00:00Z", updatedAt: "2026-10-26T01:00:00Z", conflicts: [], ...over,
+  });
+  const bell = async (user: typeof ADMIN) => {
+    h.user = user;
+    h.appts = [];
+    render(<MemoryRouter><NotificationsProvider><Titles /></NotificationsProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0));
+    return screen.getAllByRole("listitem").map(li => [li.textContent, li.getAttribute("data-route")]);
+  };
+  afterEach(() => { h.leave = []; });
+
+  it("tells the superadmin about a new request", async () => {
+    h.leave = [leave({}), leave({ id: "l2", status: "approved" })];
+    expect(await bell({ ...ADMIN, id: "s1", name: "Super", role: "superadmin" })).toEqual([
+      ["Aerhol Gocalin requested leave: Nov 3 – Nov 5 (Vacation)", "/superadmin/schedule"],
+    ]);
+  });
+
+  it("tells the dentist what was decided", async () => {
+    h.leave = [
+      leave({ status: "approved" }),
+      leave({ id: "l2", startDate: "2026-12-01", endDate: "2026-12-01", status: "rejected", decisionReason: "Short-staffed", updatedAt: "2026-10-25T00:00:00Z" }),
+      leave({ id: "l3", status: "pending" }),
+    ];
+    expect(await bell({ ...ADMIN, id: "d1", name: "Aerhol Gocalin", role: "dentist" })).toEqual([
+      ["Your leave for Nov 3 – Nov 5 was approved", "/dentist/schedule"],
+      ["Your leave for Dec 1 was rejected: Short-staffed", "/dentist/schedule"],
+    ]);
+  });
+
+  it("tells an admin what was decided on their own leave, and opens their schedule", async () => {
+    h.leave = [
+      leave({ id: "mine", dentistId: ADMIN.id, dentistName: ADMIN.name, role: "admin", status: "rejected", decisionReason: "Clinic event that day" }),
+      leave({ id: "theirs", status: "approved", updatedAt: "2026-10-20T00:00:00Z" }),
+    ];
+    expect(await bell(ADMIN)).toEqual([
+      ["Your leave for Nov 3 – Nov 5 was rejected: Clinic event that day", "/admin/schedule"],
+      ["Aerhol Gocalin is on leave Nov 3 – Nov 5 (Vacation)", "/admin"],
+    ]);
+  });
+
+  it("tells the front desk who's away", async () => {
+    h.leave = [leave({ status: "approved" })];
+    expect(await bell(ADMIN)).toEqual([["Aerhol Gocalin is on leave Nov 3 – Nov 5 (Vacation)", "/admin"]]);
+  });
+
+  it("tells the dentist when the superadmin removes days, or calls the leave off", async () => {
+    h.leave = [
+      leave({ status: "approved", decidedAt: "2026-10-20T00:00:00Z", removedDates: ["2026-11-04", "2026-11-05"], changedBy: "Super Admin", changedAt: "2026-10-26T03:00:00Z" }),
+      leave({ id: "l2", startDate: "2026-12-01", endDate: "2026-12-01", status: "cancelled", decidedAt: "2026-10-19T00:00:00Z",
+        removedDates: ["2026-12-01"], changedBy: "Super Admin", changedAt: "2026-10-25T03:00:00Z" }),
+    ];
+    expect(await bell({ ...ADMIN, id: "d1", name: "Aerhol Gocalin", role: "dentist" })).toEqual([
+      ["Days removed from your leave for Nov 3 – Nov 5: Nov 4, Nov 5. You work those days.", "/dentist/schedule"],
+      ["Your leave for Dec 1 was cancelled by Super Admin", "/dentist/schedule"],
+      ["Your leave for Nov 3 – Nov 5 was approved", "/dentist/schedule"],
+    ]);
+  });
+
+  const change = (over = {}) => ({
+    dates: ["2026-11-04"], startTime: null, endTime: null, note: null, status: "pending" as const,
+    requestedAt: "2026-10-26T04:00:00Z", decidedBy: null, decidedAt: null, decisionReason: null, ...over,
+  });
+
+  it("tells the superadmin about a change asked to approved leave", async () => {
+    h.leave = [leave({ status: "approved", changeRequest: change() })];
+    expect(await bell({ ...ADMIN, id: "s1", name: "Super", role: "superadmin" })).toEqual([
+      ["Aerhol Gocalin asks to change leave Nov 3 – Nov 5: work Nov 4", "/superadmin/schedule"],
+    ]);
+  });
+
+  it("tells the dentist what was decided on the change", async () => {
+    h.leave = [
+      leave({ status: "approved", decidedAt: "2026-10-20T00:00:00Z", changeRequest: change({ status: "approved", decidedAt: "2026-10-26T05:00:00Z" }) }),
+      leave({ id: "l2", startDate: "2026-12-01", endDate: "2026-12-01", startTime: "13:00", endTime: "17:00", status: "approved", decidedAt: "2026-10-19T00:00:00Z",
+        changeRequest: change({ dates: [], startTime: "13:00", endTime: "15:00", status: "rejected", decidedAt: "2026-10-26T04:30:00Z", decisionReason: "Short-staffed" }) }),
+    ];
+    expect(await bell({ ...ADMIN, id: "d1", name: "Aerhol Gocalin", role: "dentist" })).toEqual([
+      ["Your change to leave Nov 3 – Nov 5 was approved: you work Nov 4", "/dentist/schedule"],
+      ["Your change to leave Dec 1, 1:00 PM – 5:00 PM was rejected: Short-staffed", "/dentist/schedule"],
+      ["Your leave for Nov 3 – Nov 5 was approved", "/dentist/schedule"],
+      ["Your leave for Dec 1, 1:00 PM – 5:00 PM was approved", "/dentist/schedule"],
+    ]);
+  });
+
+  it("tells the dentist when the superadmin cuts part-day leave to fewer hours", async () => {
+    h.leave = [leave({ startDate: "2026-11-03", endDate: "2026-11-03", startTime: "13:00", endTime: "15:00", status: "approved",
+      decidedAt: "2026-10-20T00:00:00Z", changedBy: "Super Admin", changedAt: "2026-10-26T03:00:00Z" })];
+    expect((await bell({ ...ADMIN, id: "d1", name: "Aerhol Gocalin", role: "dentist" }))[0]).toEqual(
+      ["Your leave was changed by Super Admin: now Nov 3, 1:00 PM – 3:00 PM. You work the rest of that day.", "/dentist/schedule"]);
+  });
+
+  it("tells the front desk which days a colleague works after all", async () => {
+    h.leave = [leave({ status: "approved", removedDates: ["2026-11-04"] })];
+    expect(await bell(ADMIN)).toEqual([["Aerhol Gocalin is on leave Nov 3 – Nov 5, except Nov 4 (Vacation)", "/admin"]]);
   });
 });

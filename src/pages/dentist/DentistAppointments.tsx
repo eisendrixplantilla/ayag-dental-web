@@ -16,19 +16,17 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, ChevronDown, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
+import { Eye, Stethoscope, CalendarClock, XCircle, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
 import { createDentalRecord } from "@/lib/api/dentalRecords";
 import { formatTimeRange, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, byNewestBooked, type Appointment } from "@/lib/api/appointments";
-import { getDentistSchedule, generateAvailableSlots, isDentistAvailableOn, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
-import { Calendar } from "@/components/ui/calendar";
+import { getDentistSchedule, generateAvailableSlots, forServices, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
+import BookingCalendar from "@/components/BookingCalendar";
+import { SERVICE_SEPARATOR } from "@/lib/services";
 import { cn } from "@/lib/utils";
-import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
+import { formatManilaDate } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
@@ -40,6 +38,10 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter
 
 const COLUMNS = ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"];
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import ToothChart from "@/components/ToothChart";
+import Hint from "@/components/Hint";
+import { IconAction, MoreActions, RowActions } from "@/components/RowActions";
+import { DatePicker } from "@/components/DatePicker";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -51,7 +53,7 @@ const statusColors: Record<string, string> = {
 };
 
 const emptyRecord = {
-  procedure: "", diagnosis: "", treatmentNotes: "", prescription: "", nextVisit: "",
+  procedure: "", diagnosis: "", toothNumber: "", treatmentNotes: "", prescription: "", nextVisit: "",
 };
 
 export default function DentistAppointments() {
@@ -156,6 +158,7 @@ export default function DentistAppointments() {
     ? toMinutes(resched.endTime) - toMinutes(resched.time)
     : undefined;
 
+  const rsServices = useMemo(() => (resched ? resched.service.split(SERVICE_SEPARATOR) : []), [resched]);
   const slots = useMemo(() => {
     if (!rsDate || !schedule) return [];
     const bookedForDate = mine
@@ -164,10 +167,16 @@ export default function DentistAppointments() {
       .filter(a => a.date === rsDate && (a.status === "confirmed" || a.status === "pending" || a.status === "rescheduled"))
       // How long each existing booking runs, so a long one blocks every slot it covers.
       .map(a => ({ time: a.time, endTime: a.endTime }));
-    return generateAvailableSlots(schedule, parseISO(rsDate), bookedForDate, rsVisitMinutes);
-  }, [rsDate, schedule, mine, resched, rsVisitMinutes]);
+    return generateAvailableSlots(forServices(schedule, rsServices), parseISO(rsDate), bookedForDate, rsVisitMinutes);
+  }, [rsDate, schedule, mine, resched, rsVisitMinutes, rsServices]);
 
   const rsSlotLabel = slots.find(s => s.value === rsSlot)?.label ?? "";
+
+  // The moved visit's procedures, whose daily limits the new day must have room for.
+  const pickRsDate = useCallback((d: Date | undefined) => {
+    setRsDate(d ? format(d, "yyyy-MM-dd") : "");
+    setRsSlot("");
+  }, []);
 
   const openResched = (apt: Appointment) => {
     setRsReason(""); setRsRemarks(""); setRsDate(""); setRsSlot("");
@@ -193,6 +202,7 @@ export default function DentistAppointments() {
         appointmentId: consult.id,
         date: consult.date,
         diagnosis: recordForm.diagnosis,
+        toothNumber: recordForm.toothNumber || undefined,
         treatments: [{ serviceName: recordForm.procedure }],
         treatmentNotes: recordForm.treatmentNotes || undefined,
         prescriptions: recordForm.prescription.trim() ? [{ medicine: recordForm.prescription.trim() }] : undefined,
@@ -299,10 +309,10 @@ export default function DentistAppointments() {
               <TableRow>
                 <SortableHead {...headProps(0)} className={PIN_COL}>Patient Name</SortableHead>
                 <SortableHead {...headProps(1)}>Service</SortableHead>
-                <SortableHead {...headProps(2)}>Appointment Date</SortableHead>
-                <SortableHead {...headProps(3)}>Appointment Time</SortableHead>
-                <SortableHead {...headProps(4)}>Status</SortableHead>
-                <TableHead className="text-right print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(2)}>Appointment Date</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Appointment Time</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Status</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -321,67 +331,28 @@ export default function DentistAppointments() {
                 >
                   <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{apt.patientName}</TableCell>
                   <TableCell className={WRAP_CELL}>{apt.service}</TableCell>
-                  <TableCell>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="whitespace-nowrap">{formatTimeRange(apt.time, apt.endTime)}</TableCell>
-                  <TableCell>
+                  <TableCell className={CODE_COL}>{format(parseISO(apt.date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className={`whitespace-nowrap ${CODE_COL}`}>{formatTimeRange(apt.time, apt.endTime)}</TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
                   </TableCell>
-                  <TableCell className="print:hidden">
-                    {/* Full button row on larger screens */}
-                    <div className="hidden lg:flex flex-wrap gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => setDetails(apt)}>
-                        <Eye className="w-4 h-4 mr-1" /> View Details
-                      </Button>
-                      {actionable(apt.status) && (
-                        <>
-                          <Button size="sm" onClick={() => openConsult(apt)}>
-                            <Stethoscope className="w-4 h-4 mr-1" /> Start Consultation
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => openResched(apt)}>
-                            <CalendarClock className="w-4 h-4 mr-1" /> Reschedule
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => openCancel(apt)}>
-                            <XCircle className="w-4 h-4 mr-1" /> Cancel
-                          </Button>
-                        </>
-                      )}
-                      {apt.status === "pending" && (
-                        <span className="self-center text-xs text-muted-foreground">Awaiting admin approval</span>
-                      )}
-                    </div>
-
-                    {/* Compact controls on phone/tablet */}
-                    <div className="flex lg:hidden items-center gap-1 justify-end">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" title="View Details" onClick={() => setDetails(apt)}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      {actionable(apt.status) ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More options">
-                              <ChevronDown className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-popover">
-                            <DropdownMenuItem onClick={() => openConsult(apt)}>
-                              <Stethoscope className="w-4 h-4 mr-2" /> Start Consultation
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openResched(apt)}>
-                              <CalendarClock className="w-4 h-4 mr-2" /> Reschedule
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openCancel(apt)} className="text-destructive focus:text-destructive">
-                              <XCircle className="w-4 h-4 mr-2" /> Cancel
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : apt.status === "pending" ? (
-                        <span className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground" title="Awaiting admin approval" aria-label="Awaiting admin approval">
-                          <Clock3 className="w-4 h-4" />
-                        </span>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction label="View Details" icon={Eye} onClick={() => setDetails(apt)} />
+                      {apt.status === "pending" ? (
+                        <Hint label="Awaiting admin approval">
+                          <span className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground" aria-label="Awaiting admin approval">
+                            <Clock3 className="w-4 h-4" />
+                          </span>
+                        </Hint>
                       ) : (
-                        <div className="h-8 w-8" aria-hidden="true" />
+                        <MoreActions actions={actionable(apt.status) ? [
+                          { label: "Start Consultation", icon: Stethoscope, onClick: () => openConsult(apt) },
+                          { label: "Reschedule", icon: CalendarClock, onClick: () => openResched(apt) },
+                          { label: "Cancel", icon: XCircle, onClick: () => openCancel(apt), danger: true },
+                        ] : []} />
                       )}
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
@@ -423,7 +394,7 @@ export default function DentistAppointments() {
 
       {/* Consultation / dental record form */}
       <Dialog open={!!consult} onOpenChange={(o) => !o && setConsult(null)}>
-        <DialogContent className="max-w-lg bg-background max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Dental Record Form</DialogTitle>
             <DialogDescription>
@@ -440,6 +411,14 @@ export default function DentistAppointments() {
               <Input value={recordForm.diagnosis} onChange={e => setRecordForm({ ...recordForm, diagnosis: e.target.value })} />
             </div>
             <div className="space-y-2">
+              <Label>Dental Chart (if applicable)</Label>
+              <ToothChart
+                value={recordForm.toothNumber}
+                onChange={(toothNumber) => setRecordForm({ ...recordForm, toothNumber })}
+                patientId={consult?.patientId}
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Treatment Notes</Label>
               <Textarea value={recordForm.treatmentNotes} onChange={e => setRecordForm({ ...recordForm, treatmentNotes: e.target.value })} />
             </div>
@@ -449,7 +428,7 @@ export default function DentistAppointments() {
             </div>
             <div className="space-y-2">
               <Label>Next Visit (optional)</Label>
-              <Input type="date" value={recordForm.nextVisit} onChange={e => setRecordForm({ ...recordForm, nextVisit: e.target.value })} />
+              <DatePicker aria-label="Next visit" value={recordForm.nextVisit} onChange={(v) => setRecordForm({ ...recordForm, nextVisit: v })} />
             </div>
           </div>
           <DialogFooter>
@@ -485,17 +464,17 @@ export default function DentistAppointments() {
                   </span>
                 </p>
               )}
-              <div className="rounded-md border w-fit max-w-full overflow-x-auto mx-auto sm:mx-0">
-                <Calendar
-                  mode="single"
+              <div className="rounded-md border w-full max-w-[26rem] mx-auto sm:mx-0">
+                <BookingCalendar
+                  compact
+                  schedule={schedule}
+                  dentistId={resched?.dentistId ?? null}
+                  dentistName={resched?.dentistName}
+                  services={rsServices}
+                  visitMinutes={rsVisitMinutes}
+                  excludeId={resched?.id}
                   selected={rsDate ? parseISO(rsDate) : undefined}
-                  onSelect={(d) => { setRsDate(d ? format(d, "yyyy-MM-dd") : ""); setRsSlot(""); }}
-                  className="p-2 pointer-events-auto"
-                  disabled={(d) => {
-                    if (format(d, "yyyy-MM-dd") < manilaTodayDateStr()) return true;
-                    if (!schedule) return true;
-                    return !isDentistAvailableOn(schedule, d);
-                  }}
+                  onSelect={pickRsDate}
                 />
               </div>
             </div>

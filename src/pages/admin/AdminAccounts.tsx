@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
+import { IconAction, RowActions } from "@/components/RowActions";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
@@ -21,7 +22,7 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter
 
 // What the table shows, and what can be filtered by — one list, so the filter, the
 // table and the printed document always agree.
-const COLUMNS = ["Patient Name", "Email Address", "Account Status", "Date Registered"];
+const COLUMNS = ["Patient Name", "Patient ID", "Email Address", "Account Status", "Date Registered"];
 
 export default function AdminAccounts() {
   const { user } = useAuth();
@@ -45,6 +46,7 @@ export default function AdminAccounts() {
   const rows = useMemo(
     () => accounts.map(a => [
       a.name,
+      a.code ?? "—",
       a.email,
       a.status === "active" ? "Active" : "Deactivated",
       a.createdAt ?? "—",
@@ -160,18 +162,20 @@ export default function AdminAccounts() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)} className={PIN_COL}>Patient Name</SortableHead>
-                <SortableHead {...headProps(1)}>Email Address</SortableHead>
-                <SortableHead {...headProps(2)}>Account Status</SortableHead>
-                <SortableHead {...headProps(3)}>Date Registered</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(1)}>Patient ID</SortableHead>
+                <SortableHead {...headProps(2)}>Email Address</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Account Status</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(4)}>Date Registered</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paged.map(a => (
                 <TableRow key={a.id}>
                   <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{a.name}</TableCell>
+                  <TableCell className={`font-mono text-xs whitespace-nowrap ${CODE_COL}`}>{a.code ?? "—"}</TableCell>
                   <TableCell><CollapsedEmail email={a.email} /></TableCell>
-                  <TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge
                       variant={a.status === "active" ? "default" : "secondary"}
                       className={a.status === "active" ? "bg-success/10 text-success border-success/20" : ""}
@@ -179,28 +183,22 @@ export default function AdminAccounts() {
                       {a.status === "active" ? "Active" : "Deactivated"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{a.createdAt ?? "—"}</TableCell>
-                  <TableCell className="print:hidden">
-                    <div className="flex flex-wrap gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openDetail(a)}>
-                        <Eye className="w-4 h-4 mr-1" /> View
-                      </Button>
+                  <TableCell className={CODE_COL}>{a.createdAt ?? "—"}</TableCell>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions>
+                      <IconAction label="View" icon={Eye} onClick={() => openDetail(a)} />
                       {a.status === "inactive" ? (
-                        <Button variant="ghost" size="sm" className="text-success" onClick={() => activate(a)}>
-                          <CheckCircle2 className="w-4 h-4 mr-1" /> Activate
-                        </Button>
+                        <IconAction label="Activate" icon={CheckCircle2} className="text-success" onClick={() => activate(a)} />
                       ) : (
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deactivate(a)}>
-                          <Ban className="w-4 h-4 mr-1" /> Deactivate
-                        </Button>
+                        <IconAction label="Deactivate" icon={Ban} className="text-destructive" onClick={() => deactivate(a)} />
                       )}
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No patient accounts found.
                   </TableCell>
                 </TableRow>
@@ -228,6 +226,7 @@ export default function AdminAccounts() {
           ) : detail && (
             <div className="space-y-3 text-sm">
               <Row label="Patient Name" value={detail.name} />
+              <Row label="Patient ID" value={detail.code ?? "—"} />
               <Row label="Email Address" value={detail.email} />
               <Row label="Contact Number" value={detail.phone ?? "—"} />
               <Row label="Account Status" value={detail.status === "active" ? "Active" : "Deactivated"} />

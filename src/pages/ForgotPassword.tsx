@@ -11,6 +11,11 @@ import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Mail, Lock, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { PasswordLengthCheck, PasswordMatchCheck } from "@/components/PasswordChecks";
+import { passwordsReady } from "@/lib/inputRules";
+import Hint from "@/components/Hint";
+
+const MIN_PASSWORD = 6;
 
 type Step = "email" | "code" | "password";
 
@@ -72,9 +77,11 @@ export default function ForgotPassword() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <Link to="/" aria-label="Back to the home page" title="Back to the home page" className="w-20 h-20 mx-auto mb-4 aspect-square rounded-2xl gradient-primary shadow-2xl shadow-primary/40 flex items-center justify-center hover:opacity-90 transition-opacity">
-            <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-2/3 h-2/3 object-contain drop-shadow-2xl" />
-          </Link>
+          <Hint label="Back to the home page">
+            <Link to="/" aria-label="Back to the home page" className="w-20 h-20 mx-auto mb-4 aspect-square rounded-2xl gradient-primary shadow-2xl shadow-primary/40 flex items-center justify-center hover:opacity-90 transition-opacity">
+              <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-2/3 h-2/3 object-contain drop-shadow-2xl" />
+            </Link>
+          </Hint>
           <h1 className="text-3xl font-bold font-heading text-foreground">Ayag Dental Clinic</h1>
         </div>
 
@@ -176,9 +183,10 @@ export default function ForgotPassword() {
                       onChange={e => setNewPassword(e.target.value)}
                       className="pl-10"
                       required
-                      minLength={6}
+                      minLength={MIN_PASSWORD}
                     />
                   </div>
+                  <PasswordLengthCheck password={newPassword} minLength={MIN_PASSWORD} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
@@ -192,11 +200,12 @@ export default function ForgotPassword() {
                       onChange={e => setConfirmPassword(e.target.value)}
                       className="pl-10"
                       required
-                      minLength={6}
+                      minLength={MIN_PASSWORD}
                     />
                   </div>
+                  <PasswordMatchCheck password={newPassword} confirm={confirmPassword} />
                 </div>
-                <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={isLoading}>
+                <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={isLoading || !passwordsReady(newPassword, confirmPassword, MIN_PASSWORD)}>
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Reset Password
                 </Button>

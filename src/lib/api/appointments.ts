@@ -7,6 +7,8 @@ const announceChange = () => window.dispatchEvent(new Event(APPOINTMENTS_CHANGED
 export type AptStatus = "pending" | "confirmed" | "completed" | "cancelled" | "rejected" | "rescheduled";
 
 export interface Appointment {
+  /** The reference shown for it: APT-261000001. */
+  reference?: string | null;
   id: string;
   patientId: string | null;
   patientName: string;
@@ -167,6 +169,20 @@ export const cancelAppointment = (id: string, reason: string, remarks?: string) 
 export const byNewestBooked = (a: Appointment, b: Appointment) =>
   Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? "")
   || (b.date + b.time).localeCompare(a.date + a.time);
+
+/** The dentist of a patient's latest booking, leaving out ones that were called off.
+ * Older rows carry only the dentist's name, so either may be missing. */
+export function recentDentist(appointments: Appointment[]): { id: string | null; name: string | null } | null {
+  const last = appointments
+    .filter((a) => a.status !== "cancelled" && a.status !== "rejected" && (a.dentistId || a.dentistName))
+    .sort(byNewestBooked)[0];
+  return last ? { id: last.dentistId, name: last.dentistName } : null;
+}
+
+/** Why the server closed a request that was still pending when its time came; matches
+ * EXPIRED_REASON in api/appointments.ts. It's stored as rejected, with this reason. */
+export const EXPIRED_REASON = "Expired: not approved before the appointment time.";
+export const isExpired = (a: Pick<Appointment, "status" | "reason">) => a.status === "rejected" && a.reason === EXPIRED_REASON;
 
 export const rescheduleAppointment = (id: string, data: { date: string; time: string; reason: string; remarks?: string }) =>
   updateAppointment(id, { status: "rescheduled", ...data });

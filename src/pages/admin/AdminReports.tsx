@@ -3,14 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import { appointmentRef } from "@/lib/appointmentRef";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, alignFor } from "@/lib/tableClass";
 import CollapsedEmail from "@/components/CollapsedEmail";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Search, Loader2 } from "lucide-react";
+import { BarChart3, FileText, Footprints, Search, Loader2, Users } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ReportOverview from "@/components/ReportOverview";
+import { inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
 import ReportToolbar from "@/components/ReportToolbar";
 import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
@@ -18,13 +20,13 @@ import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
-import { getAppointments, type Appointment, type AptStatus } from "@/lib/api/appointments";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { groupGuests } from "@/lib/guests";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatManilaDateTime } from "@/lib/formatDate";
+import { formatManilaDateTime, manilaTodayDateStr } from "@/lib/formatDate";
 
 type ReportType = "appointment" | "walkin" | "patient";
 
@@ -37,7 +39,7 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
     title: "Walk-in Report",
     columns: ["Patient Name", "Contact Number", "Service", "Dentist", "Date", "Time", "Status"],
   },
-  patient: { title: "Patient Report", columns: ["Patient Name", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"] },
+  patient: { title: "Patient Report", columns: ["Patient Name", "Patient ID", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"] },
 };
 
 /** Free text (names, services) may wrap; short values (dates, numbers, "No account")
@@ -51,7 +53,6 @@ const roleLabel: Record<string, string> = {
   patient: "Patient",
 };
 
-const statuses: AptStatus[] = ["pending", "confirmed", "completed", "cancelled", "rejected", "rescheduled"];
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const statusVariant = (s: string) =>
@@ -60,7 +61,6 @@ const statusVariant = (s: string) =>
 interface GeneratedReport {
   type: ReportType;
   rows: string[][];
-  filters: { start: string; end: string; dentist: string; status: string };
   generatedAt: string;
 }
 
@@ -77,33 +77,23 @@ export default function AdminReports() {
       .finally(() => setLoading(false));
   }, []);
 
-  const dentists = useMemo(
-    () => Array.from(new Set(appointments.map(a => a.dentistName).filter((n): n is string => !!n))).sort(),
-    [appointments],
-  );
-
   const [type, setType] = useState<ReportType | "">("");
   // Applied to the generated report itself, so a long report can be narrowed without
   // running it again.
   const [filter, setFilter] = useState(EMPTY_FILTER);
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [dentist, setDentist] = useState("all");
-  const [status, setStatus] = useState("all");
   const [report, setReport] = useState<GeneratedReport | null>(null);
   // The column pinned on a phone: the patient. The appointment report opens with its
   // reference code, so there the name is the second column.
   const pinnedCol = report?.type === "appointment" ? 1 : 0;
 
-  const inRange = (d: string) => (!start || d >= start) && (!end || d <= end);
+  // What the overview counts over; this month to begin with. The report has its own dates.
+  const [period, setPeriod] = useState<Period>(() => ({ kind: "month", month: manilaTodayDateStr().slice(0, 7) }));
+  const walkIns = useMemo(() => inPeriod(appointments, period).filter((a) => a.type === "walk-in").length, [appointments, period]);
+  const [tab, setTab] = useState<"overview" | "report">("overview");
 
   const generate = () => {
     if (!type) {
       toast.error("Please select a report type first.");
-      return;
-    }
-    if (start && end && start > end) {
-      toast.error("Start date must be before the end date.");
       return;
     }
 
@@ -111,30 +101,28 @@ export default function AdminReports() {
 
     if (type === "appointment") {
       rows = appointments
-        .filter((a) => inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
-        .map((a) => [appointmentRef(a.id), a.patientName, a.dentistName ?? "—", a.service, a.date, capitalize(a.status)]);
+        .map((a) => [appointmentRef(a), a.patientName, a.dentistName ?? "—", a.service, a.date, capitalize(a.status)]);
     } else if (type === "walkin") {
       rows = appointments
-        .filter((a) => a.type === "walk-in" && inRange(a.date) && (dentist === "all" || a.dentistName === dentist) && (status === "all" || a.status === status))
+        .filter((a) => a.type === "walk-in")
         .map((a) => [a.patientName, a.contact || "—", a.service, a.dentistName ?? "—", a.date, toLabel(toMinutes(a.time)), capitalize(a.status)]);
     } else {
       const accountRows = patients
         .map((p) => {
           const own = appointments.filter((a) => a.patientId === p.id);
           const latest = own.map((a) => a.date).sort().at(-1) ?? "";
-          return { info: [p.name, p.phone || "—", p.email, "Registered"], total: own.length, latest };
+          return { info: [p.name, p.code ?? "—", p.phone || "—", p.email, "Registered"], total: own.length, latest };
         });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
       // so they'd be invisible here. One row per guest: the name and number taken at the desk.
       const guestRows = groupGuests(appointments).map((g) => ({
-        info: [g.name, g.contact || "—", "—", "No account"],
+        info: [g.name, "—", g.contact || "—", "—", "No account"],
         total: g.visits.length,
         latest: g.visits[0]?.date ?? "",
       }));
 
       rows = [...accountRows, ...guestRows]
-        .filter(({ latest }) => !start && !end ? true : latest && inRange(latest))
         .map(({ info, total, latest }) => [...info, String(total), latest || "—"]);
     }
 
@@ -143,7 +131,6 @@ export default function AdminReports() {
     setReport({
       type,
       rows,
-      filters: { start, end, dentist, status },
       generatedAt: formatManilaDateTime(),
     });
     toast.success("Report preview generated");
@@ -169,37 +156,51 @@ export default function AdminReports() {
       columns: meta.columns,
       rows: sortedRows,
       generatedAt: report.generatedAt,
-      filters: [
-        { label: "Date Range", value: `${report.filters.start || "All"} to ${report.filters.end || "All"}` },
-        { label: "Dentist", value: report.filters.dentist === "all" ? "All dentists" : report.filters.dentist },
-        { label: "Status", value: report.filters.status === "all" ? "All statuses" : capitalize(report.filters.status) },
-        ...(filterIsActive(filter)
-          ? [{ label: "Filtered By", value: describeReportFilter(meta.columns, filter) ?? "" }]
-          : []),
-      ],
+      filters: filterIsActive(filter)
+        ? [{ label: "Filtered By", value: describeReportFilter(meta.columns, filter) ?? "" }]
+        : undefined,
     });
   };
 
   return (
-    <div className="space-y-6">
+    <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="space-y-6">
       <div className="print:hidden">
         <h1 className="text-2xl font-bold font-heading text-foreground">Reports</h1>
-        <p className="text-muted-foreground">Select filters, generate a preview, then download or print</p>
+        <p className="text-muted-foreground">How the clinic is doing, and reports to print</p>
       </div>
 
-      <Card className="shadow-card print:hidden">
-        <CardHeader>
+      <TabsList className="print:hidden">
+        <TabsTrigger value="overview" className="gap-1.5"><BarChart3 className="w-4 h-4" /> Overview</TabsTrigger>
+        <TabsTrigger value="report" className="gap-1.5"><FileText className="w-4 h-4" /> Generate Report</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="overview" className="mt-0 space-y-4 print:hidden">
+        {loading ? (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          // Patients are all time; appointments and walk-ins the period's.
+          <ReportOverview appointments={appointments} period={period} onPeriodChange={setPeriod} stats={[
+            { label: "Patients", value: patients.length, icon: Users, note: "All time" },
+            { label: "Walk-ins", value: walkIns, icon: Footprints, note: periodLabel(period) },
+          ]} />
+        )}
+      </TabsContent>
+
+      <TabsContent value="report" className="mt-0 space-y-6">
+      {/* One card: choosing the report, then the report itself under it. */}
+      <Card className="shadow-card">
+        <CardHeader className="print:hidden">
           <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" /> Report Filters
+            <FileText className="w-5 h-5 text-primary" /> Generate Report
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {loading ? (
             <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           ) : (
-          <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="space-y-2">
+          // The type and the buttons on one line; on a phone the buttons go under it.
+          <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3 print:hidden">
+            <div className="space-y-2 w-full sm:w-72">
               <Label>Report Type</Label>
               <Select value={type} onValueChange={(v) => { setType(v as ReportType); setReport(null); }}>
                 <SelectTrigger aria-label="Report type"><SelectValue placeholder="Select report" /></SelectTrigger>
@@ -210,66 +211,23 @@ export default function AdminReports() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Start Date (optional)</Label>
-              <Input type="date" aria-label="Start date" value={start} onChange={(e) => setStart(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>End Date (optional)</Label>
-              <Input type="date" aria-label="End date" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Dentist (optional)</Label>
-              <Select value={dentist} onValueChange={setDentist} disabled={type === "patient"}>
-                <SelectTrigger aria-label="Dentist"><SelectValue placeholder="All dentists" /></SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="all">All Dentists</SelectItem>
-                  {dentists.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Status (optional)</Label>
-              <Select value={status} onValueChange={setStatus} disabled={type === "patient"}>
-                <SelectTrigger aria-label="Status"><SelectValue placeholder="All statuses" /></SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {statuses.map((s) => (
-                    <SelectItem key={s} value={s}>{capitalize(s)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex gap-2">
+              <Button onClick={generate}>
+                <Search className="w-4 h-4 mr-2" /> Generate Report
+              </Button>
+              {report && (
+                <Button variant="outline" onClick={() => setReport(null)}>Clear Preview</Button>
+              )}
             </div>
           </div>
-          <div className="flex gap-2 mt-4">
-            <Button onClick={generate}>
-              <Search className="w-4 h-4 mr-2" /> Generate Report
-            </Button>
-            {report && (
-              <Button variant="outline" onClick={() => setReport(null)}>Clear Preview</Button>
-            )}
-          </div>
-          </>
           )}
-        </CardContent>
-      </Card>
 
       {report && (
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg">
-              {reportMeta[report.type].title}
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Date Range: {report.filters.start || "All"} to {report.filters.end || "All"} ·
-              Dentist: {report.filters.dentist === "all" ? "All" : report.filters.dentist} ·
-              Status: {report.filters.status === "all" ? "All" : capitalize(report.filters.status)} ·
-              Generated: {report.generatedAt}
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <div className="space-y-4 border-t pt-4">
+          <div>
+            <h3 className="font-heading text-lg font-semibold">{reportMeta[report.type].title}</h3>
+            <p className="text-xs text-muted-foreground">Ayag Dental Clinic · Generated: {report.generatedAt}</p>
+          </div>
             <ReportToolbar
               columns={reportMeta[report.type].columns}
               rows={report.rows}
@@ -283,7 +241,7 @@ export default function AdminReports() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)} className={i === pinnedCol ? PIN_COL : undefined}>{c}</SortableHead>)}
+                    {reportMeta[report.type].columns.map((c, i) => <SortableHead key={c} {...headProps(i)} className={cn(i === pinnedCol && PIN_COL, alignFor(c))}>{c}</SortableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -299,7 +257,7 @@ export default function AdminReports() {
                     paged.map((row, i) => (
                       <TableRow key={i}>
                         {row.map((cell, j) => (
-                          <TableCell key={j} className={cn(cellFit(reportMeta[report.type].columns[j]), report.type === "appointment" && j === 5 && `font-medium ${statusVariant(cell)}`, j === pinnedCol && PIN_COL)}>
+                          <TableCell key={j} className={cn(cellFit(reportMeta[report.type].columns[j]), report.type === "appointment" && j === 5 && `font-medium ${statusVariant(cell)}`, j === pinnedCol && PIN_COL, alignFor(reportMeta[report.type].columns[j]))}>
                             {/Email/.test(reportMeta[report.type].columns[j]) ? <CollapsedEmail email={cell} /> : cell}
                           </TableCell>
                         ))}
@@ -316,9 +274,11 @@ export default function AdminReports() {
           pageSize={PAGE_SIZE}
           noun="row(s)"
         />
-          </CardContent>
-        </Card>
+        </div>
       )}
-    </div>
+        </CardContent>
+      </Card>
+      </TabsContent>
+    </Tabs>
   );
 }

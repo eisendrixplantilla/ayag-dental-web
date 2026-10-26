@@ -15,18 +15,10 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id TEXT UNIQUE;
--- Every staff account carries an Employee ID. Accounts that predate them (or were created
--- without one) are given the next free EMP-### here; rows that already have one are left
--- alone, so this is safe to re-run.
-WITH used AS (
-  SELECT COALESCE(MAX(substring(employee_id from 5)::int), 0) AS n
-  FROM users WHERE employee_id ~ '^EMP-[0-9]{1,6}$'
-), missing AS (
-  SELECT id, row_number() OVER (ORDER BY created_at, id) AS seq
-  FROM users WHERE employee_id IS NULL OR btrim(employee_id) = ''
-)
-UPDATE users SET employee_id = 'EMP-' || lpad((used.n + missing.seq)::text, 3, '0')
-FROM used, missing WHERE users.id = missing.id;
+-- The clinic's IDs: a prefix, the year and month made (YYMM, Manila time) and the number
+-- that month: staff DT-/AN-/SA-261001 in users.employee_id, patients PT-26100001, and
+-- appointments APT-261000001. Given after each insert, and to older records on first use,
+-- by api/_lib/codes.ts.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT;
@@ -129,6 +121,9 @@ CREATE TABLE IF NOT EXISTS clinic_info (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (id = 1)
 );
+-- How the booking calendars look: 'detailed' (big, with what's left each day) or
+-- 'classic' (the small month). Daily limits are enforced either way.
+ALTER TABLE clinic_info ADD COLUMN IF NOT EXISTS calendar_style TEXT NOT NULL DEFAULT 'detailed';
 
 CREATE TABLE IF NOT EXISTS appointments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -206,6 +201,36 @@ CREATE TABLE IF NOT EXISTS dentist_schedules (
   UNIQUE (dentist_id, day_of_week)
 );
 
+-- How many of a procedure a dentist takes in one day (e.g. Veneers: 3). Keyed by the
+-- service's name, as appointments store it. No row means no limit.
+CREATE TABLE IF NOT EXISTS dentist_service_limits (
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service_name TEXT NOT NULL,
+  daily_limit INTEGER NOT NULL CHECK (daily_limit > 0),
+  PRIMARY KEY (dentist_id, service_name)
+);
+
+-- Which services a dentist offers. A dentist with no rows here offers every service.
+CREATE TABLE IF NOT EXISTS dentist_services (
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service_name TEXT NOT NULL,
+  PRIMARY KEY (dentist_id, service_name)
+);
+
+-- When a dentist does a particular service: on these days of the week (0 = Sunday; empty
+-- = any day they work), between these times (null = their whole working day).
+CREATE TABLE IF NOT EXISTS dentist_service_hours (
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service_name TEXT NOT NULL,
+  days INTEGER[] NOT NULL DEFAULT '{}',
+  start_time TEXT,
+  end_time TEXT,
+  PRIMARY KEY (dentist_id, service_name)
+);
+-- How many of the service the dentist takes on each of those days, by day number
+-- (e.g. {"1": 3, "3": 2}). A day left out has no limit.
+ALTER TABLE dentist_service_hours ADD COLUMN IF NOT EXISTS day_limits JSONB NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS dentist_unavailable (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -213,6 +238,40 @@ CREATE TABLE IF NOT EXISTS dentist_unavailable (
   reason TEXT,
   remarks TEXT
 );
+
+-- A dentist's request for days off. The superadmin approves it (each day then becomes a
+-- dentist_unavailable row) or rejects it with a reason. Also created on first use
+-- (ensureLeaveTable), since the live database isn't migrated on deploy.
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dentist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+  decided_by TEXT,
+  decided_at TIMESTAMPTZ,
+  decision_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Days the superadmin took off an approved leave (freed again), and who did it when.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS removed_dates DATE[] NOT NULL DEFAULT '{}';
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS changed_by TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS changed_at TIMESTAMPTZ;
+-- Leave for part of one day: its hours ("HH:MM"); none = whole days. Approved, the day's
+-- dentist_unavailable row carries the same hours, and only they are closed to bookings.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS start_time TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TEXT;
+-- The person's own ask to change approved leave (fewer days or hours), for the superadmin to decide.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS change_request JSONB;
+ALTER TABLE dentist_unavailable ADD COLUMN IF NOT EXISTS start_time TEXT;
+ALTER TABLE dentist_unavailable ADD COLUMN IF NOT EXISTS end_time TEXT;
+
+-- Patient IDs and appointment references (see the note on users.employee_id).
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS patient_code TEXT UNIQUE;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reference TEXT UNIQUE;
 
 CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_dentist ON appointments(dentist_id);

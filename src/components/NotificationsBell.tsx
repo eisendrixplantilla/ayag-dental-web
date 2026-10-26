@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bell, CheckCheck } from "lucide-react";
 import { formatManilaDateTime } from "@/lib/formatDate";
-import { useNotifications, type NotificationItem } from "@/contexts/NotificationsContext";
+import { keyOf, useNotifications, type NotificationItem } from "@/contexts/NotificationsContext";
 
 export function NotificationsBell() {
   const navigate = useNavigate();
@@ -70,7 +70,8 @@ export function NotificationsBell() {
             const unread = !isRead(n);
             return (
               <button
-                key={n.id}
+                // One appointment can have two notices at once (a request and that day's reminder).
+                key={keyOf(n)}
                 type="button"
                 onClick={() => goToSource(n)}
                 className={`w-full flex items-start gap-2 px-2 py-2 text-sm text-left rounded-sm hover:bg-accent ${unread ? "bg-primary/5" : ""}`}

@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL, NUM_COL } from "@/lib/tableClass";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Package, Plus, AlertTriangle, Edit } from "lucide-react";
+import { IconAction, RowActions } from "@/components/RowActions";
 import { toast } from "sonner";
 import { z } from "zod";
 import { formatManilaDate } from "@/lib/formatDate";
@@ -165,13 +166,13 @@ export default function AdminInventory() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>ID</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(0)}>ID</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Item</SortableHead>
                 <SortableHead {...headProps(2)}>Category</SortableHead>
-                <SortableHead {...headProps(3)}>Quantity</SortableHead>
-                <SortableHead {...headProps(4)}>Min Stock</SortableHead>
-                <SortableHead {...headProps(6)}>Status</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <SortableHead className={NUM_COL} {...headProps(3)}>Quantity</SortableHead>
+                <SortableHead className={NUM_COL} {...headProps(4)}>Min Stock</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(6)}>Status</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,17 +183,19 @@ export default function AdminInventory() {
               )}
               {paged.map(item => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-mono text-sm">{item.id}</TableCell>
+                  <TableCell className={`font-mono text-sm ${CODE_COL}`}>{item.id}</TableCell>
                   <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{item.name}</TableCell>
                   <TableCell className={WRAP_CELL}>{item.category}</TableCell>
-                  <TableCell>{item.quantity} {item.unit}</TableCell>
-                  <TableCell>{item.minStock} {item.unit}</TableCell>
-                  <TableCell>
+                  <TableCell className={NUM_COL}>{item.quantity} {item.unit}</TableCell>
+                  <TableCell className={NUM_COL}>{item.minStock} {item.unit}</TableCell>
+                  <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={item.status === "low" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-success/10 text-success border-success/20"}>
                       {item.status === "low" ? "Low Stock" : "In Stock"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="print:hidden"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}><Edit className="w-4 h-4" /></Button></TableCell>
+                  <TableCell className={`print:hidden ${CODE_COL}`}>
+                    <RowActions><IconAction label="Edit" ariaLabel={`Edit ${item.name}`} icon={Edit} onClick={() => openEdit(item)} /></RowActions>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

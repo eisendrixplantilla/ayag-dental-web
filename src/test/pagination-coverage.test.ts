@@ -20,8 +20,9 @@ const rel = (f: string) => path.relative(root, f).replace(/\\/g, "/");
 const withTables = pageFiles.filter(f => /<TableBody>|TableToolbar/.test(read(f)));
 
 /** The catalogue is dragged into order, and a row can't be dragged onto a page that
- * isn't on screen — so its active list is deliberately whole. */
-const NOT_PAGED = ["src/pages/superadmin/SuperAdminSettings.tsx"];
+ * isn't on screen — so its active list is deliberately whole. A dentist's schedule is a
+ * form with one row per day of the week, always seven, not a list of records. */
+const NOT_PAGED = ["src/pages/superadmin/SuperAdminSettings.tsx", "src/pages/superadmin/SuperAdminDentistSchedule.tsx"];
 
 describe("every table pages at ten", () => {
   it("found the tables to check", () => {

@@ -23,6 +23,7 @@ const adminNav = [
   { title: "Patient Records", url: "/admin/patients", icon: FolderOpen },
   { title: "Patient Accounts", url: "/admin/accounts", icon: Users },
   { title: "Reports", url: "/admin/reports", icon: FileText },
+  { title: "My Schedule", url: "/admin/schedule", icon: CalendarCheck },
   { title: "Profile", url: "/admin/profile", icon: UserCog },
 ];
 
@@ -37,6 +38,7 @@ const patientNav = [
 const superAdminNav = [
   { title: "Dashboard", url: "/superadmin", icon: LayoutDashboard },
   { title: "Staff Management", url: "/superadmin/staff", icon: UserCog },
+  { title: "Schedule", url: "/superadmin/schedule", icon: CalendarCheck },
   { title: "Archive", url: "/superadmin/archives", icon: Archive },
   { title: "System Settings", url: "/superadmin/settings", icon: Settings },
   { title: "Reports & Analytics", url: "/superadmin/reports", icon: BarChart3 },

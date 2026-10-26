@@ -1,9 +1,7 @@
-/** A short, readable reference for a patient — "PT-3F9C2A" — in place of the
- * 36-character id the database uses. Like the appointment reference, it's taken from
- * that id, so nothing new has to be stored and the same patient always reads the same
- * on screen and over the counter. */
-export function patientRef(id: string): string {
-  return `PT-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+/** The Patient ID as the clinic reads it: PT-26100001 (PT, the year and month the
+ * account was made, its number that month). The server gives it; a dash until it has. */
+export function patientRef(p: { code?: string | null }): string {
+  return p.code ?? "—";
 }
 
 /** Age in whole years from a "YYYY-MM-DD" birthdate, or null if there isn't one.

@@ -15,9 +15,10 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
 import { FilePlus2, FileEdit, Eye, Loader2, Plus, X, Printer } from "lucide-react";
+import { IconAction, RowActions } from "@/components/RowActions";
 import {
   getDentalRecords, getDentalRecord, createDentalRecord, updateDentalRecord,
   type DentalRecord, type TreatmentInput, type PrescriptionInput,
@@ -32,6 +33,8 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
+import ToothChart from "@/components/ToothChart";
+import { DatePicker } from "@/components/DatePicker";
 
 const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
 
@@ -184,7 +187,7 @@ export default function DentistRecords() {
     try {
       await updateDentalRecord(editTarget.id, {
         diagnosis: editForm.diagnosis.trim(),
-        toothNumber: editForm.toothNumber.trim() || undefined,
+        toothNumber: editForm.toothNumber.trim(),
         treatmentNotes: editForm.treatmentNotes.trim() || undefined,
         nextVisit: editForm.nextVisit || undefined,
         treatments: cleanTreatments,
@@ -259,13 +262,13 @@ export default function DentistRecords() {
           <Table className={COMPACT_TABLE}>
             <TableHeader>
               <TableRow>
-                <SortableHead {...headProps(0)}>Date</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(0)}>Date</SortableHead>
                 <SortableHead {...headProps(1)} className={PIN_COL}>Patient</SortableHead>
                 <SortableHead {...headProps(2)}>Procedures</SortableHead>
-                <SortableHead {...headProps(3)}>Tooth No.</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Tooth No.</SortableHead>
                 <SortableHead {...headProps(4)}>Diagnosis</SortableHead>
                 <SortableHead {...headProps(5)}>Prescriptions</SortableHead>
-                <TableHead className="text-right print:hidden">Actions</TableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -282,21 +285,17 @@ export default function DentistRecords() {
                     ref={registerRow(r.id)}
                     className={highlightedKey === r.id ? HIGHLIGHT_ROW_CLASS : undefined}
                   >
-                    <TableCell>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
+                    <TableCell className={CODE_COL}>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
                     <TableCell className={`font-medium ${WRAP_CELL} ${PIN_COL}`}>{r.patientName ?? "—"}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
-                    <TableCell>{r.toothNumber || "—"}</TableCell>
+                    <TableCell className={CODE_COL}>{r.toothNumber || "—"}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
                     <TableCell className={WRAP_CELL}>{r.prescriptions.map(p => p.medicine).join(", ") || "—"}</TableCell>
-                    <TableCell className="print:hidden">
-                      <div className="flex flex-wrap gap-2 justify-end">
-                        <Button size="sm" variant="outline" onClick={() => openView(r)}>
-                          <Eye className="w-4 h-4 mr-1" /> View
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
-                          <FileEdit className="w-4 h-4 mr-1" /> Edit
-                        </Button>
-                      </div>
+                    <TableCell className={`print:hidden ${CODE_COL}`}>
+                      <RowActions>
+                        <IconAction label="View" icon={Eye} onClick={() => openView(r)} />
+                        <IconAction label="Edit" icon={FileEdit} onClick={() => openEdit(r)} />
+                      </RowActions>
                     </TableCell>
                   </TableRow>
                 ))
@@ -316,7 +315,7 @@ export default function DentistRecords() {
 
       {/* Create record */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg bg-background max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">New Dental Record</DialogTitle>
             <DialogDescription>Create a dental record for one of your appointments.</DialogDescription>
@@ -341,7 +340,7 @@ export default function DentistRecords() {
               </div>
               <div className="space-y-2">
                 <Label>Consultation Date *</Label>
-                <Input type="date" value={form.date} max={manilaTodayDateStr()} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <DatePicker aria-label="Consultation date" value={form.date} max={manilaTodayDateStr()} required onChange={(v) => setForm({ ...form, date: v })} />
               </div>
             </div>
             <div className="space-y-2">
@@ -350,8 +349,12 @@ export default function DentistRecords() {
             </div>
             <TreatmentListEditor treatments={treatments} setTreatments={setTreatments} />
             <div className="space-y-2">
-              <Label>Tooth Number (if applicable)</Label>
-              <Input value={form.toothNumber} onChange={e => setForm({ ...form, toothNumber: e.target.value })} placeholder="e.g. 36" />
+              <Label>Dental Chart (if applicable)</Label>
+              <ToothChart
+                value={form.toothNumber}
+                onChange={(toothNumber) => setForm({ ...form, toothNumber })}
+                patientId={appointments.find(a => a.id === form.appointmentId)?.patientId}
+              />
             </div>
             <PrescriptionListEditor prescriptions={prescriptions} setPrescriptions={setPrescriptions} />
             <div className="space-y-2">
@@ -360,7 +363,7 @@ export default function DentistRecords() {
             </div>
             <div className="space-y-2">
               <Label>Next Appointment Recommendation (optional)</Label>
-              <Input type="date" value={form.nextVisit} min={manilaTodayDateStr()} onChange={e => setForm({ ...form, nextVisit: e.target.value })} />
+              <DatePicker aria-label="Next appointment recommendation" value={form.nextVisit} min={manilaTodayDateStr()} onChange={(v) => setForm({ ...form, nextVisit: v })} />
             </div>
           </div>
           <DialogFooter>
@@ -372,7 +375,7 @@ export default function DentistRecords() {
 
       {/* Edit record */}
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="max-w-lg bg-background max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Edit Dental Record</DialogTitle>
             <DialogDescription>Update the diagnosis, procedures and prescriptions for this record.</DialogDescription>
@@ -384,8 +387,13 @@ export default function DentistRecords() {
             </div>
             <TreatmentListEditor treatments={editTreatments} setTreatments={setEditTreatments} />
             <div className="space-y-2">
-              <Label>Tooth Number</Label>
-              <Input value={editForm.toothNumber} onChange={e => setEditForm({ ...editForm, toothNumber: e.target.value })} />
+              <Label>Dental Chart</Label>
+              <ToothChart
+                value={editForm.toothNumber}
+                onChange={(toothNumber) => setEditForm({ ...editForm, toothNumber })}
+                patientId={editTarget?.patientId}
+                excludeRecordId={editTarget?.id}
+              />
             </div>
             <PrescriptionListEditor prescriptions={editPrescriptions} setPrescriptions={setEditPrescriptions} />
             <div className="space-y-2">
@@ -394,7 +402,7 @@ export default function DentistRecords() {
             </div>
             <div className="space-y-2">
               <Label>Next Appointment Recommendation</Label>
-              <Input type="date" value={editForm.nextVisit} onChange={e => setEditForm({ ...editForm, nextVisit: e.target.value })} />
+              <DatePicker aria-label="Next appointment recommendation" value={editForm.nextVisit} onChange={(v) => setEditForm({ ...editForm, nextVisit: v })} />
             </div>
           </div>
           <DialogFooter>
@@ -406,7 +414,7 @@ export default function DentistRecords() {
 
       {/* View record */}
       <Dialog open={!!viewTarget} onOpenChange={(o) => !o && setViewTarget(null)}>
-        <DialogContent className="max-w-lg bg-background max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Dental Record Details</DialogTitle>
           </DialogHeader>
@@ -418,6 +426,10 @@ export default function DentistRecords() {
                 <Field label="Consultation Date" value={format(parseISO(viewTarget.date), "MMMM d, yyyy")} />
                 <Field label="Tooth Number" value={viewTarget.toothNumber || "—"} />
                 <Field label="Attending Dentist" value={viewTarget.dentistName ?? "—"} />
+                <div className="col-span-2 space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Dental Chart</p>
+                  <ToothChart value={viewTarget.toothNumber ?? ""} patientId={viewTarget.patientId} excludeRecordId={viewTarget.id} />
+                </div>
                 <div className="col-span-2"><Field label="Diagnosis" value={viewTarget.diagnosis} /></div>
                 <div className="col-span-2">
                   <Field label="Procedures Performed" value={viewTarget.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"} />

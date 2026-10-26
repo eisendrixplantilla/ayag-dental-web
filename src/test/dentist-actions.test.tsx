@@ -26,8 +26,24 @@ vi.mock("@/components/ui/calendar", async () => {
       React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
   };
 });
+vi.mock("@/components/BookingCalendar", async () => {
+  const React = await import("react");
+  return {
+    default: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
+});
+
+// The row's other actions sit behind ▾; a plain menu stands in for Radix's in jsdom.
+vi.mock("@/components/ui/dropdown-menu", () => import("./plainDropdown"));
 
 import DentistAppointments from "@/pages/dentist/DentistAppointments";
+
+/** Runs one of a row's actions from its ▾ menu. */
+function pick(row: ReturnType<typeof within>, action: RegExp) {
+  fireEvent.click(row.getByRole("button", { name: "More options" }));
+  fireEvent.click(row.getByRole("menuitem", { name: action }));
+}
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -60,13 +76,13 @@ describe("dentist actions wait for admin approval", () => {
     for (const label of [/Start Consultation/, /Reschedule/, /^Cancel$/, /More options/]) {
       expect(pending.queryByRole("button", { name: label })).toBeNull();
     }
-    expect(pending.getAllByText("Awaiting admin approval").length).toBeGreaterThan(0);
+    expect(pending.getByLabelText("Awaiting admin approval")).toBeInTheDocument();
 
     for (const name of ["Juan Dela Cruz", "Maria Santos"]) {
       const approved = within(screen.getByText(name).closest("tr")!);
-      expect(approved.getByRole("button", { name: /Start Consultation/ })).toBeInTheDocument();
-      expect(approved.getByRole("button", { name: /Reschedule/ })).toBeInTheDocument();
-      expect(approved.queryByText("Awaiting admin approval")).toBeNull();
+      fireEvent.click(approved.getByRole("button", { name: "More options" }));
+      expect(approved.getAllByRole("menuitem").map(i => i.textContent?.trim())).toEqual(["Start Consultation", "Reschedule", "Cancel"]);
+      expect(approved.queryByLabelText("Awaiting admin approval")).toBeNull();
     }
   });
 });
@@ -89,7 +105,7 @@ describe("what the reschedule dialog tells you about the move", () => {
     })];
     render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
     const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
-    fireEvent.click(row.getByRole("button", { name: /Reschedule/ }));
+    pick(row, /Reschedule/);
     await waitFor(() => expect(document.querySelector("[role=dialog]")).not.toBeNull());
   };
 
@@ -162,7 +178,7 @@ describe("a rescheduled visit keeps the length it already had", () => {
     ];
     render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
     const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
-    fireEvent.click(row.getByRole("button", { name: /Reschedule/ }));
+    pick(row, /Reschedule/);
     await waitFor(() => expect(document.querySelector("[role=dialog]")).not.toBeNull());
     fireEvent.click(dialog().getByRole("button", { name: "Pick Mar 10" }));
     await waitFor(() => expect(slotLabels().length).toBeGreaterThan(0));
@@ -205,5 +221,30 @@ describe("the dentist's list puts the newest booking on top", () => {
     const names = Array.from(document.querySelectorAll("tbody tr"))
       .map(r => (r as HTMLTableRowElement).cells[0].textContent);
     expect(names).toEqual(["Pedro Reyes", "Maria Santos", "Allen Estrella"]);
+  });
+});
+
+describe("the consultation's dental chart", () => {
+  it("saves the teeth clicked on the chart with the record", async () => {
+    const { api } = await import("@/contexts/AuthContext");
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    pick(row, /Start Consultation/);
+    const form = within(await screen.findByRole("dialog"));
+    fireEvent.click(form.getByRole("button", { name: "Tooth 26" }));
+    fireEvent.click(form.getByRole("button", { name: "Tooth 16" }));
+    expect(form.getByText("16, 26")).toBeInTheDocument();
+
+    const [procedure, diagnosis] = form.getAllByRole("textbox");
+    fireEvent.change(procedure, { target: { value: "Restoration" } });
+    fireEvent.change(diagnosis, { target: { value: "Caries" } });
+    fireEvent.click(form.getByRole("button", { name: /Save Consultation/ }));
+
+    await waitFor(() => {
+      const saved = vi.mocked(api).mock.calls.find(([path, init]) => String(path).includes("dental-records") && init?.method === "POST");
+      expect(JSON.parse(String(saved![1]!.body))).toMatchObject({ toothNumber: "16, 26", diagnosis: "Caries" });
+    });
   });
 });

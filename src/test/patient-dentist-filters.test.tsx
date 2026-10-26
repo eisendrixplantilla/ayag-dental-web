@@ -43,6 +43,13 @@ vi.mock("@/components/ui/calendar", async () => {
       React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
   };
 });
+vi.mock("@/components/BookingCalendar", async () => {
+  const React = await import("react");
+  return {
+    default: ({ onSelect }: any) =>
+      React.createElement("button", { onClick: () => onSelect(new Date(2027, 2, 10)) }, "Pick Mar 10"),
+  };
+});
 vi.mock("@/lib/api/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/patients")>();
   return { ...actual, getPatients: vi.fn(async () => h.patients) };

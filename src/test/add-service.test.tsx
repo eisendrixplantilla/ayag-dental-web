@@ -131,7 +131,7 @@ describe("adding a dental service", () => {
 
     expect(field(/Service Name/)).toHaveValue("");
     expect(field(/Duration/)).toHaveValue(30);
-    expect(field(/Price/)).toHaveValue(null);
+    expect(field(/Price/)).toHaveValue(""); // a text box, so it can show 1,500
   });
 
   it("saves the service and shows it in the table straight away", async () => {

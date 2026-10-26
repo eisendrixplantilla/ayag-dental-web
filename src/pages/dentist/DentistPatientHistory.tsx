@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import {
   User, CalendarDays, FileText, Stethoscope, Pill, Lock, Search, Check, ChevronsUpDown, Loader2, Printer,
 } from "lucide-react";
@@ -297,11 +297,11 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <SortableHead {...aptSection.headProps(0)} className={PIN_COL}>Date</SortableHead>
-                    <SortableHead {...aptSection.headProps(1)}>Time</SortableHead>
+                    <SortableHead {...aptSection.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
+                    <SortableHead className={CODE_COL} {...aptSection.headProps(1)}>Time</SortableHead>
                     <SortableHead {...aptSection.headProps(2)}>Service</SortableHead>
-                    <SortableHead {...aptSection.headProps(3)}>Type</SortableHead>
-                    <SortableHead {...aptSection.headProps(4)}>Status</SortableHead>
+                    <SortableHead className={CODE_COL} {...aptSection.headProps(3)}>Type</SortableHead>
+                    <SortableHead className={CODE_COL} {...aptSection.headProps(4)}>Status</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -311,11 +311,11 @@ export default function DentistPatientHistory() {
                     </TableCell></TableRow>
                   ) : aptSection.paged.map(a => (
                     <TableRow key={a.id}>
-                      <TableCell className={PIN_COL}>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatTimeRange(a.time, a.endTime)}</TableCell>
+                      <TableCell className={`${PIN_COL} ${CODE_COL}`}>{format(parseISO(a.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className={`whitespace-nowrap ${CODE_COL}`}>{formatTimeRange(a.time, a.endTime)}</TableCell>
                       <TableCell className={WRAP_CELL}>{a.service}</TableCell>
-                      <TableCell className="capitalize">{a.type}</TableCell>
-                      <TableCell><Badge variant="outline" className={statusClass(a.status)}>{a.status}</Badge></TableCell>
+                      <TableCell className={`capitalize ${CODE_COL}`}>{a.type}</TableCell>
+                      <TableCell><Badge variant="outline" className={`${statusClass(a.status)} ${CODE_COL}`}>{a.status}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -342,7 +342,7 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <SortableHead {...recordSection.headProps(0)} className={PIN_COL}>Date</SortableHead>
+                    <SortableHead {...recordSection.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
                     <SortableHead {...recordSection.headProps(1)}>Procedures</SortableHead>
                     <SortableHead {...recordSection.headProps(2)}>Diagnosis</SortableHead>
                     <SortableHead {...recordSection.headProps(3)}>Treatment Notes</SortableHead>
@@ -355,7 +355,7 @@ export default function DentistPatientHistory() {
                     </TableCell></TableRow>
                   ) : recordSection.paged.map(r => (
                     <TableRow key={r.id}>
-                      <TableCell className={PIN_COL}>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className={`${PIN_COL} ${CODE_COL}`}>{format(parseISO(r.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className={WRAP_CELL}>{r.treatments.map(t => t.serviceName).filter(Boolean).join(", ") || "—"}</TableCell>
                       <TableCell className={WRAP_CELL}>{r.diagnosis}</TableCell>
                       <TableCell className={WRAP_CELL}>{r.treatmentNotes || "—"}</TableCell>
@@ -385,7 +385,7 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <SortableHead {...procedureSection.headProps(0)} className={PIN_COL}>Date</SortableHead>
+                    <SortableHead {...procedureSection.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
                     <SortableHead {...procedureSection.headProps(1)}>Procedure</SortableHead>
                     <SortableHead {...procedureSection.headProps(2)}>Dentist</SortableHead>
                     <SortableHead {...procedureSection.headProps(3)}>Outcome</SortableHead>
@@ -398,7 +398,7 @@ export default function DentistPatientHistory() {
                     </TableCell></TableRow>
                   ) : procedureSection.paged.map((p, i) => (
                     <TableRow key={i}>
-                      <TableCell className={PIN_COL}>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className={`${PIN_COL} ${CODE_COL}`}>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className={`font-medium ${WRAP_CELL}`}>{p.procedure}</TableCell>
                       <TableCell className={WRAP_CELL}>{p.dentist}</TableCell>
                       <TableCell className={WRAP_CELL}>{p.outcome}</TableCell>
@@ -428,7 +428,7 @@ export default function DentistPatientHistory() {
               <Table className={COMPACT_TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <SortableHead {...rxSection.headProps(0)} className={PIN_COL}>Date</SortableHead>
+                    <SortableHead {...rxSection.headProps(0)} className={`${PIN_COL} ${CODE_COL}`}>Date</SortableHead>
                     <SortableHead {...rxSection.headProps(1)}>Medication</SortableHead>
                     <SortableHead {...rxSection.headProps(2)}>Prescribed By</SortableHead>
                   </TableRow>
@@ -440,7 +440,7 @@ export default function DentistPatientHistory() {
                     </TableCell></TableRow>
                   ) : rxSection.paged.map((p, i) => (
                     <TableRow key={i}>
-                      <TableCell className={PIN_COL}>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className={`${PIN_COL} ${CODE_COL}`}>{format(parseISO(p.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className={`font-medium ${WRAP_CELL}`}>{p.medication}</TableCell>
                       <TableCell className={WRAP_CELL}>{p.dentist}</TableCell>
                     </TableRow>

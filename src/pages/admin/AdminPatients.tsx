@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPACT_TABLE, WRAP_CELL, PIN_COL } from "@/lib/tableClass";
+import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL, NUM_COL } from "@/lib/tableClass";
 import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -28,12 +28,15 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import MobileInput from "@/components/MobileInput";
+import { cleanName, formatMobile, formatName, PH_MOBILE } from "@/lib/inputRules";
 import {
   MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink,
   type LinkSide, type MatchLevel, type VerificationMethod,
 } from "@/lib/guestMatch";
+import { IconAction, RowActions } from "@/components/RowActions";
 
-const COLUMNS = ["Name", "Age", "Phone", "Email", "Status", "Walk-in"];
+const COLUMNS = ["Name", "Patient ID", "Age", "Phone", "Email", "Status", "Walk-in"];
 
 // A walk-in booked for someone with no account has no patients row behind it: there's
 // nothing to open, edit or archive. Once they sign up, staff can link it to the account.
@@ -53,7 +56,7 @@ interface PatientRow {
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Full name is required"),
   age: z.coerce.number().int().min(1, "Age is required").max(120, "Age must be valid"),
-  phone: z.string().trim().min(1, "Phone number is required"),
+  phone: z.string().trim().min(1, "Phone number is required").regex(PH_MOBILE, "Enter an 11-digit mobile number starting with 09"),
   email: z.string().trim().min(1, "Email is required").email("Invalid email address"),
   address: z.string().trim().min(1, "Address is required"),
 });
@@ -130,6 +133,8 @@ export default function AdminPatients() {
   const textRows = useMemo(
     () => rows.map(r => [
       r.name,
+      // A guest booked at the desk has no account, so no Patient ID.
+      r.patient?.code ?? "—",
       r.age || "—",
       r.phone || "—",
       r.email || "—",
@@ -283,7 +288,7 @@ export default function AdminPatients() {
 
   const openEdit = (p: Patient) => {
     setEditingPatient(p);
-    setEditForm({ name: p.name, age: p.age != null ? String(p.age) : "", phone: p.phone ?? "", email: p.email, address: p.address ?? "" });
+    setEditForm({ name: p.name, age: p.age != null ? String(p.age) : "", phone: formatMobile(p.phone ?? ""), email: p.email, address: p.address ?? "" });
     setEditErrors({});
   };
 
@@ -355,7 +360,7 @@ export default function AdminPatients() {
             <div className="space-y-4">
               <div>
                 <Label>Full Name <span className="text-destructive">*</span></Label>
-                <Input placeholder="Patient name" value={form.name} onChange={e => handleFormChange("name", e.target.value)} />
+                <Input placeholder="Patient name" autoCapitalize="words" value={form.name} onChange={e => handleFormChange("name", formatName(e.target.value))} onBlur={() => handleFormChange("name", cleanName(form.name))} />
                 {formErrors.name && <p className="text-xs text-destructive mt-1">{formErrors.name}</p>}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -366,7 +371,7 @@ export default function AdminPatients() {
                 </div>
                 <div>
                   <Label>Phone <span className="text-destructive">*</span></Label>
-                  <Input placeholder="Phone number" value={form.phone} onChange={e => handleFormChange("phone", e.target.value)} />
+                  <MobileInput value={form.phone} onValueChange={v => handleFormChange("phone", v)} />
                   {formErrors.phone && <p className="text-xs text-destructive mt-1">{formErrors.phone}</p>}
                 </div>
               </div>
@@ -414,12 +419,13 @@ export default function AdminPatients() {
             <TableHeader>
               <TableRow>
                 <SortableHead {...headProps(0)} className={PIN_COL}>Name</SortableHead>
-                <SortableHead {...headProps(1)}>Age</SortableHead>
-                <SortableHead {...headProps(2)}>Phone</SortableHead>
-                <SortableHead {...headProps(3)}>Email</SortableHead>
-                <SortableHead {...headProps(4)}>Status</SortableHead>
-                <SortableHead {...headProps(5)}>Walk-in</SortableHead>
-                <TableHead className="print:hidden">Actions</TableHead>
+                <SortableHead className={CODE_COL} {...headProps(1)}>Patient ID</SortableHead>
+                <SortableHead className={NUM_COL} {...headProps(2)}>Age</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(3)}>Phone</SortableHead>
+                <SortableHead {...headProps(4)}>Email</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(5)}>Status</SortableHead>
+                <SortableHead className={CODE_COL} {...headProps(6)}>Walk-in</SortableHead>
+                <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -429,46 +435,46 @@ export default function AdminPatients() {
                   <TableRow key={r.key}>
                     <TableCell className={`${WRAP_CELL} ${PIN_COL}`}>
                       {p ? (
-                        <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.id}`)}>{r.name}</button>
+                        <button className="font-medium text-primary hover:underline print:no-underline print:text-foreground" onClick={() => navigate(`/admin/patients/${p.code ?? p.id}`, { state: { id: p.id } })}>{r.name}</button>
                       ) : (
                         <span className="font-medium">{r.name}</span>
                       )}
                     </TableCell>
-                    <TableCell>{r.age}</TableCell>
-                    <TableCell className={WRAP_CELL}>{r.phone}</TableCell>
+                    <TableCell className={`font-mono text-xs whitespace-nowrap ${CODE_COL}`}>{p?.code ?? "—"}</TableCell>
+                    <TableCell className={NUM_COL}>{r.age}</TableCell>
+                    <TableCell className={`${WRAP_CELL} ${CODE_COL}`}>{r.phone}</TableCell>
                     <TableCell><CollapsedEmail email={r.email} /></TableCell>
-                    <TableCell>
+                    <TableCell className={CODE_COL}>
                       {p ? (
                         <Badge variant={p.status === "active" ? "default" : "secondary"} className={p.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>{p.status}</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">no account</Badge>
                       )}
                     </TableCell>
-                    <TableCell>{r.hasWalkIn ? "Yes" : "No"}</TableCell>
-                    <TableCell className="print:hidden">
-                      {p ? (
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/admin/patients/${p.id}`)}><Eye className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-4 h-4" /></Button>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-primary"
-                          aria-label={`Link ${r.guest ? guestLabel(r.guest) : r.name} to an account`}
-                          title="Link to the account this patient has made"
-                          onClick={() => openLink(r)}
-                        >
-                          <Link2 className="w-4 h-4 mr-1" /> Link
-                        </Button>
-                      )}
+                    <TableCell className={CODE_COL}>{r.hasWalkIn ? "Yes" : "No"}</TableCell>
+                    <TableCell className={`print:hidden ${CODE_COL}`}>
+                      <RowActions>
+                        {p ? (
+                          <>
+                            <IconAction label="View" icon={Eye} onClick={() => navigate(`/admin/patients/${p.code ?? p.id}`, { state: { id: p.id } })} />
+                            <IconAction label="Edit" icon={Edit} onClick={() => openEdit(p)} />
+                          </>
+                        ) : (
+                          <IconAction
+                            label="Link to the account this patient has made"
+                            ariaLabel={`Link ${r.guest ? guestLabel(r.guest) : r.name} to an account`}
+                            icon={Link2}
+                            className="text-primary"
+                            onClick={() => openLink(r)}
+                          />
+                        )}
+                      </RowActions>
                     </TableCell>
                   </TableRow>
                 );
               })}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No patients found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -489,7 +495,7 @@ export default function AdminPatients() {
           <div className="space-y-4">
             <div>
               <Label>Full Name <span className="text-destructive">*</span></Label>
-              <Input placeholder="Patient name" value={editForm.name} onChange={e => handleEditFormChange("name", e.target.value)} />
+              <Input placeholder="Patient name" autoCapitalize="words" value={editForm.name} onChange={e => handleEditFormChange("name", formatName(e.target.value))} onBlur={() => handleEditFormChange("name", cleanName(editForm.name))} />
               {editErrors.name && <p className="text-xs text-destructive mt-1">{editErrors.name}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -500,7 +506,7 @@ export default function AdminPatients() {
               </div>
               <div>
                 <Label>Phone <span className="text-destructive">*</span></Label>
-                <Input placeholder="Phone number" value={editForm.phone} onChange={e => handleEditFormChange("phone", e.target.value)} />
+                <MobileInput value={editForm.phone} onValueChange={v => handleEditFormChange("phone", v)} />
                 {editErrors.phone && <p className="text-xs text-destructive mt-1">{editErrors.phone}</p>}
               </div>
             </div>

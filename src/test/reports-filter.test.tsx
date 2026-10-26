@@ -73,17 +73,23 @@ function apt(over: Partial<Appointment>): Appointment {
 beforeEach(() => {
   printed.calls = [];
   h.appts = [
-    apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", patientName: "Allen Estrella", service: "Root Canal" }),
-    apt({ id: "b7d41e55-0000-4000-8000-00000000000b", patientName: "Maria Santos", service: "Oral", dentistName: "Aerhol Gocalin" }),
-    apt({ id: "c2e58a99-0000-4000-8000-00000000000c", patientName: "Pedro Reyes", service: "Oral" }),
+    apt({ id: "3f9c2a10-0000-4000-8000-00000000000a", reference: "APT-260900001", patientName: "Allen Estrella", service: "Root Canal" }),
+    apt({ id: "b7d41e55-0000-4000-8000-00000000000b", reference: "APT-260900002", patientName: "Maria Santos", service: "Oral", dentistName: "Aerhol Gocalin" }),
+    apt({ id: "c2e58a99-0000-4000-8000-00000000000c", reference: "APT-260900003", patientName: "Pedro Reyes", service: "Oral" }),
   ];
 });
 
 const dataRows = () => Array.from(document.querySelectorAll("tbody tr"));
 const names = () => dataRows().map(r => (r as HTMLTableRowElement).cells[1]?.textContent);
 
-const generate = async () => {
+/** Renders the page on its Generate Report tab (it opens on the Overview). */
+const renderBuilder = () => {
   render(<MemoryRouter><AdminReports /></MemoryRouter>);
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /Generate Report/ }));
+};
+
+const generate = async () => {
+  renderBuilder();
   const type = await screen.findByLabelText("Report type");
   fireEvent.change(type, { target: { value: "appointment" } });
   fireEvent.click(screen.getByRole("button", { name: /Generate Report/ }));
@@ -139,7 +145,7 @@ describe("filtering a report that has already been generated", () => {
     fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
 
     expect(printed.calls[0].rows).toHaveLength(3);
-    expect(printed.calls[0].filters.map((f: any) => f.label)).not.toContain("Filtered By");
+    expect(printed.calls[0].filters ?? []).toEqual([]);
   });
 
   it("offers Print on its own — there is no separate PDF button", async () => {
@@ -190,7 +196,7 @@ describe("filtering by one field", () => {
 
     chooseField("0"); // Reference
     await waitFor(() => expect(valuePicker("Reference")).toBeInTheDocument());
-    pick("Reference", "APT-3F9C2A");
+    pick("Reference", "APT-260900001");
     await waitFor(() => expect(names()).toEqual(["Allen Estrella"]));
   });
 
@@ -208,7 +214,7 @@ describe("filtering by one field", () => {
   it("goes back to typing when a column holds too many values to list", async () => {
     h.appts = Array.from({ length: 20 }, (_, i) =>
       apt({ id: `${i}0000000-0000-4000-8000-00000000000${i.toString(16)}`, patientName: `Patient ${i}` }));
-    render(<MemoryRouter><AdminReports /></MemoryRouter>);
+    renderBuilder();
     fireEvent.change(await screen.findByLabelText("Report type"), { target: { value: "appointment" } });
     fireEvent.click(screen.getByRole("button", { name: /Generate Report/ }));
     // Twenty rows, ten to a page — the field picker still sees all twenty values.
@@ -347,5 +353,23 @@ describe("sorting a report by clicking a column heading", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Print Report/ }));
     expect(printed.calls[0].rows.map((r: string[]) => r[1])).toEqual(["Newest", "Middle", "Oldest"]);
+  });
+});
+
+describe("the admin's overview", () => {
+  it("opens first, with the period's appointments and walk-ins", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-26T02:00:00Z"));
+    try {
+      h.appts = [apt({}), apt({ id: "w1", type: "walk-in" }), apt({ id: "old", date: "2026-08-02" })];
+      render(<MemoryRouter><AdminReports /></MemoryRouter>);
+      expect(await screen.findByRole("tab", { name: /Overview/, selected: true })).toBeInTheDocument();
+      const stat = (label: string) => screen.getAllByText(label)[0].parentElement!.textContent;
+      await waitFor(() => expect(stat("Walk-ins")).toBe("Walk-ins1September 2026"));
+      expect(stat("Patients")).toBe("Patients0All time");
+      expect(screen.getByText("September 2026 · 2 appointments")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
