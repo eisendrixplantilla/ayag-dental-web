@@ -1,127 +1,91 @@
-import { PIN_COL } from "@/lib/tableClass";
 import { useEffect, useMemo, useState } from "react";
-import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import StatCard from "@/components/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Users,
-  CalendarDays,
-  CalendarPlus,
-  CalendarCheck,
-  CheckCircle2,
-  Clock,
-  UserPlus,
-  Printer,
-  Loader2,
-} from "lucide-react";
-import { getAppointments, byNewestBooked, type Appointment } from "@/lib/api/appointments";
+import { CalendarDays, Clock, ListOrdered, Loader2, Printer, UserPlus, Users } from "lucide-react";
+import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { getPatients } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { manilaTodayDateStr, manilaNowMinutes } from "@/lib/formatDate";
+import { manilaDateOf, manilaNowMinutes, manilaTodayDateStr } from "@/lib/formatDate";
+import { PeriodPicker } from "@/components/ReportOverview";
+import { DashboardCharts } from "@/components/ReportCharts";
+import TodayList from "@/components/TodayList";
+import { STATUSES, STATUS_LABEL, countByStatus, datesInPeriod, inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
 
-const statusColors: Record<string, string> = {
-  completed: "bg-success/10 text-success border-success/20",
-  confirmed: "bg-success/10 text-success border-success/20",
-  pending: "bg-warning/10 text-warning border-warning/20",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/20",
-  rejected: "bg-destructive/10 text-destructive border-destructive/20",
-  rescheduled: "bg-warning/10 text-warning border-warning/20",
-};
-
-const today = manilaTodayDateStr();
-
+/** The front desk's summary: the period's numbers and graphs, and who is still to come today. */
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patientCount, setPatientCount] = useState(0);
+  /** Each patient's registration date, in Manila ("yyyy-MM-dd"). */
+  const [registered, setRegistered] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<Period>(() => ({ kind: "month", month: manilaTodayDateStr().slice(0, 7) }));
 
   useEffect(() => {
     setLoading(true);
     Promise.all([getAppointments(), getPatients()])
       .then(([a, p]) => {
         setAppointments(a);
-        setPatientCount(p.length);
+        setRegistered(p.flatMap((x) => (x.createdAt ? [manilaDateOf(x.createdAt)] : [])));
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const stats = useMemo(() => {
-    const todays = appointments.filter(a => a.date === today);
-    return {
-      today: todays.length,
-      pending: appointments.filter(a => a.status === "pending").length,
-      confirmed: appointments.filter(a => a.status === "confirmed").length,
-      completed: appointments.filter(a => a.status === "completed").length,
-      walkIn: todays.filter(a => a.type === "walk-in").length,
-    };
-  }, [appointments]);
+  const shown = useMemo(() => inPeriod(appointments, period), [appointments, period]);
+  const newPatients = useMemo(() => datesInPeriod(registered, period).length, [registered, period]);
+  const pending = shown.filter((a) => a.status === "pending").length;
+  const walkIns = shown.filter((a) => a.type === "walk-in").length;
+  const label = periodLabel(period);
 
+  // Today's bookings still to come, in time order.
   const upcomingToday = useMemo(() => {
+    const today = manilaTodayDateStr();
     const now = manilaNowMinutes();
     return appointments
-      .filter(a => a.date === today && (a.status === "pending" || a.status === "confirmed"))
-      .sort((a, b) => toMinutes(a.time) - toMinutes(b.time))
-      .map(a => ({ ...a, upcoming: toMinutes(a.time) >= now }));
+      .filter((a) => a.date === today && ["pending", "confirmed", "rescheduled"].includes(a.status) && toMinutes(a.time) >= now)
+      .sort((a, b) => toMinutes(a.time) - toMinutes(b.time));
   }, [appointments]);
 
-  // "Recent" means recently booked, so a booking just taken is the first row.
-  const recent = useMemo(() => [...appointments].sort(byNewestBooked).slice(0, 6), [appointments]);
-
   const print = usePrintDocument();
-  // The dashboard's figures as a document: the counts, then the lists behind them.
-  const handlePrint = () =>
+  // The dashboard's figures, for the period on show, and today's queue, as a document.
+  const handlePrint = () => {
+    const counts = countByStatus(shown);
     print({
       title: "Dashboard Summary",
-      filters: [{ label: "As Of", value: today }],
+      filters: [{ label: "Period", value: label }],
       tables: [
         {
           heading: "Summary",
+          showCount: false,
           columns: ["Statistic", "Count"],
           rows: [
-            ["Today's Appointments", String(stats.today)],
-            ["Pending Appointments", String(stats.pending)],
-            ["Confirmed Appointments", String(stats.confirmed)],
-            ["Completed Appointments", String(stats.completed)],
-            ["Walk-in Appointments Today", String(stats.walkIn)],
-            ["Total Registered Patients", String(patientCount)],
+            ["Appointments", String(shown.length)],
+            ["Pending Requests", String(pending)],
+            ["Walk-ins", String(walkIns)],
+            ["New Patients", String(newPatients)],
+            ["Total Registered Patients", String(registered.length)],
           ],
         },
         {
-          heading: "Upcoming Appointments Today",
-          columns: ["Time", "Patient", "Service", "Dentist", "Status"],
-          rows: upcomingToday.filter(a => a.upcoming).map(a => [
-            toLabel(toMinutes(a.time)),
-            a.patientName,
-            a.service,
-            a.dentistName ?? "Unassigned",
-            a.status,
-          ]),
-          emptyText: "No more appointments scheduled for today.",
+          heading: "Appointments by Status",
+          showCount: false,
+          columns: ["Status", "Appointments"],
+          rows: STATUSES.map((s) => [STATUS_LABEL[s], String(counts[s])]),
         },
         {
-          heading: "Recent Appointments",
-          columns: ["Patient", "Service", "Dentist", "Schedule", "Type", "Status"],
-          rows: recent.map(a => [
-            a.patientName,
-            a.service,
-            a.dentistName ?? "—",
-            `${format(parseISO(a.date), "MMM d, yyyy")} • ${toLabel(toMinutes(a.time))}`,
-            a.type,
-            a.status,
-          ]),
-          emptyText: "No appointments yet.",
+          heading: "Still to Come Today",
+          columns: ["Time", "Patient", "Service", "Dentist", "Status"],
+          rows: upcomingToday.map((a) => [toLabel(toMinutes(a.time)), a.patientName, a.service, a.dentistName ?? "Unassigned", STATUS_LABEL[a.status]]),
+          emptyText: "No more appointments scheduled for today.",
         },
       ],
     });
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, {user?.name}</p>
@@ -131,85 +95,35 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
+      <PeriodPicker period={period} onChange={setPeriod} />
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
-      <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-        <StatCard title="Today's Appointments" value={stats.today} icon={CalendarDays} trend="Scheduled today" delay={0} />
-        <StatCard title="Pending Appointments" value={stats.pending} icon={Clock} trend="Awaiting approval" delay={0.05} />
-        <StatCard title="Confirmed Appointments" value={stats.confirmed} icon={CalendarCheck} trend="Approved" delay={0.1} />
-        <StatCard title="Completed Appointments" value={stats.completed} icon={CheckCircle2} trend="Finished visits" delay={0.15} />
-        <StatCard title="Walk-in Appointments Today" value={stats.walkIn} icon={UserPlus} trend="Today" delay={0.2} />
-        <StatCard title="Total Registered Patients" value={patientCount} icon={Users} trend="All time" delay={0.25} />
-      </div>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <StatCard title="Appointments" value={shown.length} icon={CalendarDays} note={label} delay={0} />
+            <StatCard title="Pending Requests" value={pending} icon={Clock} note="Awaiting approval" delay={0.05} />
+            <StatCard title="Walk-ins" value={walkIns} icon={UserPlus} note={label} delay={0.1} />
+            <StatCard title="New Patients" value={newPatients} icon={Users} note={`${registered.length} in total`} delay={0.15} />
+          </div>
 
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" /> Upcoming Appointments Today
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {upcomingToday.filter(a => a.upcoming).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No more appointments scheduled for today.</p>
-          ) : (
-            <div className="space-y-3">
-              {upcomingToday.filter(a => a.upcoming).map(apt => (
-                <div key={apt.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{apt.patientName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {apt.service} • {toLabel(toMinutes(apt.time))} • {apt.dentistName ?? "Unassigned"}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <DashboardCharts appointments={shown} period={period} />
 
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <CalendarPlus className="w-5 h-5 text-primary" /> Recent Appointments
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                <th className={`py-2 pr-4 font-medium ${PIN_COL}`}>Patient</th>
-                <th className="py-2 pr-4 font-medium">Service</th>
-                <th className="py-2 pr-4 font-medium">Dentist</th>
-                <th className="py-2 pr-4 font-medium text-center">Schedule</th>
-                <th className="py-2 pr-4 font-medium text-center">Type</th>
-                <th className="py-2 font-medium text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.length === 0 && (
-                <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No appointments yet</td></tr>
-              )}
-              {recent.map(apt => (
-                <tr key={apt.id} className="border-b border-border/50 last:border-0">
-                  <td className={`py-3 pr-4 font-medium text-foreground ${PIN_COL}`}>{apt.patientName}</td>
-                  <td className="py-3 pr-4 text-muted-foreground">{apt.service}</td>
-                  <td className="py-3 pr-4 text-muted-foreground">{apt.dentistName ?? "—"}</td>
-                  <td className="py-3 pr-4 text-muted-foreground text-center">{format(parseISO(apt.date), "MMM d, yyyy")} • {toLabel(toMinutes(apt.time))}</td>
-                  <td className="py-3 pr-4 text-muted-foreground capitalize text-center">{apt.type}</td>
-                  <td className="py-3 text-center">
-                    <Badge variant="outline" className={statusColors[apt.status]}>{apt.status}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-      </>
+          <TodayList
+            title="Still to Come Today"
+            icon={ListOrdered}
+            emptyText="No more appointments scheduled for today."
+            link={{ to: "/admin/queue", label: "Open queue" }}
+            items={upcomingToday.map((a) => ({
+              id: a.id,
+              when: toLabel(toMinutes(a.time)),
+              title: a.patientName,
+              detail: `${a.service} · ${a.dentistName ?? "Unassigned"}`,
+              status: a.status,
+            }))}
+          />
+        </>
       )}
     </div>
   );

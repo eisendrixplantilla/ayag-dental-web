@@ -14,6 +14,11 @@ export function formatManilaTime(d: Date | string = new Date()): string {
   return new Date(d).toLocaleTimeString("en-US", { timeZone: MANILA_TZ });
 }
 
+/** The Manila date of a moment (a stored timestamp) as "YYYY-MM-DD". */
+export function manilaDateOf(d: Date | string): string {
+  return new Date(d).toLocaleDateString("en-CA", { timeZone: MANILA_TZ });
+}
+
 /** Today's date in Manila as "YYYY-MM-DD" — for <input type="date"> min/max, date-string
  * comparisons, and any "today" constant that must ignore the viewing device's own timezone. */
 export function manilaTodayDateStr(): string {

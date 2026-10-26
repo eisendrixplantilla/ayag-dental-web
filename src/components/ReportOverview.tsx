@@ -81,7 +81,7 @@ export default function ReportOverview({ appointments, period, onPeriodChange, s
 }
 
 /** Month, a range of dates, or all time: what the strip and the graphs count over. */
-function PeriodPicker({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
+export function PeriodPicker({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
   const thisMonth = manilaTodayDateStr().slice(0, 7);
   const bounds = periodBounds(period);
   const kinds: { kind: Period["kind"]; label: string }[] = [

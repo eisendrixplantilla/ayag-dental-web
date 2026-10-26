@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { type BarChart3, Stethoscope, UserRound } from "lucide-react";
+import { BarChart3, type LucideIcon, PieChart as PieIcon, Stethoscope, UserRound } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig,
@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Appointment } from "@/lib/api/appointments";
 import {
-  STATUSES, STATUS_LABEL, byDentist, byService, countByStatus, overTime, type Period,
+  STATUSES, STATUS_LABEL, byDentist, byService, countByStatus, overTime, periodLabel, type Period,
 } from "@/lib/reportPeriod";
 
 /** One colour per status, the same in every chart (and close to the badges'). */
@@ -22,11 +22,19 @@ const STATUS_CHART: ChartConfig = {
 };
 const COUNT_CHART: ChartConfig = { count: { label: "Appointments", color: "hsl(174 72% 33%)" } };
 
-function ChartCard({ title, icon: Icon, children }: { title: string; icon: typeof BarChart3; children: React.ReactNode }) {
+export function ChartCard({ title, icon: Icon, note, className, children }: {
+  title: string;
+  icon: LucideIcon;
+  /** A line under the title: what the chart counts over. */
+  note?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <Card className="shadow-card print:hidden min-w-0">
+    <Card className={cn("shadow-card print:hidden min-w-0", className)}>
       <CardHeader className="pb-2">
         <CardTitle className="font-heading text-base flex items-center gap-2"><Icon className="w-4 h-4 text-primary" /> {title}</CardTitle>
+        {note && <p className="text-sm text-muted-foreground">{note}</p>}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -116,6 +124,21 @@ export function OverTimeChart({ appointments, period }: { appointments: Appointm
         ))}
       </BarChart>
     </ChartContainer>
+  );
+}
+
+/** A dashboard's two graphs of the period's appointments: over time, and by status. */
+export function DashboardCharts({ appointments, period }: { appointments: Appointment[]; period: Period }) {
+  const total = appointments.length;
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+      <ChartCard title="Appointments Over Time" icon={BarChart3} note={periodLabel(period)} className="xl:col-span-3">
+        <OverTimeChart appointments={appointments} period={period} />
+      </ChartCard>
+      <ChartCard title="By Status" icon={PieIcon} note={`${total} appointment${total === 1 ? "" : "s"}`} className="xl:col-span-2">
+        <div className="flex items-center justify-center py-2"><StatusDonut appointments={appointments} /></div>
+      </ChartCard>
+    </div>
   );
 }
 

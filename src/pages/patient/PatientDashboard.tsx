@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import StatCard from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import TodayList from "@/components/TodayList";
 import { CalendarDays, History, Bell, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
@@ -25,7 +25,7 @@ export default function PatientDashboard() {
 
   const { upcoming, nextConfirmed, totalVisits, reminders } = useMemo(() => {
     const upcoming = appointments
-      .filter(a => (a.status === "pending" || a.status === "confirmed") && a.date >= today)
+      .filter(a => (a.status === "pending" || a.status === "confirmed" || a.status === "rescheduled") && a.date >= today)
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
     const nextConfirmed = upcoming.find((a) => a.status === "confirmed") ?? null;
@@ -63,67 +63,48 @@ export default function PatientDashboard() {
       ) : (
       <>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-        <StatCard title="Upcoming Appointments" value={upcoming.length} icon={CalendarDays} delay={0} />
-        <StatCard title="Total Visits" value={totalVisits} icon={History} delay={0.1} />
+        <StatCard title="Upcoming Appointments" value={upcoming.length} icon={CalendarDays} note="Pending or confirmed" delay={0} />
+        <StatCard title="Total Visits" value={totalVisits} icon={History} note="Completed visits" delay={0.1} />
         <StatCard
           title="Next Appointment"
           value={nextConfirmed ? format(parseISO(nextConfirmed.date), "MMM d") : "None"}
           icon={CalendarDays}
-          trend={nextConfirmed ? nextConfirmed.service : "No confirmed appointment"}
+          note={nextConfirmed ? `${nextConfirmed.service} · ${toLabel(toMinutes(nextConfirmed.time))}` : "No confirmed appointment"}
           delay={0.2}
           className="col-span-2 sm:col-span-1"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg">Upcoming Appointments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {upcoming.length === 0 && (
-                <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
-              )}
-              {upcoming.map((apt) => (
-                <div key={apt.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="font-medium text-foreground">{apt.service}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(parseISO(apt.date), "MMM d, yyyy")} at {formatTimeRange(apt.time, apt.endTime)}
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      apt.status === "confirmed"
-                        ? "bg-success/10 text-success border-success/20"
-                        : "bg-warning/10 text-warning border-warning/20"
-                    }
-                  >
-                    {apt.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TodayList
+          title="Next Visits"
+          icon={CalendarDays}
+          emptyText="No upcoming appointments."
+          link={{ to: "/patient/appointments", label: "My appointments" }}
+          items={upcoming.map((a) => ({
+            id: a.id,
+            when: format(parseISO(a.date), "MMM d"),
+            title: a.service,
+            detail: formatTimeRange(a.time, a.endTime),
+            status: a.status,
+          }))}
+        />
 
         <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <Bell className="w-5 h-5 text-primary" /> Reminders
+          <CardHeader className="pb-2">
+            <CardTitle className="font-heading text-base flex items-center gap-2">
+              <Bell className="w-4 h-4 text-primary" /> Reminders
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <ul className="space-y-2.5">
               {reminders.map((r, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
+                <li key={i} className="flex items-start gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
                   <p className="text-sm text-foreground">{r}</p>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </CardContent>
         </Card>
       </div>

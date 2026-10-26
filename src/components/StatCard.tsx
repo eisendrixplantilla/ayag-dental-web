@@ -9,12 +9,14 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: string;
   trendUp?: boolean;
+  /** A plain line under the value (what it counts over), in muted ink, in place of a trend. */
+  note?: string;
   delay?: number;
   /** e.g. a column span in the grid it sits in. */
   className?: string;
 }
 
-export default function StatCard({ title, value, icon: Icon, trend, trendUp, delay = 0, className }: StatCardProps) {
+export default function StatCard({ title, value, icon: Icon, trend, trendUp, note, delay = 0, className }: StatCardProps) {
   return (
     <motion.div className={className} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay }}>
       {/* Two to a row on a phone, so the card tightens up there: less padding, smaller
@@ -25,6 +27,7 @@ export default function StatCard({ title, value, icon: Icon, trend, trendUp, del
             <div className="min-w-0">
               <p className="text-xs sm:text-sm text-muted-foreground">{title}</p>
               <p className="text-xl sm:text-2xl font-bold font-heading mt-1 text-foreground">{value}</p>
+              {note && <p className="text-xs mt-1 text-muted-foreground">{note}</p>}
               {trend && (
                 <p className={`text-xs mt-1 font-medium ${trendUp ? "text-success" : "text-destructive"}`}>
                   {trend}
