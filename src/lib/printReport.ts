@@ -74,6 +74,8 @@ export interface ReportDoc {
   generatedAt: string;
   rowsPerPage?: number;
   clinic?: ClinicLetterhead | null;
+  /** false: no "Total records" in the footer, where the rows are figures, not records. */
+  showTotal?: boolean;
 }
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -371,7 +373,7 @@ export function buildReportHtml(doc: ReportDoc, origin = "", layout?: TableChunk
     const first = chunks[0];
     const shown = plain
       ? (first?.rows.length ? `Records ${first.start + 1}–${first.start + first.rows.length} of ${total}` : "No records")
-      : `Total records: ${total}`;
+      : doc.showTotal === false ? "" : `Total records: ${total}`;
 
     return `<section class="sheet">
       ${header}

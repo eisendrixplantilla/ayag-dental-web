@@ -47,6 +47,7 @@ export default function SuperAdminDashboard() {
     const counts = countByStatus(shown);
     print({
       title: "System Overview",
+      showTotal: false,
       filters: [{ label: "Period", value: label }],
       tables: [
         {

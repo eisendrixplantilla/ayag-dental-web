@@ -373,3 +373,23 @@ describe("the admin's overview", () => {
     }
   });
 });
+
+describe("printing the overview", () => {
+  it("prints the period's numbers as tables, one for each graph", async () => {
+    render(<MemoryRouter><AdminReports /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("radio", { name: "All time" }));
+    fireEvent.click(screen.getByRole("button", { name: /Print Overview/ }));
+    const doc = printed.calls.at(-1);
+    expect(doc.title).toBe("Reports Overview");
+    expect(doc.showTotal).toBe(false);
+    expect(doc.filters).toEqual([{ label: "Period", value: "All time" }]);
+    expect(doc.tables.map((t: any) => t.heading)).toEqual(
+      ["Summary", "Appointments by Status", "Appointments Over Time", "By Dentist", "Top Services"]);
+    const byStatus = doc.tables[1].rows;
+    expect(byStatus.find((r: string[]) => r[0] === "Confirmed")).toEqual(["Confirmed", "3", "100%"]);
+    expect(byStatus.at(-1)).toEqual(["Total", "3", "100%"]);
+    // Only the days that had appointments.
+    expect(doc.tables[2].rows).toEqual([["Sep 25", "0", "3", "0", "0", "0", "0", "3"]]);
+    expect(doc.tables[3].rows).toEqual([["Dr. Mike Johnson", "2"], ["Aerhol Gocalin", "1"]]);
+  });
+});

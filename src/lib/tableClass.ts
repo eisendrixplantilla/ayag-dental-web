@@ -57,7 +57,7 @@ export const CODE_COL = "!text-center [&>*]:mx-auto [&>.flex]:justify-center";
  * listed as data (the generated reports, the printed documents). */
 export function columnKind(column: string): "text" | "number" | "code" {
   // "Visit Count", not "Account": a count is its own word.
-  if (/^(Age|Quantity|Qty|Min Stock|Stock|Price|Amount|Subtotal|Total.*|(.+ )?Count|Patients|Appointments)$/i.test(column)) return "number";
+  if (/^(Age|Quantity|Qty|Min Stock|Stock|Price|Amount|Subtotal|Total.*|(.+ )?Count|Patients|Appointments|Share|Pending|Confirmed|Rescheduled|Completed|Cancelled|Rejected)$/i.test(column)) return "number";
   if (/(\bID\b|Reference|Date|Dates|Time|Booked On|Requested|Registered|Status|Type|Walk-in|Account|^Day$|Phone|Contact Number|Tooth No|Hours|Lunch Break|Latest Consultation|Leave For|Role|Slot)/i.test(column)) return "code";
   // A day of a week laid out across the page ("Mon Oct 26").
   if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/.test(column)) return "code";

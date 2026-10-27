@@ -1,10 +1,14 @@
-import { CalendarDays, PieChart, type LucideIcon } from "lucide-react";
+import { CalendarDays, PieChart, Printer, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { Appointment } from "@/lib/api/appointments";
 import { manilaTodayDateStr } from "@/lib/formatDate";
-import { inPeriod, periodBounds, periodLabel, type Period } from "@/lib/reportPeriod";
+import {
+  STATUSES, STATUS_LABEL, byDentist, byService, countByStatus, inPeriod, overTime, periodBounds, periodLabel, type Period,
+} from "@/lib/reportPeriod";
+import { usePrintDocument } from "@/hooks/usePrintDocument";
 import ReportCharts, { OverTimeChart, StatusDonut } from "@/components/ReportCharts";
 import { DatePicker, MonthPicker } from "@/components/DatePicker";
 import Segmented from "@/components/Segmented";
@@ -38,10 +42,63 @@ export default function ReportOverview({ appointments, period, onPeriodChange, s
     ...stats.slice(1),
   ];
 
+  const print = usePrintDocument();
+  // The overview on paper: the strip, then each graph as the table of its numbers.
+  const handlePrint = () => {
+    const counts = countByStatus(shown);
+    const share = (n: number) => `${total ? Math.round((n / total) * 100) : 0}%`;
+    print({
+      title: "Reports Overview",
+      showTotal: false,
+      filters: [{ label: "Period", value: periodLabel(period) }],
+      tables: [
+        {
+          heading: "Summary",
+          showCount: false,
+          columns: ["Statistic", "Count", "Covers"],
+          rows: strip.map((s) => [s.label, String(s.value), s.note]),
+        },
+        {
+          heading: "Appointments by Status",
+          showCount: false,
+          columns: ["Status", "Appointments", "Share"],
+          rows: [...STATUSES.map((s) => [STATUS_LABEL[s], String(counts[s]), share(counts[s])]), ["Total", String(total), share(total)]],
+        },
+        {
+          // Only the days (or months) with appointments: a month is mostly empty days.
+          heading: "Appointments Over Time",
+          columns: ["Date", ...STATUSES.map((s) => STATUS_LABEL[s]), "Total"],
+          rows: overTime(shown, period)
+            .map((b) => ({ b, sum: STATUSES.reduce((n, s) => n + b[s], 0) }))
+            .filter(({ sum }) => sum > 0)
+            .map(({ b, sum }) => [b.label, ...STATUSES.map((s) => String(b[s])), String(sum)]),
+          emptyText: "No appointments in this period.",
+        },
+        {
+          heading: "By Dentist",
+          columns: ["Dentist", "Appointments"],
+          rows: byDentist(shown).map((d) => [d.name, String(d.count)]),
+          emptyText: "No appointments in this period.",
+        },
+        {
+          heading: "Top Services",
+          columns: ["Service", "Count"],
+          rows: byService(shown).map((d) => [d.name, String(d.count)]),
+          emptyText: "No appointments in this period.",
+        },
+      ],
+    });
+  };
+
   return (
     <>
       {/* The period only steers the overview; a generated report has its own filters. */}
-      <PeriodPicker period={period} onChange={onPeriodChange} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PeriodPicker period={period} onChange={onPeriodChange} />
+        <Button variant="outline" onClick={handlePrint}>
+          <Printer className="w-4 h-4 mr-2" /> Print Overview
+        </Button>
+      </div>
       <Card className="shadow-card">
         <CardContent className={cn("grid divide-x p-0", strip.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4")}>
           {strip.map((s) => (
