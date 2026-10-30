@@ -29,12 +29,9 @@ export function fillConsent(
   template: string,
   v: { patient: string; procedure: string; dentist: string; date: string; clinic: string },
 ): string {
-  return template
-    .replace(/\{patient\}/g, v.patient)
-    .replace(/\{procedure\}/g, v.procedure)
-    .replace(/\{dentist\}/g, v.dentist)
-    .replace(/\{date\}/g, v.date)
-    .replace(/\{clinic\}/g, v.clinic);
+  // One pass, and each value put in as it is: a name with "$&" in it, or one that reads
+  // "{date}", stays as written instead of being taken for a pattern.
+  return template.replace(/\{(patient|procedure|dentist|date|clinic)\}/g, (_, field: keyof typeof v) => v[field]);
 }
 
 /** The longest wording the superadmin may save. */

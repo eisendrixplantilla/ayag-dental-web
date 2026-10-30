@@ -121,6 +121,13 @@ describe("the patient's consent", () => {
     expect((await call("GET", { consent: "apt-1" })).code).toBe(403);
   });
 
+  it("puts names in as written, even ones that look like patterns", async () => {
+    h.appt!.patient_name = "Ana $& Cruz {date}";
+    h.wording = "I, {patient}, on {date}.";
+    const res = await call("GET", { consent: "apt-1" });
+    expect(res.body.form.text).toBe("I, Ana $& Cruz {date}, on October 30, 2026.");
+  });
+
   it("lists which visits have one, for the dentist's menu", async () => {
     await sign();
     const res = await call("GET", { consents: "true" });

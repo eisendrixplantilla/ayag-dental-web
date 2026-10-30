@@ -52,13 +52,48 @@ export function SignaturePad({ onChange, disabled }: { onChange: (png: string | 
   };
   useEffect(reset, []);
 
+  // Turning a tablet or phone resizes the box, and a canvas keeps its old size inside it:
+  // strokes would land away from the finger. So it's resized with the box, and what's
+  // already signed is drawn back in, scaled to fit.
+  const emptyRef = useRef(true);
+  emptyRef.current = empty;
+  const changed = useRef(onChange);
+  changed.current = onChange;
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c || typeof ResizeObserver === "undefined") return;
+    let width = c.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (!c.clientWidth || c.clientWidth === width) return;
+      const before = { w: width, h: c.clientHeight };
+      width = c.clientWidth;
+      const signed = emptyRef.current ? null : c.toDataURL("image/png");
+      reset();
+      if (!signed) return;
+      const img = new Image();
+      img.onload = () => {
+        const ctx = c.getContext("2d");
+        if (!ctx) return;
+        const k = Math.min(c.clientWidth / before.w, c.clientHeight / before.h);
+        const w = before.w * k;
+        const h = before.h * k;
+        ctx.drawImage(img, (c.clientWidth - w) / 2, (c.clientHeight - h) / 2, w, h);
+        changed.current(c.toDataURL("image/png"));
+      };
+      img.src = signed;
+    });
+    observer.observe(c);
+    return () => observer.disconnect();
+  }, []);
+
   const at = (e: PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
   const down = (e: PointerEvent<HTMLCanvasElement>) => {
     if (disabled) return;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    // Keeps the stroke when the finger strays off the pad; signing still works without it.
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* not a live pointer */ }
     drawing.current = true;
     const ctx = e.currentTarget.getContext("2d");
     const p = at(e);
