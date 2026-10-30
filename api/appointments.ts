@@ -8,6 +8,7 @@ import { manilaDateStr, manilaNowMinutes } from "./_lib/date.js";
 import { MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink } from "./_lib/guestMatch.js";
 import { notOffered, outsideServiceHours, overLimit, servicesOf } from "./_lib/bookingLimits.js";
 import { assignCodes, ensureCodes } from "./_lib/codes.js";
+import { consentHandler } from "./_lib/consent.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
@@ -69,6 +70,43 @@ async function slotTaken(opts: {
     return want.from < held.to && want.to > held.from;
   });
 }
+
+/**
+ * Does this patient already have a live booking that day for one of the same services?
+ * A patient is matched by account, or, for a guest walk-in without one, by the same name
+ * and contact number (as digits); a guest with no number can't be told apart, so isn't
+ * checked. Returns the message to answer with, or null when there's no clash.
+ */
+async function sameServiceSameDay(opts: {
+  patientId: string | null; patientName: string | null; contact: string | null;
+  date: string; service: string; excludeId?: string | null;
+}): Promise<string | null> {
+  const digits = String(opts.contact ?? "").replace(/\D/g, "");
+  if (!opts.patientId && !digits) return null;
+  const rows = await sql`
+    SELECT service, time /* patient-same-day */ FROM appointments
+    WHERE date = ${opts.date}
+      AND status = ANY(${HOLDING}::text[])
+      AND (patient_id = ${opts.patientId}
+        OR (${opts.patientId}::uuid IS NULL AND patient_id IS NULL AND patient_name = ${opts.patientName}
+          AND regexp_replace(coalesce(contact, ''), '[^0-9]', '', 'g') = ${digits}))
+      AND (${opts.excludeId ?? null}::uuid IS NULL OR id <> ${opts.excludeId ?? null}::uuid)`;
+  const wanted = new Set(servicesOf(opts.service));
+  for (const r of rows as { service: string; time: string }[]) {
+    const same = servicesOf(r.service).find((s) => wanted.has(s));
+    if (same) {
+      return `${displayService(same)} is already booked for this patient on this day, at ${toLabel(r.time)}. `
+        + "A service can be booked once a day: choose another day or another service.";
+    }
+  }
+  return null;
+}
+
+/** "13:00" → "1:00 PM". */
+const toLabel = (t: string) => {
+  const m = toMinutes(t);
+  return `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, "0")} ${m < 720 ? "AM" : "PM"}`;
+};
 
 /**
  * Guest walk-ins save age and gender, which databases migrated before those columns
@@ -143,6 +181,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await expireOverduePending().catch((err) => console.error("Expiring overdue requests failed:", err));
 
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
+
+  // The patient's consent to the procedure (see _lib/consent).
+  if (req.query.consent || req.query.consents) return consentHandler(req, res, session);
 
   if (req.method === "GET") {
     // Bookings from before references get theirs before any is shown.
@@ -260,6 +301,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null, service,
     });
     if (offHours) return res.status(409).json({ error: offHours });
+    // The same patient can't take the same service twice in one day.
+    const twice = await sameServiceSameDay({ patientId, patientName, contact: contact ?? null, date, service });
+    if (twice) return res.status(409).json({ error: twice });
     await ensureGuestColumns();
     await ensureCodes("appointments");
     const inserted = await sql`
@@ -432,6 +476,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           service: existing.service, excludeId: id,
         });
         if (full) return res.status(409).json({ error: full });
+      }
+      // The same patient can't take the same service twice in one day.
+      if (next.date !== isoDate(existing.date)) {
+        const twice = await sameServiceSameDay({
+          patientId: existing.patient_id, patientName: existing.patient_name, contact: existing.contact,
+          date: next.date, service: existing.service, excludeId: id,
+        });
+        if (twice) return res.status(409).json({ error: twice });
       }
       if (moving) {
         const offHours = await outsideServiceHours({

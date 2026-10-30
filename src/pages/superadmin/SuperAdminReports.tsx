@@ -56,7 +56,7 @@ const reportMeta: Record<ReportType, { title: string; columns: string[]; pin: nu
   },
   patient: {
     title: "Patient Summary Report",
-    columns: ["Patient Name", "Patient ID", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"],
+    columns: ["Patient Name", "Patient ID", "Contact Number", "Email Address", "Account", "Total Appointments", "Recent Consultation"],
     pin: 0,
   },
   accounts: {

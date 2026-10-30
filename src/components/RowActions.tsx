@@ -19,6 +19,10 @@ export interface RowAction {
   onClick: () => void;
   /** Red, for actions that cancel, remove or delete. */
   danger?: boolean;
+  /** Shown but locked; `note` says why. */
+  disabled?: boolean;
+  /** A short line under the label, e.g. what it's waiting for. */
+  note?: string;
 }
 
 /** A row's actions, side by side in the middle of the cell. */
@@ -71,9 +75,16 @@ export function MoreActions({ actions, label = "More options" }: { actions: RowA
           <DropdownMenuItem
             key={a.label}
             onClick={a.onClick}
-            className={a.danger ? "text-destructive focus:text-destructive" : undefined}
+            disabled={a.disabled}
+            className={cn(a.danger && "text-destructive focus:text-destructive", a.note && "items-start")}
           >
-            <a.icon className="w-4 h-4 mr-2" /> {a.label}
+            <a.icon className={cn("w-4 h-4 mr-2", a.note && "mt-0.5")} />
+            {a.note ? (
+              <span className="flex flex-col">
+                <span>{a.label}</span>
+                <span className="text-[11px] text-muted-foreground">{a.note}</span>
+              </span>
+            ) : a.label}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

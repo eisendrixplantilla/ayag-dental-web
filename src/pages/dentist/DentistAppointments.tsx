@@ -18,15 +18,15 @@ import {
 } from "@/components/ui/table";
 import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, Loader2, Printer, Clock3, CalendarCheck } from "lucide-react";
-import { createDentalRecord } from "@/lib/api/dentalRecords";
+import { Eye, Stethoscope, CalendarClock, XCircle, Loader2, Printer, Clock3, CalendarCheck, FileSignature } from "lucide-react";
+import { createDentalRecord, type TreatmentInput } from "@/lib/api/dentalRecords";
 import { formatTimeRange, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, forServices, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
 import BookingCalendar from "@/components/BookingCalendar";
 import { SERVICE_SEPARATOR } from "@/lib/services";
 import { cn } from "@/lib/utils";
-import { formatManilaDate } from "@/lib/formatDate";
+import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { useNotificationJump, HIGHLIGHT_ROW_CLASS } from "@/hooks/useNotificationJump";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
@@ -39,9 +39,13 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter
 const COLUMNS = ["Patient Name", "Service", "Appointment Date", "Appointment Time", "Status"];
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ToothChart from "@/components/ToothChart";
+import { teethAfter } from "@/lib/teeth";
+import type { ToothCodes, ToothNotes } from "@/lib/toothCodes";
 import Hint from "@/components/Hint";
 import { IconAction, MoreActions, RowActions } from "@/components/RowActions";
 import { DatePicker } from "@/components/DatePicker";
+import { ConsentDialog, ConsentSection } from "@/components/Consent";
+import { getConsents, type ConsentSummary } from "@/lib/api/consent";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -53,7 +57,9 @@ const statusColors: Record<string, string> = {
 };
 
 const emptyRecord = {
-  procedure: "", diagnosis: "", toothNumber: "", treatmentNotes: "", prescription: "", nextVisit: "",
+  // The first is the procedure typed in; the chart adds others as teeth are given them.
+  treatments: [{ serviceName: "" }] as TreatmentInput[],
+  diagnosis: "", toothNumber: "", toothCodes: {} as ToothCodes, toothNotes: {} as ToothNotes, treatmentNotes: "", prescription: "", nextVisit: "",
 };
 
 export default function DentistAppointments() {
@@ -70,7 +76,11 @@ export default function DentistAppointments() {
       .then(setAppointments)
       .catch(() => { if (!silent) toast({ title: "Failed to load appointments", variant: "destructive" }); })
       .finally(() => { if (!silent) setLoading(false); });
+    // Which visits the patient has signed the consent for: the consultation waits for it.
+    getConsents().then(setConsents).catch(() => {});
   };
+  const [consents, setConsents] = useState<Map<string, ConsentSummary>>(new Map());
+  const [consentApt, setConsentApt] = useState<Appointment | null>(null);
 
   useEffect(() => load(), []);
   // Pick up changes made by other people without needing a manual page refresh.
@@ -186,12 +196,16 @@ export default function DentistAppointments() {
     setCxReason(""); setCxRemarks(""); setCancelApt(apt);
   };
   const openConsult = (apt: Appointment) => {
+    if (consents.get(apt.id)?.status !== "signed") {
+      toast({ title: "Consent needed", description: "The patient has to sign the consent before the consultation.", variant: "destructive" });
+      return;
+    }
     setRecordForm(emptyRecord); setConsult(apt);
   };
 
   const submitConsult = async () => {
     if (!consult) return;
-    if (!recordForm.procedure.trim() || !recordForm.diagnosis.trim()) {
+    if (!recordForm.treatments[0]?.serviceName?.trim() || !recordForm.diagnosis.trim()) {
       toast({ title: "Missing information", description: "Procedure and diagnosis are required.", variant: "destructive" });
       return;
     }
@@ -203,7 +217,10 @@ export default function DentistAppointments() {
         date: consult.date,
         diagnosis: recordForm.diagnosis,
         toothNumber: recordForm.toothNumber || undefined,
-        treatments: [{ serviceName: recordForm.procedure }],
+        toothCodes: recordForm.toothCodes,
+        toothNotes: recordForm.toothNotes,
+        // The procedure typed in, and the ones the chart put on teeth.
+        treatments: recordForm.treatments.filter((t, i) => t.serviceName?.trim() && (i === 0 || t.teeth)),
         treatmentNotes: recordForm.treatmentNotes || undefined,
         prescriptions: recordForm.prescription.trim() ? [{ medicine: recordForm.prescription.trim() }] : undefined,
         nextVisit: recordForm.nextVisit || undefined,
@@ -347,7 +364,16 @@ export default function DentistAppointments() {
                         </Hint>
                       ) : (
                         <MoreActions actions={actionable(apt.status) ? [
-                          { label: "Start Consultation", icon: Stethoscope, onClick: () => openConsult(apt) },
+                          // The patient signs first; the consultation stays locked until they have.
+                          {
+                            label: "Patient Consent", icon: FileSignature, onClick: () => setConsentApt(apt),
+                            note: { signed: "Signed", declined: "Patient declined" }[consents.get(apt.id)?.status ?? ""] ?? "Not signed yet",
+                          },
+                          {
+                            label: "Start Consultation", icon: Stethoscope, onClick: () => openConsult(apt),
+                            disabled: consents.get(apt.id)?.status !== "signed",
+                            note: consents.get(apt.id)?.status === "signed" ? undefined : "Needs the signed consent first",
+                          },
                           { label: "Reschedule", icon: CalendarClock, onClick: () => openResched(apt) },
                           { label: "Cancel", icon: XCircle, onClick: () => openCancel(apt), danger: true },
                         ] : []} />
@@ -387,10 +413,22 @@ export default function DentistAppointments() {
               <Field label="Current Status" value={details.status} />
               {details.reason && <div className="col-span-2"><Field label="Reason" value={details.reason} /></div>}
               {details.remarks && <div className="col-span-2"><Field label="Remarks" value={details.remarks} /></div>}
+              {["confirmed", "rescheduled", "completed"].includes(details.status) && (
+                <ConsentSection appointmentId={details.id} className="col-span-2" />
+              )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <ConsentDialog
+        appointment={consentApt}
+        onClose={() => setConsentApt(null)}
+        onSaved={(c) => {
+          setConsents(prev => new Map(prev).set(c.appointmentId, { appointmentId: c.appointmentId, status: c.status, signedAt: c.signedAt }));
+          setConsentApt(null);
+        }}
+      />
 
       {/* Consultation / dental record form */}
       <Dialog open={!!consult} onOpenChange={(o) => !o && setConsult(null)}>
@@ -404,7 +442,13 @@ export default function DentistAppointments() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Procedure Performed *</Label>
-              <Input value={recordForm.procedure} onChange={e => setRecordForm({ ...recordForm, procedure: e.target.value })} />
+              <Input
+                value={recordForm.treatments[0]?.serviceName ?? ""}
+                onChange={e => {
+                  const next = recordForm.treatments.map((t, i) => (i === 0 ? { ...t, serviceName: e.target.value } : t));
+                  setRecordForm({ ...recordForm, treatments: next, toothNumber: teethAfter(recordForm.toothNumber, recordForm.treatments, next) });
+                }}
+              />
             </div>
             <div className="space-y-2">
               <Label>Diagnosis *</Label>
@@ -413,8 +457,17 @@ export default function DentistAppointments() {
             <div className="space-y-2">
               <Label>Dental Chart (if applicable)</Label>
               <ToothChart
+                procedures={recordForm.treatments}
+                codes={recordForm.toothCodes}
+                notes={recordForm.toothNotes}
                 value={recordForm.toothNumber}
-                onChange={(toothNumber) => setRecordForm({ ...recordForm, toothNumber })}
+                onChange={(next) => setRecordForm({
+                  ...recordForm,
+                  treatments: next.procedures.map(p => ({ serviceName: p.serviceName ?? "", teeth: p.teeth ?? undefined })),
+                  toothNumber: next.value,
+                  toothCodes: next.codes,
+                  toothNotes: next.notes,
+                })}
                 patientId={consult?.patientId}
               />
             </div>
@@ -428,7 +481,7 @@ export default function DentistAppointments() {
             </div>
             <div className="space-y-2">
               <Label>Next Visit (optional)</Label>
-              <DatePicker aria-label="Next visit" value={recordForm.nextVisit} onChange={(v) => setRecordForm({ ...recordForm, nextVisit: v })} />
+              <DatePicker aria-label="Next visit" value={recordForm.nextVisit} min={manilaTodayDateStr()} onChange={(v) => setRecordForm({ ...recordForm, nextVisit: v })} />
             </div>
           </div>
           <DialogFooter>

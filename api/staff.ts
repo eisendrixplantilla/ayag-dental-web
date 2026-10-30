@@ -7,6 +7,7 @@ import { manilaDateStr } from "./_lib/date.js";
 import { ensureBookingTables, hoursFor, limitsFor, mapServiceHours } from "./_lib/bookingLimits.js";
 import { displayService } from "./_lib/services.js";
 import { assignCodes, ensureCodes } from "./_lib/codes.js";
+import { CONSENT_FIELDS, DEFAULT_CONSENT, MAX_CONSENT_TEXT, consentTemplate, ensureConsentTables } from "./_lib/consent.js";
 import {
   MAX_LEAVE_DAYS, TIME, approveLeave, changeOf, datesBetween, ensureLeaveTable, ensureUnavailableTimes, leaveDates, mapLeave, nameOf,
   removeLeaveDays, saveChange, shortenLeave,
@@ -309,6 +310,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // The wording of the patient's consent form (see _lib/consent). Empty goes back to the
+  // standard wording.
+  if (req.query.consentText === "true") {
+    if (!requireSuperAdmin(req, res)) return;
+    await ensureConsentTables();
+
+    if (req.method === "PUT") {
+      const { text } = req.body ?? {};
+      if (text != null && typeof text !== "string") return res.status(400).json({ error: "text must be a string" });
+      const own = (text ?? "").trim();
+      if (own.length > MAX_CONSENT_TEXT) {
+        return res.status(400).json({ error: `The consent form can be at most ${MAX_CONSENT_TEXT} characters.` });
+      }
+      await sql`/* consent-text-save */ UPDATE clinic_info SET consent_text = ${own || null}, updated_at = now() WHERE id = 1`;
+    } else if (req.method !== "GET") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+    const t = await consentTemplate();
+    return res.status(200).json({ text: t.text, custom: t.custom, standard: DEFAULT_CONSENT, fields: CONSENT_FIELDS });
   }
 
   // Leave: a dentist asks for days off; the superadmin approves (turning each day into an

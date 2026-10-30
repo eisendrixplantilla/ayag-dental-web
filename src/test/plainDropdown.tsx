@@ -28,9 +28,14 @@ export const DropdownMenuTrigger = ({ children }: { children: ReactElement }) =>
 export const DropdownMenuContent = ({ children }: { children: ReactNode }) =>
   useContext(MenuCtx).open ? <div role="menu">{children}</div> : null;
 
-export const DropdownMenuItem = ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => {
+export const DropdownMenuItem = ({ children, onClick, disabled }: { children: ReactNode; onClick?: () => void; disabled?: boolean }) => {
   const { setOpen } = useContext(MenuCtx);
-  return <div role="menuitem" onClick={() => { onClick?.(); setOpen(false); }}>{children}</div>;
+  // Like Radix: a disabled item is announced as such and does nothing.
+  return (
+    <div role="menuitem" aria-disabled={disabled || undefined} onClick={() => { if (disabled) return; onClick?.(); setOpen(false); }}>
+      {children}
+    </div>
+  );
 };
 
 export const DropdownMenuSeparator = () => <hr />;

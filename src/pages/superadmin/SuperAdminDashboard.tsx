@@ -1,72 +1,98 @@
-import { useEffect, useMemo, useState } from "react";
-import StatCard from "@/components/StatCard";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Clock, Loader2, Printer, Stethoscope, UserPlus } from "lucide-react";
-import { getStaff, type StaffMember } from "@/lib/api/staff";
-import { getPatients } from "@/lib/api/patients";
+import { Loader2, Printer } from "lucide-react";
+import { getPatients, type Patient } from "@/lib/api/patients";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { manilaDateOf, manilaTodayDateStr } from "@/lib/formatDate";
+import { getAllSchedules, getStaff, type DentistScheduleData, type StaffMember } from "@/lib/api/staff";
+import { byNewestAsk, getLeave, leaveHours, LEAVE_CHANGED, pendingChange, describeChange, type LeaveRequest } from "@/lib/api/leave";
+import { manilaDateOf, manilaTodayAsLocalDate, manilaTodayDateStr } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { PeriodPicker } from "@/components/ReportOverview";
-import { DashboardCharts } from "@/components/ReportCharts";
-import { STATUSES, STATUS_LABEL, countByStatus, datesInPeriod, inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
+import ClinicDashboard, { TopTreatments } from "@/components/ClinicDashboard";
+import { DentistWorkload, LeaveApprovals, StaffOnDuty } from "@/components/StaffDashboardCards";
+import { dashboardPrintTables, firstVisits } from "@/lib/dashboardStats";
+import { inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
+import { cellFor, cellText, leaveDays } from "@/lib/staffDay";
 
-/** A summary at a glance for the period: four numbers and two graphs. The detail lives in
- * Reports & Analytics, Staff and Appointments. */
+/** The clinic at a glance for the period, from the Super Admin's side: the numbers and
+ * graphs, who is working today, the leave waiting for a decision, and each dentist's
+ * workload. The detail lives in Reports & Analytics and Schedule. */
 export default function SuperAdminDashboard() {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  /** Each patient's registration date, in Manila ("yyyy-MM-dd"). */
-  const [registered, setRegistered] = useState<string[]>([]);
-  const [patientCount, setPatientCount] = useState(0);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [schedules, setSchedules] = useState<Record<string, DentistScheduleData>>({});
+  const [leave, setLeave] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>(() => ({ kind: "month", month: manilaTodayDateStr().slice(0, 7) }));
 
+  const load = useCallback(() => {
+    // Schedules and leave only fill the staff cards: if they fail, the rest still shows.
+    return Promise.all([
+      getPatients(), getAppointments(), getStaff(),
+      getAllSchedules().catch(() => ({})), getLeave().catch(() => [] as LeaveRequest[]),
+    ]).then(([p, a, s, sch, l]) => {
+      setPatients(p);
+      setAppointments(a);
+      setStaff(s);
+      setSchedules(sch);
+      setLeave(l);
+    });
+  }, []);
   useEffect(() => {
     setLoading(true);
-    Promise.all([getStaff(), getPatients(), getAppointments()])
-      .then(([s, p, a]) => {
-        setStaff(s);
-        setPatientCount(p.length);
-        setRegistered(p.flatMap((x) => (x.createdAt ? [manilaDateOf(x.createdAt)] : [])));
-        setAppointments(a);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    load().finally(() => setLoading(false));
+    // A leave decided here turns into days off, so the day's staff is read again too.
+    const reload = () => { load(); };
+    window.addEventListener(LEAVE_CHANGED, reload);
+    return () => window.removeEventListener(LEAVE_CHANGED, reload);
+  }, [load]);
 
   const shown = useMemo(() => inPeriod(appointments, period), [appointments, period]);
-  const newPatients = useMemo(() => datesInPeriod(registered, period).length, [registered, period]);
-  const pending = shown.filter((a) => a.status === "pending").length;
-  const activeDentists = staff.filter((s) => s.role === "dentist" && s.status === "active").length;
-  const totalDentists = staff.filter((s) => s.role === "dentist").length;
-  const label = periodLabel(period);
+  const team = staff.filter((s) => (s.role === "dentist" || s.role === "admin") && s.status === "active");
+  const pendingLeave = leave.filter((l) => l.status === "pending" || pendingChange(l)).sort(byNewestAsk);
 
   const print = usePrintDocument();
-  // The figures behind the dashboard, for the period on show, as a document.
   const handlePrint = () => {
-    const counts = countByStatus(shown);
+    const today = manilaTodayAsLocalDate();
+    const todayKey = manilaTodayDateStr();
     print({
       title: "System Overview",
       showTotal: false,
-      filters: [{ label: "Period", value: label }],
+      filters: [{ label: "Period", value: periodLabel(period) }],
       tables: [
+        // The front desk's lists are the front desk's; the Super Admin's are staff ones.
+        ...dashboardPrintTables(appointments, period).filter((t) => t.heading !== "Approval Requests" && t.heading !== "Today's Appointments"),
         {
-          heading: "Summary",
-          showCount: false,
-          columns: ["Statistic", "Count"],
-          rows: [
-            ["New Patients", String(newPatients)],
-            ["Appointments", String(shown.length)],
-            ["Pending Requests", String(pending)],
-            ["Total Registered Patients", String(patientCount)],
-            ["Active Dentists", String(activeDentists)],
-          ],
+          heading: "Staff on Duty Today",
+          columns: ["Name", "Role", "Today", "Appointments"],
+          rows: team.map((s) => [
+            s.name, s.role === "dentist" ? "Dentist" : "Admin", cellText(cellFor(schedules[s.id], today)),
+            s.role === "dentist"
+              ? String(appointments.filter((a) => a.date === todayKey && a.status !== "cancelled" && a.status !== "rejected"
+                && (a.dentistId === s.id || a.dentistName === s.name)).length)
+              : "—",
+          ]),
+          emptyText: "No active staff.",
         },
         {
-          heading: "Appointments by Status",
-          showCount: false,
-          columns: ["Status", "Appointments"],
-          rows: STATUSES.map((s) => [STATUS_LABEL[s], String(counts[s])]),
+          heading: "Leave Requests",
+          columns: ["Name", "Role", "Dates", "Reason", "Request"],
+          rows: pendingLeave.map((l) => [
+            l.dentistName, l.role === "dentist" ? "Dentist" : "Admin",
+            `${leaveDays(l)}${leaveHours(l) ? `, ${leaveHours(l)}` : ""}`, l.reason,
+            pendingChange(l) ? `Change: ${describeChange(l.changeRequest!)}` : "New leave",
+          ]),
+          emptyText: "No leave waiting for approval.",
+        },
+        {
+          heading: "Appointments by Dentist",
+          columns: ["Dentist", "Appointments", "Completed"],
+          rows: [...new Set(shown.map((a) => a.dentistName ?? "Unassigned"))].map((name) => {
+            const mine = shown.filter((a) => (a.dentistName ?? "Unassigned") === name);
+            return [name, String(mine.length), String(mine.filter((a) => a.status === "completed").length)];
+          }).sort((a, b) => Number(b[1]) - Number(a[1])),
+          emptyText: "No appointments in this period.",
         },
       ],
     });
@@ -89,16 +115,26 @@ export default function SuperAdminDashboard() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard title="New Patients" value={newPatients} icon={UserPlus} note={`${patientCount} in total`} delay={0} />
-            <StatCard title="Appointments" value={shown.length} icon={CalendarDays} note={label} delay={0.05} />
-            <StatCard title="Pending Requests" value={pending} icon={Clock} note="Awaiting approval" delay={0.1} />
-            <StatCard title="Active Dentists" value={activeDentists} icon={Stethoscope} note={`of ${totalDentists} dentist${totalDentists === 1 ? "" : "s"}`} delay={0.15} />
-          </div>
-
-          <DashboardCharts appointments={shown} period={period} />
-        </>
+        <ClinicDashboard
+          appointments={appointments}
+          period={period}
+          links={{ report: "/superadmin/reports", patients: "/superadmin/reports" }}
+          patientTotals={{
+            monthLabel: "New Patients This Month",
+            allLabel: "Total Patients All Time",
+            // Accounts from the day they registered; walk-in guests from their first visit.
+            joined: [
+              ...patients.flatMap((p) => (p.createdAt ? [{ date: manilaDateOf(p.createdAt), account: true }] : [])),
+              ...firstVisits(appointments, true),
+            ],
+          }}
+          middle={[
+            <TopTreatments key="top" appointments={shown} period={period} />,
+            <StaffOnDuty key="duty" staff={staff} schedules={schedules} appointments={appointments} />,
+            <LeaveApprovals key="leave" leave={leave} />,
+          ]}
+          bottomLeft={<DentistWorkload appointments={shown} period={period} />}
+        />
       )}
     </div>
   );

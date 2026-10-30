@@ -40,6 +40,7 @@ import MobileInput from "@/components/MobileInput";
 import { cleanName, formatName, PH_MOBILE } from "@/lib/inputRules";
 import Hint from "@/components/Hint";
 import { IconAction, RowActions } from "@/components/RowActions";
+import { ConsentSection } from "@/components/Consent";
 
 
 // What the walk-in table shows, sorts by and prints.
@@ -708,6 +709,7 @@ export default function AdminAppointments() {
               <DetailRow label="Time" value={formatTimeRange(viewing.time, viewing.endTime)} />
               <DetailRow label="Status" value={viewing.status} />
               <DetailRow label="Booked On" value={formatManilaStamp(viewing.createdAt)} />
+              {["confirmed", "rescheduled", "completed"].includes(viewing.status) && <ConsentSection appointmentId={viewing.id} />}
             </div>
           )}
           <DialogFooter className="gap-2">

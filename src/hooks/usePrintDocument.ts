@@ -34,6 +34,18 @@ function loadLetterhead(): Promise<ClinicLetterhead | null> {
   return letterhead;
 }
 
+/** The clinic's letterhead, loaded as the page opens so it's there by the time Print is
+ * pressed. If it isn't (or can't be fetched), documents still print, with just the clinic's name. */
+export function useLetterhead(): ClinicLetterhead | null {
+  const [clinic, setClinic] = useState<ClinicLetterhead | null>(null);
+  useEffect(() => {
+    let live = true;
+    loadLetterhead().then((c) => { if (live) setClinic(c); });
+    return () => { live = false; };
+  }, []);
+  return clinic;
+}
+
 /** For tests: forget what was fetched. */
 export const resetLetterhead = () => { letterhead = null; };
 
@@ -53,14 +65,7 @@ export function printRange(from: string, to: string): string {
  * filled in from the session here, so no page has to remember to. */
 export function usePrintDocument() {
   const { user } = useAuth();
-  // Loaded as the page opens, so it's there by the time Print is pressed. If it isn't
-  // (or can't be fetched), the document still prints, with just the clinic's name.
-  const [clinic, setClinic] = useState<ClinicLetterhead | null>(null);
-  useEffect(() => {
-    let live = true;
-    loadLetterhead().then((c) => { if (live) setClinic(c); });
-    return () => { live = false; };
-  }, []);
+  const clinic = useLetterhead();
 
   return useCallback(
     (doc: PrintableDoc): boolean => {

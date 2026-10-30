@@ -7,11 +7,24 @@ const h = vi.hoisted(() => ({
   appts: [] as Appointment[],
   // No working days unless a test gives the dentist some.
   schedule: { days: [] as any[], unavailable: [] as any[] },
+  // Which visits the patient has signed the consent for.
+  consents: [] as { appointmentId: string; status: "signed" | "declined"; signedAt: string }[],
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "dr-mike", name: "Dr. Mike Johnson", email: "dentist@ayagdental.com", role: "dentist", verified: true } }),
-  api: vi.fn(async () => ({ appointments: h.appts })),
+  api: vi.fn(async (path: string, init?: RequestInit) => {
+    if (path.includes("consents=true")) return { consents: h.consents };
+    if (path.includes("consent=true") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body));
+      return { consent: { appointmentId: body.appointmentId, status: body.decision, signedAt: "2026-10-30T07:00:00Z", text: "", patientName: body.printedName } };
+    }
+    if (path.includes("consent=")) {
+      return { consent: null, form: { patientName: "Juan Dela Cruz", procedure: "Oral", dentistName: "Dr. Mike Johnson", date: "September 25, 2026",
+        text: "I, Juan Dela Cruz, give my consent.\n\nI may refuse at any time." } };
+    }
+    return { appointments: h.appts };
+  }),
 }));
 vi.mock("@/lib/api/staff", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/staff")>();
@@ -36,6 +49,7 @@ vi.mock("@/components/BookingCalendar", async () => {
 
 // The row's other actions sit behind ▾; a plain menu stands in for Radix's in jsdom.
 vi.mock("@/components/ui/dropdown-menu", () => import("./plainDropdown"));
+vi.mock("@/components/ui/popover", () => import("./plainPopover"));
 
 import DentistAppointments from "@/pages/dentist/DentistAppointments";
 
@@ -50,7 +64,7 @@ beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
 afterEach(cleanup);
-beforeEach(() => { h.schedule = { days: [], unavailable: [] }; });
+beforeEach(() => { h.schedule = { days: [], unavailable: [] }; h.consents = []; });
 
 function apt(over: Partial<Appointment>): Appointment {
   return {
@@ -81,7 +95,9 @@ describe("dentist actions wait for admin approval", () => {
     for (const name of ["Juan Dela Cruz", "Maria Santos"]) {
       const approved = within(screen.getByText(name).closest("tr")!);
       fireEvent.click(approved.getByRole("button", { name: "More options" }));
-      expect(approved.getAllByRole("menuitem").map(i => i.textContent?.trim())).toEqual(["Start Consultation", "Reschedule", "Cancel"]);
+      expect(approved.getAllByRole("menuitem").map(i => i.textContent?.trim())).toEqual([
+        "Patient ConsentNot signed yet", "Start ConsultationNeeds the signed consent first", "Reschedule", "Cancel",
+      ]);
       expect(approved.queryByLabelText("Awaiting admin approval")).toBeNull();
     }
   });
@@ -225,26 +241,110 @@ describe("the dentist's list puts the newest booking on top", () => {
 });
 
 describe("the consultation's dental chart", () => {
-  it("saves the teeth clicked on the chart with the record", async () => {
+  it("saves the chart's codes and teeth with the record", async () => {
     const { api } = await import("@/contexts/AuthContext");
     h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    h.consents = [{ appointmentId: "c", status: "signed", signedAt: "2026-09-25T05:00:00Z" }];
     render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
 
     const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
-    pick(row, /Start Consultation/);
+    await waitFor(() => {
+      fireEvent.click(row.getByRole("button", { name: "More options" }));
+      const item = row.getByRole("menuitem", { name: /Start Consultation/ });
+      expect(item).not.toHaveAttribute("aria-disabled");
+      fireEvent.click(item);
+    });
     const form = within(await screen.findByRole("dialog"));
-    fireEvent.click(form.getByRole("button", { name: "Tooth 26" }));
-    fireEvent.click(form.getByRole("button", { name: "Tooth 16" }));
-    expect(form.getByText("16, 26")).toBeInTheDocument();
-
     const [procedure, diagnosis] = form.getAllByRole("textbox");
     fireEvent.change(procedure, { target: { value: "Restoration" } });
     fireEvent.change(diagnosis, { target: { value: "Caries" } });
+    // A tooth opens its picker of the chart's codes.
+    for (const t of [26, 16]) {
+      fireEvent.click(form.getByRole("button", { name: `Tooth ${t}` }));
+      fireEvent.click(within(screen.getByRole("dialog", { name: `Chart codes for tooth ${t}` })).getByRole("button", { name: "D: Decayed (caries)" }));
+    }
+    expect(form.getByRole("list", { name: "Chart codes by tooth" })).toHaveTextContent("16D26D");
     fireEvent.click(form.getByRole("button", { name: /Save Consultation/ }));
 
     await waitFor(() => {
       const saved = vi.mocked(api).mock.calls.find(([path, init]) => String(path).includes("dental-records") && init?.method === "POST");
-      expect(JSON.parse(String(saved![1]!.body))).toMatchObject({ toothNumber: "16, 26", diagnosis: "Caries" });
+      expect(JSON.parse(String(saved![1]!.body))).toMatchObject({
+        toothNumber: "16, 26", diagnosis: "Caries", toothCodes: { 16: ["D"], 26: ["D"] }, treatments: [{ serviceName: "Restoration" }],
+      });
     });
+  });
+});
+
+describe("the patient's consent before the consultation", () => {
+  beforeAll(() => {
+    // jsdom draws nothing; the pad only needs to hand back a picture.
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.toDataURL = vi.fn(() => "data:image/png;base64,SIGNED");
+  });
+
+  it("keeps Start Consultation locked until the patient signs, then unlocks it", async () => {
+    const { api } = await import("@/contexts/AuthContext");
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+
+    // Locked: it does nothing, and says why.
+    fireEvent.click(row.getByRole("button", { name: "More options" }));
+    const locked = row.getByRole("menuitem", { name: /Start Consultation/ });
+    expect(locked).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(locked);
+    expect(screen.queryByText("Dental Record Form")).toBeNull();
+
+    // The patient reads it, ticks, prints their name and signs.
+    fireEvent.click(row.getByRole("menuitem", { name: /Patient Consent/ }));
+    const form = within(await screen.findByRole("dialog"));
+    expect(await form.findByText("I, Juan Dela Cruz, give my consent.")).toBeInTheDocument();
+    const sign = form.getByRole("button", { name: /Sign Consent/ });
+    expect(sign).toBeDisabled();
+    fireEvent.click(form.getByRole("checkbox", { name: /read and understood/ }));
+    expect(form.getByLabelText("Patient's printed name")).toHaveValue("Juan Dela Cruz");
+    expect(sign).toBeDisabled(); // not signed yet
+    const pad = form.getByRole("img", { name: /Signature pad/ });
+    fireEvent.pointerDown(pad, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(pad, { clientX: 60, clientY: 30, pointerId: 1 });
+    fireEvent.pointerUp(pad, { clientX: 60, clientY: 30, pointerId: 1 });
+    expect(sign).toBeEnabled();
+    fireEvent.click(sign);
+
+    await waitFor(() => {
+      const sent = vi.mocked(api).mock.calls.find(([path, init]) => String(path).includes("consent=true") && init?.method === "POST");
+      expect(JSON.parse(String(sent![1]!.body))).toEqual({
+        appointmentId: "c", decision: "signed", printedName: "Juan Dela Cruz", signature: "data:image/png;base64,SIGNED",
+      });
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Signed: the consultation opens.
+    fireEvent.click(row.getByRole("button", { name: "More options" }));
+    expect(row.getByRole("menuitem", { name: /Patient Consent/ })).toHaveTextContent("Signed");
+    fireEvent.click(row.getByRole("menuitem", { name: /Start Consultation/ }));
+    expect(await screen.findByText("Dental Record Form")).toBeInTheDocument();
+  });
+
+  it("records a patient who declines, and the consultation stays locked", async () => {
+    const { api } = await import("@/contexts/AuthContext");
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    pick(row, /Patient Consent/);
+    const form = within(await screen.findByRole("dialog"));
+    fireEvent.click(await form.findByRole("button", { name: /Patient Declined/ }));
+    fireEvent.change(form.getByLabelText(/Why the patient declined/), { target: { value: "Wants a second opinion" } });
+    fireEvent.click(form.getByRole("button", { name: /Record as Declined/ }));
+
+    await waitFor(() => {
+      const sent = vi.mocked(api).mock.calls.find(([path, init]) => String(path).includes("consent=true") && init?.method === "POST"
+        && String(init.body).includes("declined"));
+      expect(JSON.parse(String(sent![1]!.body))).toEqual({ appointmentId: "c", decision: "declined", reason: "Wants a second opinion" });
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(row.getByRole("button", { name: "More options" }));
+    expect(row.getByRole("menuitem", { name: /Patient Consent/ })).toHaveTextContent("Patient declined");
+    expect(row.getByRole("menuitem", { name: /Start Consultation/ })).toHaveAttribute("aria-disabled", "true");
   });
 });

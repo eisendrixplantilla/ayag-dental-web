@@ -79,7 +79,7 @@ export interface ReportDoc {
 }
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
-const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ESCAPES[c]);
+export const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ESCAPES[c]);
 
 const DEFAULT_EMPTY = "No records found for these filters.";
 /** A heading and its column row cost about two records' worth of the sheet. */
@@ -222,7 +222,8 @@ export function fitSheets(tables: ReportTable[], m: SheetMetrics, budget: number
   return sheets.map((x) => x.chunks);
 }
 
-const STYLES = `
+/** The clinic's document look, shared with the other printed forms (e.g. printConsent). */
+export const STYLES = `
   @page { size: A4 portrait; margin: 14mm; }
   * { box-sizing: border-box; }
   /* Sized in pt, not px: a printer works in points, and the px sizes this used to carry
@@ -491,7 +492,25 @@ export function printReport(doc: ReportDoc): boolean {
   } catch {
     layout = null; // filling the sheets is a nicety; the fixed count still prints soundly
   }
-  const html = buildReportHtml(doc, window.location.origin, layout ?? undefined);
+  sendToPrinter(iframe, frameDoc, buildReportHtml(doc, window.location.origin, layout ?? undefined));
+  return true;
+}
+
+/** Prints a document already written as HTML (e.g. a signed consent), as `printReport` does. */
+export function printHtml(html: string): boolean {
+  const iframe = document.createElement("iframe");
+  document.body.appendChild(iframe);
+  const frameDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (!frameDoc) {
+    document.body.removeChild(iframe);
+    return false;
+  }
+  sendToPrinter(iframe, frameDoc, html);
+  return true;
+}
+
+/** Writes the document into the hidden frame and opens the print dialog once its images are in. */
+function sendToPrinter(iframe: HTMLIFrameElement, frameDoc: Document, html: string) {
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
 
   frameDoc.open();
@@ -515,5 +534,4 @@ export function printReport(doc: ReportDoc): boolean {
   } else {
     send();
   }
-  return true;
 }

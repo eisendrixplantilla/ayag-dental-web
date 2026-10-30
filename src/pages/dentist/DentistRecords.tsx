@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { SERVICE_SEPARATOR } from "@/lib/services";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,16 +35,26 @@ import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
-import ToothChart from "@/components/ToothChart";
+import ToothChart, { type ProcedureTeeth } from "@/components/ToothChart";
+import { teethAfter } from "@/lib/teeth";
+import type { ToothCodes, ToothNotes } from "@/lib/toothCodes";
+import { useProcedureColors } from "@/lib/procedureColors";
+import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/DatePicker";
+import { ConsentSection } from "@/components/Consent";
 
 const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
+
+/** A procedure as the chart hands it back, as the form keeps it. */
+const toInput = (p: ProcedureTeeth): TreatmentInput => ({ serviceName: p.serviceName ?? "", teeth: p.teeth ?? undefined });
 
 const emptyForm = {
   appointmentId: "",
   date: manilaTodayDateStr(),
   diagnosis: "",
   toothNumber: "",
+  toothCodes: {} as ToothCodes,
+  toothNotes: {} as ToothNotes,
   treatmentNotes: "",
   nextVisit: "",
 };
@@ -55,6 +67,7 @@ export default function DentistRecords() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -66,7 +79,7 @@ export default function DentistRecords() {
 
   useEffect(load, []);
   useEffect(() => {
-    getAppointments().then(setAppointments).catch(() => {});
+    getAppointments().then(setAppointments).catch(() => {}).finally(() => setAppointmentsLoaded(true));
   }, []);
 
   const [filter, setFilter] = useState(EMPTY_FILTER);
@@ -122,7 +135,7 @@ export default function DentistRecords() {
   const [prescriptions, setPrescriptions] = useState<PrescriptionInput[]>([]);
 
   const [editTarget, setEditTarget] = useState<DentalRecord | null>(null);
-  const [editForm, setEditForm] = useState({ diagnosis: "", toothNumber: "", treatmentNotes: "", nextVisit: "" });
+  const [editForm, setEditForm] = useState({ diagnosis: "", toothNumber: "", toothCodes: {} as ToothCodes, toothNotes: {} as ToothNotes, treatmentNotes: "", nextVisit: "" });
   const [editTreatments, setEditTreatments] = useState<TreatmentInput[]>([]);
   const [editPrescriptions, setEditPrescriptions] = useState<PrescriptionInput[]>([]);
 
@@ -135,6 +148,23 @@ export default function DentistRecords() {
     setPrescriptions([]);
     setCreateOpen(true);
   };
+
+  // Sent here by the dashboard's "Write record": open the form on that consultation, dated
+  // the day it took place, with its services as the procedures, once the records say it has
+  // none yet.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const writeFor = (location.state as { writeFor?: unknown } | null)?.writeFor;
+  useEffect(() => {
+    if (typeof writeFor !== "string" || loading || !appointmentsLoaded) return;
+    const apt = availableAppointments.find(a => a.id === writeFor);
+    navigate(location.pathname, { replace: true, state: null });
+    if (!apt) return;
+    openCreate();
+    setForm({ ...emptyForm, appointmentId: apt.id, date: apt.date });
+    setTreatments(apt.service.split(SERVICE_SEPARATOR).map(s => ({ serviceName: s.trim() })).filter(t => t.serviceName));
+    // Runs when the records have loaded with a consultation to write up; openCreate is the page's own.
+  }, [writeFor, loading, appointmentsLoaded, availableAppointments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitCreate = async () => {
     const cleanTreatments = treatments.filter(t => t.serviceName?.trim());
@@ -149,6 +179,8 @@ export default function DentistRecords() {
         date: form.date,
         diagnosis: form.diagnosis.trim(),
         toothNumber: form.toothNumber.trim() || undefined,
+        toothCodes: form.toothCodes,
+        toothNotes: form.toothNotes,
         treatmentNotes: form.treatmentNotes.trim() || undefined,
         nextVisit: form.nextVisit || undefined,
         treatments: cleanTreatments,
@@ -168,10 +200,12 @@ export default function DentistRecords() {
     setEditForm({
       diagnosis: r.diagnosis,
       toothNumber: r.toothNumber ?? "",
+      toothCodes: r.toothCodes ?? {},
+      toothNotes: r.toothNotes ?? {},
       treatmentNotes: r.treatmentNotes ?? "",
       nextVisit: r.nextVisit ?? "",
     });
-    setEditTreatments(r.treatments.map(t => ({ serviceName: t.serviceName ?? "" })));
+    setEditTreatments(r.treatments.map(t => ({ serviceName: t.serviceName ?? "", teeth: t.teeth ?? undefined })));
     setEditPrescriptions(r.prescriptions.map(p => ({ medicine: p.medicine, dosage: p.dosage ?? "", instructions: p.instructions ?? "" })));
     setEditTarget(r);
   };
@@ -188,6 +222,8 @@ export default function DentistRecords() {
       await updateDentalRecord(editTarget.id, {
         diagnosis: editForm.diagnosis.trim(),
         toothNumber: editForm.toothNumber.trim(),
+        toothCodes: editForm.toothCodes,
+        toothNotes: editForm.toothNotes,
         treatmentNotes: editForm.treatmentNotes.trim() || undefined,
         nextVisit: editForm.nextVisit || undefined,
         treatments: cleanTreatments,
@@ -347,12 +383,21 @@ export default function DentistRecords() {
               <Label>Diagnosis *</Label>
               <Input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} />
             </div>
-            <TreatmentListEditor treatments={treatments} setTreatments={setTreatments} />
+            <TreatmentListEditor
+              treatments={treatments}
+              setTreatments={(next) => { setForm(f => ({ ...f, toothNumber: teethAfter(f.toothNumber, treatments, next) })); setTreatments(next); }}
+            />
             <div className="space-y-2">
               <Label>Dental Chart (if applicable)</Label>
               <ToothChart
+                procedures={treatments}
                 value={form.toothNumber}
-                onChange={(toothNumber) => setForm({ ...form, toothNumber })}
+                codes={form.toothCodes}
+                notes={form.toothNotes}
+                onChange={(next) => {
+                  setTreatments(next.procedures.map(toInput));
+                  setForm(f => ({ ...f, toothNumber: next.value, toothCodes: next.codes, toothNotes: next.notes }));
+                }}
                 patientId={appointments.find(a => a.id === form.appointmentId)?.patientId}
               />
             </div>
@@ -385,12 +430,21 @@ export default function DentistRecords() {
               <Label>Diagnosis *</Label>
               <Input value={editForm.diagnosis} onChange={e => setEditForm({ ...editForm, diagnosis: e.target.value })} />
             </div>
-            <TreatmentListEditor treatments={editTreatments} setTreatments={setEditTreatments} />
+            <TreatmentListEditor
+              treatments={editTreatments}
+              setTreatments={(next) => { setEditForm(f => ({ ...f, toothNumber: teethAfter(f.toothNumber, editTreatments, next) })); setEditTreatments(next); }}
+            />
             <div className="space-y-2">
               <Label>Dental Chart</Label>
               <ToothChart
+                procedures={editTreatments}
                 value={editForm.toothNumber}
-                onChange={(toothNumber) => setEditForm({ ...editForm, toothNumber })}
+                codes={editForm.toothCodes}
+                notes={editForm.toothNotes}
+                onChange={(next) => {
+                  setEditTreatments(next.procedures.map(toInput));
+                  setEditForm(f => ({ ...f, toothNumber: next.value, toothCodes: next.codes, toothNotes: next.notes }));
+                }}
                 patientId={editTarget?.patientId}
                 excludeRecordId={editTarget?.id}
               />
@@ -402,7 +456,7 @@ export default function DentistRecords() {
             </div>
             <div className="space-y-2">
               <Label>Next Appointment Recommendation</Label>
-              <DatePicker aria-label="Next appointment recommendation" value={editForm.nextVisit} onChange={(v) => setEditForm({ ...editForm, nextVisit: v })} />
+              <DatePicker aria-label="Next appointment recommendation" value={editForm.nextVisit} min={manilaTodayDateStr()} onChange={(v) => setEditForm({ ...editForm, nextVisit: v })} />
             </div>
           </div>
           <DialogFooter>
@@ -428,7 +482,14 @@ export default function DentistRecords() {
                 <Field label="Attending Dentist" value={viewTarget.dentistName ?? "—"} />
                 <div className="col-span-2 space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Dental Chart</p>
-                  <ToothChart value={viewTarget.toothNumber ?? ""} patientId={viewTarget.patientId} excludeRecordId={viewTarget.id} />
+                  <ToothChart
+                    procedures={viewTarget.treatments.map(t => ({ serviceName: t.serviceName ?? undefined, teeth: t.teeth }))}
+                    value={viewTarget.toothNumber ?? ""}
+                    codes={viewTarget.toothCodes ?? {}}
+                    notes={viewTarget.toothNotes ?? {}}
+                    patientId={viewTarget.patientId}
+                    excludeRecordId={viewTarget.id}
+                  />
                 </div>
                 <div className="col-span-2"><Field label="Diagnosis" value={viewTarget.diagnosis} /></div>
                 <div className="col-span-2">
@@ -453,6 +514,7 @@ export default function DentistRecords() {
                   </div>
                 )}
               </div>
+              <ConsentSection appointmentId={viewTarget.appointmentId} />
             </div>
           )}
         </DialogContent>
@@ -461,27 +523,101 @@ export default function DentistRecords() {
   );
 }
 
+/**
+ * The record's procedures as chips in one box; type the next one
+ * and pick from the clinic's services as they match (arrow keys and Enter), or press Enter
+ * to add what's typed.
+ */
 function TreatmentListEditor({ treatments, setTreatments }: { treatments: TreatmentInput[]; setTreatments: (t: TreatmentInput[]) => void }) {
+  const { services } = useProcedureColors();
+  const [draft, setDraft] = useState("");
+  const [listOpen, setListOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  // Moved through the list with the arrow keys: Enter then takes the highlighted service
+  // even with nothing typed.
+  const [navigated, setNavigated] = useState(false);
+  const id = useId();
+  const named = treatments.map((t, i) => ({ t, i })).filter(({ t }) => t.serviceName?.trim());
+  const has = (name: string) => named.some(({ t }) => t.serviceName!.trim().toLowerCase() === name.trim().toLowerCase());
+  // The services not on the record yet that match what's typed, best first: starting with it.
+  const q = draft.trim().toLowerCase();
+  const matches = services
+    .filter(s => !has(s.name) && (!q || s.name.toLowerCase().includes(q)))
+    .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)));
+  const add = (raw: string) => {
+    const name = raw.trim();
+    setDraft("");
+    setActive(0);
+    setNavigated(false);
+    if (!name || has(name)) return;
+    // Into the form's empty row when it has one, so the list never keeps a blank.
+    const blank = treatments.findIndex(t => !t.serviceName?.trim());
+    setTreatments(blank >= 0 ? treatments.map((t, j) => (j === blank ? { ...t, serviceName: name } : t)) : [...treatments, { serviceName: name }]);
+  };
+  const showList = listOpen && matches.length > 0;
   return (
-    <div className="space-y-2">
-      <Label>Procedures Performed *</Label>
-      {treatments.map((t, i) => (
-        <div key={i} className="flex gap-2">
-          <Input
-            value={t.serviceName ?? ""}
-            onChange={e => setTreatments(treatments.map((x, j) => j === i ? { serviceName: e.target.value } : x))}
-            placeholder="e.g. Tooth Extraction"
+    <div className="space-y-1.5">
+      <Label htmlFor={`${id}-add`}>Procedures Performed *</Label>
+      <div className="relative">
+        <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+          {named.map(({ t, i }) => (
+            <span key={i} className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-muted/50 py-0.5 pl-2.5 pr-0.5 text-sm">
+              <span className="truncate">{t.serviceName}</span>
+              {t.teeth && <span className="text-xs tabular-nums text-muted-foreground">{t.teeth}</span>}
+              <button type="button" aria-label={`Remove ${t.serviceName}`} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={() => setTreatments(treatments.filter((_, j) => j !== i))}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+          <input
+            id={`${id}-add`}
+            role="combobox"
+            aria-expanded={showList}
+            aria-controls={`${id}-list`}
+            aria-autocomplete="list"
+            aria-activedescendant={showList ? `${id}-opt-${active}` : undefined}
+            autoComplete="off"
+            value={draft}
+            onChange={e => { setDraft(e.target.value); setActive(0); setNavigated(false); setListOpen(true); }}
+            onFocus={() => setListOpen(true)}
+            onBlur={() => { setListOpen(false); add(draft); }}
+            onKeyDown={e => {
+              if (e.key === "ArrowDown" && matches.length) {
+                e.preventDefault(); setListOpen(true); setNavigated(true); setActive(a => (navigated ? (a + 1) % matches.length : 0));
+              } else if (e.key === "ArrowUp" && matches.length) {
+                e.preventDefault(); setNavigated(true); setActive(a => (a - 1 + matches.length) % matches.length);
+              } else if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault(); add(showList && (q || navigated) ? matches[active].name : draft);
+              }
+              else if (e.key === "Escape") setListOpen(false);
+              else if (e.key === "Backspace" && !draft && named.length) setTreatments(treatments.filter((_, j) => j !== named[named.length - 1].i));
+            }}
+            placeholder={named.length ? "Add another…" : "e.g. Tooth Extraction"}
+            className="min-w-[8rem] flex-1 bg-transparent py-0.5 text-sm outline-none placeholder:text-muted-foreground"
           />
-          {treatments.length > 1 && (
-            <Button type="button" variant="ghost" size="icon" onClick={() => setTreatments(treatments.filter((_, j) => j !== i))}>
-              <X className="w-4 h-4" />
-            </Button>
-          )}
         </div>
-      ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => setTreatments([...treatments, { serviceName: "" }])}>
-        <Plus className="w-4 h-4 mr-1" /> Add Procedure
-      </Button>
+        {showList && (
+          <ul id={`${id}-list`} role="listbox" aria-label="Services"
+            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+            {matches.map((s, k) => (
+              <li
+                key={s.id}
+                id={`${id}-opt-${k}`}
+                role="option"
+                aria-selected={k === active}
+                // Picked before the box loses focus, so the blur doesn't add the half-typed text.
+                onMouseDown={e => { e.preventDefault(); add(s.name); }}
+                onMouseEnter={() => setActive(k)}
+                className={cn("flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm", k === active && "bg-muted")}
+              >
+                <span className="truncate">{s.name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">Pick from the list or type one and press Enter.</p>
     </div>
   );
 }
@@ -489,7 +625,13 @@ function TreatmentListEditor({ treatments, setTreatments }: { treatments: Treatm
 function PrescriptionListEditor({ prescriptions, setPrescriptions }: { prescriptions: PrescriptionInput[]; setPrescriptions: (p: PrescriptionInput[]) => void }) {
   return (
     <div className="space-y-2">
-      <Label>Prescriptions</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>Prescriptions</Label>
+        <Button type="button" variant="outline" size="sm" onClick={() => setPrescriptions([...prescriptions, { medicine: "" }])}>
+          <Plus className="w-4 h-4 mr-1" /> Add Prescription
+        </Button>
+      </div>
+      {prescriptions.length === 0 && <p className="text-xs text-muted-foreground">No prescriptions.</p>}
       {prescriptions.map((p, i) => (
         <div key={i} className="rounded-lg border border-border p-3 space-y-2">
           <div className="flex gap-2 items-start">
@@ -518,9 +660,6 @@ function PrescriptionListEditor({ prescriptions, setPrescriptions }: { prescript
           </div>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => setPrescriptions([...prescriptions, { medicine: "" }])}>
-        <Plus className="w-4 h-4 mr-1" /> Add Prescription
-      </Button>
     </div>
   );
 }

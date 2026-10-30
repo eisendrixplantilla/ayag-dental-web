@@ -1,87 +1,63 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
-import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Clock, ListOrdered, Loader2, Printer, UserPlus, Users } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { getPatients } from "@/lib/api/patients";
-import { toLabel, toMinutes } from "@/lib/dentistSchedules";
-import { manilaDateOf, manilaNowMinutes, manilaTodayDateStr } from "@/lib/formatDate";
+import { getPatients, type Patient } from "@/lib/api/patients";
+import { getDentistDirectory, getDentistSchedule, type DentistDirectoryEntry, type DentistScheduleData } from "@/lib/api/staff";
+import { manilaDateOf, manilaTodayDateStr } from "@/lib/formatDate";
 import { PeriodPicker } from "@/components/ReportOverview";
-import { DashboardCharts } from "@/components/ReportCharts";
-import TodayList from "@/components/TodayList";
-import { STATUSES, STATUS_LABEL, countByStatus, datesInPeriod, inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
+import ClinicDashboard, { ApprovalRequests, TopTreatments } from "@/components/ClinicDashboard";
+import { CheckInList, DentistsToday } from "@/components/TodayCards";
+import { dashboardPrintTables, firstVisits } from "@/lib/dashboardStats";
+import { inPeriod, periodLabel, type Period } from "@/lib/reportPeriod";
 
-/** The front desk's summary: the period's numbers and graphs, and who is still to come today. */
+/** The front desk's dashboard: the period's numbers and graphs, the next patient, the
+ * requests waiting for approval, and today's appointments. */
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  /** Each patient's registration date, in Manila ("yyyy-MM-dd"). */
-  const [registered, setRegistered] = useState<string[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [dentists, setDentists] = useState<DentistDirectoryEntry[]>([]);
+  const [schedules, setSchedules] = useState<Record<string, DentistScheduleData>>({});
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>(() => ({ kind: "month", month: manilaTodayDateStr().slice(0, 7) }));
 
+  const load = useCallback(() => {
+    return Promise.all([getAppointments(), getPatients()]).then(([a, p]) => {
+      setAppointments(a);
+      setPatients(p);
+    });
+  }, []);
+  // Each dentist's hours and days off, for who can still take a walk-in today. Read once;
+  // the card lists the dentists without them meanwhile (or if they can't be read).
+  useEffect(() => {
+    let live = true;
+    getDentistDirectory()
+      .then(async (list) => {
+        if (!live || !Array.isArray(list)) return;
+        setDentists(list);
+        const pairs = await Promise.all(list.map((d) => getDentistSchedule(d.id).then((sch) => [d.id, sch] as const).catch(() => null)));
+        if (live) setSchedules(Object.fromEntries(pairs.filter((x): x is readonly [string, DentistScheduleData] => !!x)));
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
   useEffect(() => {
     setLoading(true);
-    Promise.all([getAppointments(), getPatients()])
-      .then(([a, p]) => {
-        setAppointments(a);
-        setRegistered(p.flatMap((x) => (x.createdAt ? [manilaDateOf(x.createdAt)] : [])));
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    load().finally(() => setLoading(false));
+  }, [load]);
 
   const shown = useMemo(() => inPeriod(appointments, period), [appointments, period]);
-  const newPatients = useMemo(() => datesInPeriod(registered, period).length, [registered, period]);
-  const pending = shown.filter((a) => a.status === "pending").length;
-  const walkIns = shown.filter((a) => a.type === "walk-in").length;
-  const label = periodLabel(period);
-
-  // Today's bookings still to come, in time order.
-  const upcomingToday = useMemo(() => {
-    const today = manilaTodayDateStr();
-    const now = manilaNowMinutes();
-    return appointments
-      .filter((a) => a.date === today && ["pending", "confirmed", "rescheduled"].includes(a.status) && toMinutes(a.time) >= now)
-      .sort((a, b) => toMinutes(a.time) - toMinutes(b.time));
-  }, [appointments]);
-
   const print = usePrintDocument();
-  // The dashboard's figures, for the period on show, and today's queue, as a document.
-  const handlePrint = () => {
-    const counts = countByStatus(shown);
+  const handlePrint = () =>
     print({
       title: "Dashboard Summary",
-      filters: [{ label: "Period", value: label }],
-      tables: [
-        {
-          heading: "Summary",
-          showCount: false,
-          columns: ["Statistic", "Count"],
-          rows: [
-            ["Appointments", String(shown.length)],
-            ["Pending Requests", String(pending)],
-            ["Walk-ins", String(walkIns)],
-            ["New Patients", String(newPatients)],
-            ["Total Registered Patients", String(registered.length)],
-          ],
-        },
-        {
-          heading: "Appointments by Status",
-          showCount: false,
-          columns: ["Status", "Appointments"],
-          rows: STATUSES.map((s) => [STATUS_LABEL[s], String(counts[s])]),
-        },
-        {
-          heading: "Still to Come Today",
-          columns: ["Time", "Patient", "Service", "Dentist", "Status"],
-          rows: upcomingToday.map((a) => [toLabel(toMinutes(a.time)), a.patientName, a.service, a.dentistName ?? "Unassigned", STATUS_LABEL[a.status]]),
-          emptyText: "No more appointments scheduled for today.",
-        },
-      ],
+      showTotal: false,
+      filters: [{ label: "Period", value: periodLabel(period) }],
+      tables: dashboardPrintTables(appointments, period),
     });
-  };
 
   return (
     <div className="space-y-6">
@@ -100,30 +76,26 @@ export default function AdminDashboard() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard title="Appointments" value={shown.length} icon={CalendarDays} note={label} delay={0} />
-            <StatCard title="Pending Requests" value={pending} icon={Clock} note="Awaiting approval" delay={0.05} />
-            <StatCard title="Walk-ins" value={walkIns} icon={UserPlus} note={label} delay={0.1} />
-            <StatCard title="New Patients" value={newPatients} icon={Users} note={`${registered.length} in total`} delay={0.15} />
-          </div>
-
-          <DashboardCharts appointments={shown} period={period} />
-
-          <TodayList
-            title="Still to Come Today"
-            icon={ListOrdered}
-            emptyText="No more appointments scheduled for today."
-            link={{ to: "/admin/queue", label: "Open queue" }}
-            items={upcomingToday.map((a) => ({
-              id: a.id,
-              when: toLabel(toMinutes(a.time)),
-              title: a.patientName,
-              detail: `${a.service} · ${a.dentistName ?? "Unassigned"}`,
-              status: a.status,
-            }))}
-          />
-        </>
+        <ClinicDashboard
+          appointments={appointments}
+          period={period}
+          middle={[
+            <TopTreatments key="top" appointments={shown} period={period} />,
+            <DentistsToday key="dentists" dentists={dentists} schedules={schedules} appointments={appointments} />,
+            <ApprovalRequests key="approvals" appointments={appointments} onChanged={load} />,
+          ]}
+          bottomLeft={<CheckInList appointments={appointments} />}
+          links={{ report: "/admin/reports", patients: "/admin/patients" }}
+          patientTotals={{
+            monthLabel: "New Patients This Month",
+            allLabel: "Total Patients All Time",
+            // Accounts from the day they registered; walk-in guests from their first visit.
+            joined: [
+              ...patients.flatMap((p) => (p.createdAt ? [{ date: manilaDateOf(p.createdAt), account: true }] : [])),
+              ...firstVisits(appointments, true),
+            ],
+          }}
+        />
       )}
     </div>
   );

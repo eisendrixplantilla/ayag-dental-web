@@ -9,7 +9,8 @@ import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical, Save } from "lucide-react";
+import { Settings, Clock, Stethoscope, Printer, Loader2, Plus, Trash2, RotateCcw, GripVertical, Save, FileSignature } from "lucide-react";
+import { getConsentWording, saveConsentWording, type ConsentWording } from "@/lib/api/consent";
 import { toast } from "sonner";
 import { getClinicHours, updateClinicHours, getClinicInfo, updateClinicInfo, type ClinicHourEntry, type ClinicInfo } from "@/lib/api/settings";
 import {
@@ -665,6 +666,74 @@ export default function SuperAdminSettings() {
           </Button>
         </CardContent>
       </Card>
+
+      <ConsentWordingCard />
     </div>
+  );
+}
+
+/**
+ * The wording of the consent patients sign before a procedure. The parts in braces are
+ * filled in for each visit. Consents already signed keep the wording they were signed with.
+ */
+function ConsentWordingCard() {
+  const [wording, setWording] = useState<ConsentWording | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    getConsentWording()
+      .then((w) => { setWording(w); setDraft(w.text ?? ""); })
+      .catch(() => toast.error("Failed to load the consent form"));
+  }, []);
+
+  const save = async (text: string, done: string) => {
+    setSaving(true);
+    try {
+      const w = await saveConsentWording(text);
+      setWording(w);
+      setDraft(w.text ?? "");
+      toast.success(done);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save the consent form");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changed = !!wording && draft.trim() !== (wording.text ?? "").trim();
+  return (
+    <Card className="shadow-card print:hidden">
+      <CardHeader>
+        <CardTitle className="font-heading text-lg flex items-center gap-2"><FileSignature className="w-5 h-5 text-primary" /> Patient Consent Form</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          What patients read and sign before a procedure. These are filled in for each visit:{" "}
+          {(wording?.fields ?? ["{patient}", "{procedure}", "{dentist}", "{date}", "{clinic}"]).map((f, i) => (
+            <span key={f}>{i ? ", " : ""}<code className="rounded bg-muted px-1 text-xs text-foreground">{f}</code></span>
+          ))}
+          . A blank line starts a new paragraph. Consents already signed keep the wording they were signed with.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Label htmlFor="consent-wording" className="sr-only">Consent form wording</Label>
+        <Textarea
+          id="consent-wording"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={14}
+          maxLength={8000}
+          disabled={!wording || saving}
+          className="text-sm leading-relaxed"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="gradient-primary text-primary-foreground" onClick={() => save(draft, "Consent form saved")} disabled={!changed || !draft.trim() || saving}>
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save Consent Form
+          </Button>
+          <Button variant="outline" onClick={() => save("", "Consent form set back to the standard wording")} disabled={!wording?.custom || saving}>
+            <RotateCcw className="w-4 h-4 mr-2" /> Use Standard Wording
+          </Button>
+          <span className="text-xs text-muted-foreground">{wording ? (wording.custom ? "The clinic's own wording." : "The standard wording.") : ""}</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -4,6 +4,8 @@ export interface TreatmentEntry {
   id: string;
   serviceId: string | null;
   serviceName: string | null;
+  /** The teeth this procedure was done on ("16, 26"); null on records from before. */
+  teeth?: string | null;
 }
 
 export interface PrescriptionEntry {
@@ -23,6 +25,10 @@ export interface DentalRecord {
   date: string;
   diagnosis: string;
   toothNumber: string | null;
+  /** The dental chart's codes per tooth ({ "16": ["D", "Am"] }); see lib/toothCodes. */
+  toothCodes?: Record<string, string[]>;
+  /** A note on a tooth ({ "16": "Sensitive to cold" }). */
+  toothNotes?: Record<string, string>;
   treatmentNotes: string | null;
   nextVisit: string | null;
   createdAt: string;
@@ -47,6 +53,8 @@ export interface Service {
 export interface TreatmentInput {
   serviceId?: string;
   serviceName?: string;
+  /** The teeth this procedure was done on ("16, 26"). */
+  teeth?: string;
 }
 
 export interface PrescriptionInput {
@@ -60,6 +68,8 @@ export interface DentalRecordInput {
   date?: string;
   diagnosis: string;
   toothNumber?: string;
+  toothCodes?: Record<string, string[]>;
+  toothNotes?: Record<string, string>;
   treatmentNotes?: string;
   nextVisit?: string;
   treatments?: TreatmentInput[];
@@ -69,6 +79,8 @@ export interface DentalRecordInput {
 export interface DentalRecordUpdate {
   diagnosis?: string;
   toothNumber?: string;
+  toothCodes?: Record<string, string[]>;
+  toothNotes?: Record<string, string>;
   treatmentNotes?: string;
   nextVisit?: string;
   treatments?: TreatmentInput[];

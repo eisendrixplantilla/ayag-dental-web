@@ -44,6 +44,13 @@ vi.mock("../../api/_lib/db.js", () => ({
       return onThatDay(date, statuses, dentistId, dentistName, excludeId)
         .map(r => ({ time: r.time, end_time: r.end_time }));
     }
+    if (text.includes("patient-same-day")) {
+      const [date, statuses, patientId, , patientName, digits, excludeId] = v;
+      return h.rows.filter(r => r.date === date && statuses.includes(r.status) && r.id !== excludeId
+        && ((patientId !== null && r.patient_id === patientId)
+          || (patientId === null && r.patient_id === null && r.patient_name === patientName && onlyDigits(r.contact) === digits)))
+        .map(r => ({ service: r.service, time: r.time }));
+    }
     if (text.includes("guest-columns")) return [];
     if (text.includes("booking-limits-table") || text.includes("calendar-style-column") || text.includes("dentist-services-table")
       || text.includes("service-hours-table") || text.includes("service-day-limits-column")) return [];
@@ -745,5 +752,56 @@ describe("a request still pending when its time comes", () => {
     const res = await patch("later-today", { status: "confirmed" });
     expect(res.code).toBe(200);
     expect(res.body.appointment.status).toBe("confirmed");
+  });
+});
+
+describe("one visit per service a day", () => {
+  it("refuses a patient's second booking of the same service that day", async () => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    h.rows = [row({ status: "confirmed", date: "2099-01-05", time: "09:00", service: "Oral" })];
+    const res = await call("POST", { body: { ...booking, patientName: "Allen Estrella", date: "2099-01-05", time: "14:00" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/Oral is already booked for this patient on this day, at 9:00 AM/);
+  });
+
+  it("matches one service inside a visit for several", async () => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    h.rows = [row({ status: "pending", date: "2099-01-05", time: "09:00", service: "Cleaning, Oral" })];
+    const res = await call("POST", { body: { ...booking, patientName: "Allen Estrella", date: "2099-01-05", time: "14:00" } });
+    expect(res.code).toBe(409);
+  });
+
+  it("allows another service that day, the same service another day, and after a cancellation", async () => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    h.rows = [
+      row({ id: "a", status: "confirmed", date: "2099-01-05", time: "09:00", service: "Cleaning" }),
+      row({ id: "b", status: "cancelled", date: "2099-01-06", time: "09:00", service: "Oral" }),
+    ];
+    expect((await call("POST", { body: { ...booking, patientName: "Allen", date: "2099-01-05", time: "14:00" } })).code).toBe(201);
+    expect((await call("POST", { body: { ...booking, patientName: "Allen", date: "2099-01-06", time: "14:00" } })).code).toBe(201);
+  });
+
+  it("doesn't mix up two patients", async () => {
+    h.session = { sub: "p2", email: "maria@example.com", role: "patient" };
+    h.rows = [row({ status: "confirmed", date: "2099-01-05", time: "09:00", service: "Oral" })];
+    expect((await call("POST", { body: { ...booking, date: "2099-01-05", time: "14:00" } })).code).toBe(201);
+  });
+
+  it("checks a guest walk-in by name and number", async () => {
+    h.rows = [row({ patient_id: null, patient_name: "Jose", contact: "0917 123 4567", status: "confirmed", date: "2099-01-05", time: "09:00" })];
+    const walkIn = { ...booking, patientName: "Jose", type: "walk-in", date: "2099-01-05", time: "14:00" };
+    expect((await call("POST", { body: { ...walkIn, contact: "09171234567" } })).code).toBe(409);
+    expect((await call("POST", { body: { ...walkIn, contact: "09998887777" } })).code).toBe(201);
+  });
+
+  it("refuses moving an appointment onto a day that already has that service", async () => {
+    h.rows = [
+      row({ id: "a", status: "confirmed", date: "2099-01-05", time: "09:00", service: "Oral" }),
+      row({ id: "b", status: "confirmed", date: "2099-01-07", time: "09:00", service: "Oral" }),
+    ];
+    const res = await patch("b", { date: "2099-01-05", time: "14:00" });
+    expect(res.code).toBe(409);
+    // Moving within its own day is not a clash with itself.
+    expect((await patch("b", { time: "15:00" })).code).toBe(200);
   });
 });

@@ -6,11 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import CollapsedEmail from "@/components/CollapsedEmail";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Eye, CheckCircle2, Ban, Archive, Loader2, Printer } from "lucide-react";
+import { Eye, CheckCircle2, Loader2, Printer } from "lucide-react";
 import { IconAction, RowActions } from "@/components/RowActions";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
-import { getPatients, getPatient, updatePatient, archivePatient, type Patient } from "@/lib/api/patients";
+import { getPatients, getPatient, updatePatient, type Patient } from "@/lib/api/patients";
 import { formatManilaDate, formatManilaDateTime } from "@/lib/formatDate";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import TableToolbar from "@/components/TableToolbar";
@@ -25,7 +24,6 @@ import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter
 const COLUMNS = ["Patient Name", "Patient ID", "Email Address", "Account Status", "Date Registered"];
 
 export default function AdminAccounts() {
-  const { user } = useAuth();
   const [accounts, setAccounts] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(EMPTY_FILTER);
@@ -72,8 +70,6 @@ export default function AdminAccounts() {
         : undefined,
     });
 
-  const canArchive = (p: Patient) => (p.appointmentsCount ?? 0) === 0 && (p.dentalRecordsCount ?? 0) === 0;
-
   const openDetail = (a: Patient) => {
     setSelectedId(a.id);
     setDetail(null);
@@ -92,32 +88,6 @@ export default function AdminAccounts() {
       if (selectedId === a.id) openDetail(a);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to activate account");
-    }
-  };
-
-  const deactivate = async (a: Patient) => {
-    try {
-      await updatePatient(a.id, { status: "inactive" });
-      toast.success(`${a.name}'s account has been deactivated and can no longer log in.`);
-      load();
-      if (selectedId === a.id) openDetail(a);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to deactivate account");
-    }
-  };
-
-  const remove = async (a: Patient) => {
-    if (!canArchive(a)) {
-      toast.error("This account has existing appointments or dental records and cannot be archived.");
-      return;
-    }
-    try {
-      await archivePatient(a.id, user?.name);
-      toast.success(`${a.name}'s account has been moved to the Archive.`);
-      setSelectedId(null);
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to archive account");
     }
   };
 
@@ -187,10 +157,8 @@ export default function AdminAccounts() {
                   <TableCell className={`print:hidden ${CODE_COL}`}>
                     <RowActions>
                       <IconAction label="View" icon={Eye} onClick={() => openDetail(a)} />
-                      {a.status === "inactive" ? (
+                      {a.status === "inactive" && (
                         <IconAction label="Activate" icon={CheckCircle2} className="text-success" onClick={() => activate(a)} />
-                      ) : (
-                        <IconAction label="Deactivate" icon={Ban} className="text-destructive" onClick={() => deactivate(a)} />
                       )}
                     </RowActions>
                   </TableCell>
@@ -234,28 +202,12 @@ export default function AdminAccounts() {
               <Row label="Last Login" value={detail.lastLogin ? formatManilaDateTime(detail.lastLogin) : "—"} />
               <Row label="Appointments" value={String(detail.appointmentsCount ?? 0)} />
               <Row label="Dental Records" value={String(detail.dentalRecordsCount ?? 0)} />
-              {!canArchive(detail) && (
-                <p className="text-xs text-muted-foreground border rounded-md p-2">
-                  This account has existing appointments or dental records, so it cannot be archived. Deactivate it instead.
-                </p>
-              )}
             </div>
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setSelectedId(null)}>Close</Button>
-            {detail && (detail.status === "active" ? (
-              <Button variant="secondary" onClick={() => deactivate(detail)}>Deactivate</Button>
-            ) : (
+            {detail && detail.status === "inactive" && (
               <Button onClick={() => activate(detail)}>Activate</Button>
-            ))}
-            {detail && (
-              <Button
-                variant="outline"
-                disabled={!canArchive(detail)}
-                onClick={() => remove(detail)}
-              >
-                <Archive className="w-4 h-4 mr-1" /> Archive
-              </Button>
             )}
           </DialogFooter>
         </DialogContent>

@@ -20,23 +20,75 @@ function mapRecord(r: any, treatments: any[], prescriptions: any[]) {
     date: toDateStr(r.date),
     diagnosis: r.diagnosis,
     toothNumber: r.tooth_number,
+    toothCodes: r.tooth_codes ?? {},
+    toothNotes: r.tooth_notes ?? {},
     treatmentNotes: r.treatment_notes,
     nextVisit: toDateStr(r.next_visit),
     createdAt: r.created_at,
     treatments: treatments
       .filter((t) => t.record_id === r.id)
-      .map((t) => ({ id: t.id, serviceId: t.service_id, serviceName: displayService(t.service_name) })),
+      .map((t) => ({ id: t.id, serviceId: t.service_id, serviceName: displayService(t.service_name), teeth: t.teeth ?? null })),
     prescriptions: prescriptions
       .filter((p) => p.record_id === r.id)
       .map((p) => ({ id: p.id, medicine: p.medicine, dosage: p.dosage, instructions: p.instructions })),
   };
 }
 
+/**
+ * The dental chart's columns are newer than their tables: which teeth each procedure was
+ * done on, and each tooth's chart codes. They're added on first use (once per instance), so
+ * records keep working without a separate migrate run; the statements are no-ops once done.
+ */
+let chartColumns: Promise<void> | null = null;
+function ensureChartColumns() {
+  chartColumns ??= (async () => {
+    await sql`/* treatment-teeth-column */ ALTER TABLE treatments ADD COLUMN IF NOT EXISTS teeth TEXT`;
+    await sql`/* tooth-codes-column */ ALTER TABLE dental_records ADD COLUMN IF NOT EXISTS tooth_codes JSONB`;
+    await sql`/* tooth-notes-column */ ALTER TABLE dental_records ADD COLUMN IF NOT EXISTS tooth_notes JSONB`;
+  })().catch((err) => {
+    // Tried again next time; if a column really is missing the query says so.
+    chartColumns = null;
+    console.error("Could not add the dental chart's columns", err);
+  });
+  return chartColumns;
+}
+
+/** An FDI tooth number: 11–48 adult, 51–85 baby. */
+const REAL_TOOTH = /^([1-4][1-8]|[5-8][1-5])$/;
+
+/** The notes on teeth as sent ({ "16": "Sensitive to cold" }), as JSON to store: real teeth
+ * only, each note trimmed and kept to 500 characters, empty ones left out. Null when not sent. */
+function toothNotesJson(v: unknown): string | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string> = {};
+  for (const [tooth, note] of Object.entries(v as Record<string, unknown>)) {
+    if (!REAL_TOOTH.test(tooth) || typeof note !== "string") continue;
+    const text = note.trim().slice(0, 500);
+    if (text) out[tooth] = text;
+  }
+  return JSON.stringify(out);
+}
+
+/** A tooth's chart codes as sent ({ "16": ["D", "Am"] }), as JSON to store: real teeth only
+ * (FDI: 11–48 adult, 51–85 baby), codes as short strings, empty teeth left out. Null when
+ * not sent. */
+function toothCodesJson(v: unknown): string | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string[]> = {};
+  for (const [tooth, codes] of Object.entries(v as Record<string, unknown>)) {
+    if (!REAL_TOOTH.test(tooth) || !Array.isArray(codes)) continue;
+    const list = [...new Set(codes.filter((c): c is string => typeof c === "string" && c.length > 0 && c.length <= 8))];
+    if (list.length) out[tooth] = list;
+  }
+  return JSON.stringify(out);
+}
+
 async function loadTreatmentsAndPrescriptions(recordIds: string[]) {
   if (recordIds.length === 0) return { treatments: [], prescriptions: [] };
+  await ensureChartColumns();
   const [treatments, prescriptions] = await Promise.all([
     sql.query(
-      `SELECT t.id, t.record_id, t.service_id, s.service_name FROM treatments t LEFT JOIN services s ON s.id = t.service_id WHERE t.record_id = ANY($1)`,
+      `SELECT t.id, t.record_id, t.service_id, t.teeth, s.service_name FROM treatments t LEFT JOIN services s ON s.id = t.service_id WHERE t.record_id = ANY($1)`,
       [recordIds],
     ),
     sql.query(`SELECT id, record_id, medicine, dosage, instructions FROM prescriptions WHERE record_id = ANY($1)`, [recordIds]),
@@ -57,14 +109,16 @@ async function findOrCreateService(name: string): Promise<string> {
 
 async function replaceTreatmentsAndPrescriptions(
   recordId: string,
-  treatments: { serviceId?: string; serviceName?: string }[] | undefined,
+  treatments: { serviceId?: string; serviceName?: string; teeth?: string | null }[] | undefined,
   prescriptions: { medicine: string; dosage?: string; instructions?: string }[] | undefined,
 ) {
   if (treatments) {
+    await ensureChartColumns();
     await sql`DELETE FROM treatments WHERE record_id = ${recordId}`;
     for (const t of treatments) {
       const serviceId = t.serviceId ?? (t.serviceName ? await findOrCreateService(t.serviceName) : null);
-      if (serviceId) await sql`INSERT INTO treatments (record_id, service_id) VALUES (${recordId}, ${serviceId})`;
+      const teeth = typeof t.teeth === "string" && t.teeth.trim() ? t.teeth.trim() : null;
+      if (serviceId) await sql`INSERT INTO treatments (record_id, service_id, teeth) VALUES (${recordId}, ${serviceId}, ${teeth})`;
     }
   }
   if (prescriptions) {
@@ -269,17 +323,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (session.role === "patient") return res.status(403).json({ error: "Forbidden" });
 
+  const PAST_NEXT_VISIT = "The next visit can't be in the past. Choose today or a later date.";
+
   if (req.method === "POST") {
-    const { appointmentId, date, diagnosis, toothNumber, treatmentNotes, nextVisit, treatments, prescriptions } = req.body ?? {};
+    const { appointmentId, date, diagnosis, toothNumber, toothCodes, toothNotes, treatmentNotes, nextVisit, treatments, prescriptions } = req.body ?? {};
     if (!appointmentId || !diagnosis) {
       return res.status(400).json({ error: "Appointment and diagnosis are required" });
     }
     const apptRows = await sql`SELECT id, date FROM appointments WHERE id = ${appointmentId}`;
     if (!apptRows[0]) return res.status(400).json({ error: "Appointment not found" });
+    if (nextVisit && nextVisit < manilaDateStr(new Date())) return res.status(400).json({ error: PAST_NEXT_VISIT });
 
+    await ensureChartColumns();
     const inserted = await sql`
-      INSERT INTO dental_records (appointment_id, date, diagnosis, tooth_number, treatment_notes, next_visit)
-      VALUES (${appointmentId}, ${date ?? apptRows[0].date}, ${diagnosis}, ${toothNumber ?? null}, ${treatmentNotes ?? null}, ${nextVisit ?? null})
+      INSERT INTO dental_records (appointment_id, date, diagnosis, tooth_number, tooth_codes, tooth_notes, treatment_notes, next_visit)
+      VALUES (${appointmentId}, ${date ?? apptRows[0].date}, ${diagnosis}, ${toothNumber ?? null}, ${toothCodesJson(toothCodes)}::jsonb,
+        ${toothNotesJson(toothNotes)}::jsonb, ${treatmentNotes ?? null}, ${nextVisit ?? null})
       RETURNING id
     `;
     const recordId = inserted[0].id;
@@ -293,15 +352,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   if (req.method === "PATCH") {
-    const { diagnosis, toothNumber, treatmentNotes, nextVisit, treatments, prescriptions } = req.body ?? {};
+    const { diagnosis, toothNumber, toothCodes, toothNotes, treatmentNotes, nextVisit, treatments, prescriptions } = req.body ?? {};
 
-    const existingRows = await sql`SELECT id FROM dental_records WHERE id = ${id}`;
+    const existingRows = await sql`SELECT id, next_visit FROM dental_records WHERE id = ${id}`;
     if (!existingRows[0]) return res.status(404).json({ error: "Dental record not found" });
+    // A record saved with a next visit that has since passed can still be edited; a new
+    // next visit has to be today or later.
+    if (nextVisit && nextVisit !== toDateStr(existingRows[0].next_visit) && nextVisit < manilaDateStr(new Date())) {
+      return res.status(400).json({ error: PAST_NEXT_VISIT });
+    }
 
+    await ensureChartColumns();
     await sql`
       UPDATE dental_records SET
         diagnosis = COALESCE(${diagnosis ?? null}, diagnosis),
         tooth_number = COALESCE(${toothNumber ?? null}, tooth_number),
+        tooth_codes = COALESCE(${toothCodesJson(toothCodes)}::jsonb, tooth_codes),
+        tooth_notes = COALESCE(${toothNotesJson(toothNotes)}::jsonb, tooth_notes),
         treatment_notes = COALESCE(${treatmentNotes ?? null}, treatment_notes),
         next_visit = COALESCE(${nextVisit ?? null}, next_visit),
         updated_at = now()

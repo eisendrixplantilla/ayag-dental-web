@@ -22,7 +22,8 @@ export default function Hint({ label, children, side }: Props) {
       <Tooltip>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipPortal>
-          <TooltipContent side={side} className="max-w-xs text-xs">{label}</TooltipContent>
+          {/* Above an open picker or menu too (those sit at z-60). */}
+          <TooltipContent side={side} className="z-[70] max-w-xs text-xs">{label}</TooltipContent>
         </TooltipPortal>
       </Tooltip>
     </TooltipProvider>

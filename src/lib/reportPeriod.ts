@@ -47,12 +47,6 @@ export function inPeriod(appointments: Appointment[], p: Period): Appointment[] 
   return b ? appointments.filter((a) => a.date >= b.from && a.date <= b.to) : appointments;
 }
 
-/** The dates ("yyyy-MM-dd") inside the period. */
-export function datesInPeriod(dates: string[], p: Period): string[] {
-  const b = periodBounds(p);
-  return b ? dates.filter((d) => d >= b.from && d <= b.to) : dates;
-}
-
 export function countByStatus(appointments: Appointment[]): Record<AptStatus, number> {
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<AptStatus, number>;
   for (const a of appointments) if (a.status in counts) counts[a.status] += 1;

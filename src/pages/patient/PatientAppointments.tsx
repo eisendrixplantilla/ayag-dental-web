@@ -24,6 +24,7 @@ import TablePagination from "@/components/TablePagination";
 import { usePagination, PAGE_SIZE } from "@/hooks/usePagination";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 import Hint from "@/components/Hint";
+import { ConsentSection } from "@/components/Consent";
 
 const APT_COLUMNS = ["Reference", "Service", "Dentist", "Date", "Time", "Status", "When"];
 /** Still ahead of the patient — the clinic hasn't finished with it, so it can still
@@ -352,6 +353,8 @@ export default function PatientAppointments() {
                   <p className="text-foreground">{detailsApt.remarks}</p>
                 </div>
               )}
+              {/* The consent they signed at the clinic, to read again or print. */}
+              {["confirmed", "rescheduled", "completed"].includes(detailsApt.status) && <ConsentSection appointmentId={detailsApt.id} />}
             </div>
           )}
         </DialogContent>

@@ -25,6 +25,7 @@ import SortableHead from "@/components/SortableHead";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ALL_FIELDS, EMPTY_FILTER, describeReportFilter, filterIsActive, matchesReportFilter } from "@/lib/reportFilter";
 import { IconAction, RowActions } from "@/components/RowActions";
+import { ConsentSection } from "@/components/Consent";
 
 const COLUMNS = [
   "Reference", "Patient Name", "Service", "Assigned Dentist", "Date", "Time", "Booked On", "Type", "Status",
@@ -303,6 +304,9 @@ export default function AdminOnlineAppointments() {
               </p>
               {selectedLive.reason && <p><span className="font-semibold text-foreground">Rejection Reason:</span> {selectedLive.reason}</p>}
             </div>
+          )}
+          {selectedLive && ["confirmed", "rescheduled", "completed"].includes(selectedLive.status) && (
+            <ConsentSection appointmentId={selectedLive.id} />
           )}
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>Close</Button>

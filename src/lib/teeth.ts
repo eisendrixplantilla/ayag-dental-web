@@ -23,3 +23,20 @@ export function parseTeeth(text: string | null | undefined): number[] {
 /** How the chosen teeth are saved in Tooth No.: "16, 26". */
 export const formatTeeth = (teeth: number[]) =>
   [...teeth].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).join(", ");
+
+/** A procedure of a visit as a form holds it, with the teeth it was done on. */
+type Placed = { serviceName?: string | null; teeth?: string | null };
+
+/** The teeth a visit's named procedures were done on. */
+const placedTeeth = (list: Placed[]) => list.filter((p) => p.serviceName?.trim()).flatMap((p) => parseTeeth(p.teeth));
+
+/**
+ * The visit's Tooth No. once its procedures change in the form (renamed, added, removed):
+ * every procedure's teeth, and any the record had without a procedure (saved before
+ * procedures had teeth), which stay as they were.
+ */
+export function teethAfter(value: string, before: Placed[], after: Placed[]): string {
+  const had = placedTeeth(before);
+  const loose = parseTeeth(value).filter((t) => !had.includes(t));
+  return formatTeeth([...new Set([...placedTeeth(after), ...loose])]);
+}

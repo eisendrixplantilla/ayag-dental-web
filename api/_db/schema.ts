@@ -273,6 +273,34 @@ ALTER TABLE dentist_unavailable ADD COLUMN IF NOT EXISTS end_time TEXT;
 ALTER TABLE patients ADD COLUMN IF NOT EXISTS patient_code TEXT UNIQUE;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reference TEXT UNIQUE;
 
+-- Which teeth each procedure of a record was done on ("16, 26"); the record's
+-- tooth_number stays the whole visit's teeth.
+ALTER TABLE treatments ADD COLUMN IF NOT EXISTS teeth TEXT;
+-- The dental chart's codes per tooth ({"16": ["D", "Am"]}): conditions, restorations,
+-- surgery and X-rays, as on the standard dental record.
+ALTER TABLE dental_records ADD COLUMN IF NOT EXISTS tooth_codes JSONB;
+-- A note on a tooth ({"16": "Sensitive to cold"}).
+ALTER TABLE dental_records ADD COLUMN IF NOT EXISTS tooth_notes JSONB;
+
+-- The patient's consent to the procedure, signed on screen before the consultation: one
+-- per appointment, the wording as it was signed, and the drawn signature (a PNG data URL).
+-- Signed, it never changes; declined, it can still be signed. Also made on first use
+-- (api/_lib/consent.ts). The clinic's own wording is clinic_info.consent_text.
+ALTER TABLE clinic_info ADD COLUMN IF NOT EXISTS consent_text TEXT;
+CREATE TABLE IF NOT EXISTS consents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  appointment_id UUID NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('signed', 'declined')),
+  patient_name TEXT NOT NULL,
+  procedure TEXT,
+  dentist_name TEXT,
+  consent_text TEXT NOT NULL,
+  signature TEXT,
+  decline_reason TEXT,
+  recorded_by TEXT,
+  signed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_dentist ON appointments(dentist_id);
 CREATE INDEX IF NOT EXISTS idx_dental_records_appointment ON dental_records(appointment_id);

@@ -39,7 +39,7 @@ const reportMeta: Record<ReportType, { title: string; columns: string[] }> = {
     title: "Walk-in Report",
     columns: ["Patient Name", "Contact Number", "Service", "Dentist", "Date", "Time", "Status"],
   },
-  patient: { title: "Patient Report", columns: ["Patient Name", "Patient ID", "Contact Number", "Email Address", "Account", "Total Appointments", "Latest Consultation"] },
+  patient: { title: "Patient Report", columns: ["Patient Name", "Patient ID", "Contact Number", "Email Address", "Account", "Total Appointments", "Recent Consultation"] },
 };
 
 /** Free text (names, services) may wrap; short values (dates, numbers, "No account")

@@ -115,6 +115,10 @@ export function pendingChange(l: LeaveRequest): LeaveChange | null {
 }
 
 /** What a change asks for: "work Nov 3, Nov 4" or "leave only 1:00 PM – 3:00 PM". */
+/** Newest ask first: a change asked to approved leave counts from when it was asked. */
+export const byNewestAsk = (a: LeaveRequest, b: LeaveRequest) =>
+  (pendingChange(b)?.requestedAt ?? b.createdAt).localeCompare(pendingChange(a)?.requestedAt ?? a.createdAt);
+
 export function describeChange(c: LeaveChange): string {
   return c.dates.length
     ? `work ${c.dates.map((d) => format(parseISO(d), "MMM d")).join(", ")}`
