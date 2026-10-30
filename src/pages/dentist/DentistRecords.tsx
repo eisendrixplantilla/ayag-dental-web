@@ -471,6 +471,7 @@ export default function DentistRecords() {
         <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Dental Record Details</DialogTitle>
+            <DialogDescription className="sr-only">The record, its dental chart and the patient's consent.</DialogDescription>
           </DialogHeader>
           {viewTarget && (
             <div className="space-y-4">

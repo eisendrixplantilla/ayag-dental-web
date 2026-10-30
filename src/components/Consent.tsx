@@ -316,29 +316,30 @@ export function ConsentDialog({ appointment, onClose, onSaved }: {
               <p className="text-sm text-muted-foreground">Hand the screen to the patient to read and sign.</p>
               <Wording text={form.text} className="max-h-64 overflow-y-auto overscroll-contain rounded-md border bg-muted/30 p-3" />
 
-              {declining ? (
+              {declining && (
                 <div className="space-y-2">
                   <Label htmlFor="consent-decline-reason">Why the patient declined (optional)</Label>
                   <Textarea id="consent-decline-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={3}
                     placeholder="e.g. Wants to think it over, or to ask for a second opinion" />
                   <p className="text-xs text-muted-foreground">The consultation stays locked until the patient signs.</p>
                 </div>
-              ) : (
-                <>
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} className="mt-0.5" aria-label="I have read and understood this consent" />
-                    <span>I have read and understood this consent, my questions were answered, and I agree to the procedure.</span>
-                  </label>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="consent-printed-name">Patient's printed name</Label>
-                    <Input id="consent-printed-name" value={printedName} onChange={(e) => setPrintedName(e.target.value)} maxLength={120} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Patient's signature</Label>
-                    <SignaturePad onChange={setSignature} disabled={saving} />
-                  </div>
-                </>
               )}
+              {/* Hidden, not removed, while declining: going Back finds the pad as the patient
+                  left it, and the signature it hands back is the one on screen. */}
+              <div className={cn("space-y-4", declining && "hidden")}>
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} className="mt-0.5" aria-label="I have read and understood this consent" />
+                  <span>I have read and understood this consent, my questions were answered, and I agree to the procedure.</span>
+                </label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="consent-printed-name">Patient's printed name</Label>
+                  <Input id="consent-printed-name" value={printedName} onChange={(e) => setPrintedName(e.target.value)} maxLength={120} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Patient's signature</Label>
+                  <SignaturePad onChange={setSignature} disabled={saving} />
+                </div>
+              </div>
             </div>
             <DialogFooter className="gap-2 sm:justify-between">
               {declining ? (

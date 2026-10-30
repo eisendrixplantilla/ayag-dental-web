@@ -326,6 +326,25 @@ describe("the patient's consent before the consultation", () => {
     expect(await screen.findByText("Dental Record Form")).toBeInTheDocument();
   });
 
+  it("keeps the signature on screen when Patient Declined is tapped and then taken back", async () => {
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    pick(row, /Patient Consent/);
+    const form = within(await screen.findByRole("dialog"));
+    fireEvent.click(await form.findByRole("checkbox", { name: /read and understood/ }));
+    const pad = form.getByRole("img", { name: /Signature pad/ });
+    fireEvent.pointerDown(pad, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerUp(pad, { clientX: 10, clientY: 10, pointerId: 1 });
+
+    fireEvent.click(form.getByRole("button", { name: /Patient Declined/ }));
+    fireEvent.click(form.getByRole("button", { name: "Back" }));
+    // The same pad, still signed: Sign Consent sends what the patient can see.
+    expect(form.getByRole("img", { name: /Signature pad/ })).toBe(pad);
+    expect(form.queryByText(/Sign here with/)).toBeNull();
+    expect(form.getByRole("button", { name: /Sign Consent/ })).toBeEnabled();
+  });
+
   it("records a patient who declines, and the consultation stays locked", async () => {
     const { api } = await import("@/contexts/AuthContext");
     h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];

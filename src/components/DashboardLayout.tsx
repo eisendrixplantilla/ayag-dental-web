@@ -138,7 +138,13 @@ function AppSidebar() {
               <p className="text-xs text-sidebar-foreground/50">{getRoleLabel(user?.role || "patient")}</p>
             </div>
           )}
-          <Button variant="ghost" className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => { logout(); navigate("/login"); }}>
+          <Button variant="ghost" className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => {
+            // The phone drawer remembers being open for the tab; closed here, so whoever logs in
+            // next doesn't land on a page covered by it.
+            setOpenMobile(false);
+            logout();
+            navigate("/login");
+          }}>
             <LogOut className="w-4 h-4 mr-2" />
             {!collapsed && "Sign Out"}
           </Button>

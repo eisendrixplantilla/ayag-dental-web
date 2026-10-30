@@ -299,6 +299,18 @@ describe("mobile sidebar", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(await screen.findByRole("heading", { level: 1, name: "Walk-in Appointments" })).toBeInTheDocument();
   });
+
+  it("closes the drawer on Sign Out, so the next person to log in isn't greeted by it", async () => {
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 500 });
+    sessionStorage.setItem("sidebar:openMobile", "true");
+    h.user = ADMIN;
+    h.appts = [];
+    renderAdminApp();
+
+    const drawer = await screen.findByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: /Sign Out/ }));
+    expect(sessionStorage.getItem("sidebar:openMobile")).toBe("false");
+  });
 });
 
 describe("each role is sent to its own module", () => {
