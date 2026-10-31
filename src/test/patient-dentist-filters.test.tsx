@@ -449,3 +449,31 @@ describe("a patient's own list puts their newest booking on top", () => {
     expect(services).toEqual(["Tooth Extraction", "Oral Prophylaxis"]);
   });
 });
+
+describe("the dentist's patient list while it loads", () => {
+  beforeEach(() => {
+    h.role = "dentist";
+    h.name = "Dr. Mike Johnson";
+  });
+
+  it("shows it's loading, not that there are no patients", async () => {
+    const { getPatients } = await import("@/lib/api/patients");
+    vi.mocked(getPatients).mockImplementationOnce(() => new Promise(() => {}));
+    render(<MemoryRouter><DentistPatientHistory /></MemoryRouter>);
+
+    expect(document.querySelector(".animate-spin")).not.toBeNull();
+    expect(screen.queryByText(/You have no patients yet/)).toBeNull();
+  });
+
+  it("says there are none once it has loaded empty, and says so when it couldn't load", async () => {
+    render(<MemoryRouter><DentistPatientHistory /></MemoryRouter>);
+    expect(await screen.findByText(/You have no patients yet/)).toBeInTheDocument();
+    cleanup();
+
+    const { getPatients } = await import("@/lib/api/patients");
+    vi.mocked(getPatients).mockRejectedValueOnce(new Error("offline"));
+    render(<MemoryRouter><DentistPatientHistory /></MemoryRouter>);
+    expect(await screen.findByText(/Couldn't load your patients/)).toBeInTheDocument();
+    expect(screen.queryByText(/You have no patients yet/)).toBeNull();
+  });
+});

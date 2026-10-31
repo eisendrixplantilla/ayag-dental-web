@@ -301,6 +301,19 @@ CREATE TABLE IF NOT EXISTS consents (
   signed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Clinical photos taken at the consultation, before and after: shrunk in the browser to a
+-- JPEG data URL. Seen by dentists only. Also made on first use (api/_lib/photos.ts).
+CREATE TABLE IF NOT EXISTS record_photos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  record_id UUID NOT NULL REFERENCES dental_records(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('before', 'after')),
+  label TEXT,
+  image TEXT NOT NULL,
+  taken_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_record_photos_record ON record_photos(record_id);
+
 CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_dentist ON appointments(dentist_id);
 CREATE INDEX IF NOT EXISTS idx_dental_records_appointment ON dental_records(appointment_id);

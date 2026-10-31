@@ -177,8 +177,8 @@ export async function consentHandler(req: VercelRequest, res: VercelResponse, se
       return res.status(409).json({ error: "A consent is taken for an approved appointment, before its consultation." });
     }
     const form = await formFor(appt);
-    const [who] = await sql`/* consent-recorder */ SELECT first_name, last_name, name, email FROM users WHERE id = ${session.sub}`;
-    const recordedBy = [who?.first_name, who?.last_name].filter(Boolean).join(" ") || who?.name || who?.email || null;
+    const [who] = await sql`/* consent-recorder */ SELECT first_name, last_name, email FROM users WHERE id = ${session.sub}`;
+    const recordedBy = [who?.first_name, who?.last_name].filter(Boolean).join(" ") || who?.email || null;
     const declineReason = decision === "declined" && typeof reason === "string" ? reason.trim().slice(0, 500) || null : null;
 
     // A declined consent can still be signed later; a signed one is never changed.

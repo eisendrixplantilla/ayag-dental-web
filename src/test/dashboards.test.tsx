@@ -49,6 +49,8 @@ beforeAll(() => {
 afterEach(cleanup);
 
 const today = manilaTodayDateStr();
+/** Earlier in this month, or later when today is the 1st: a day of the month that isn't today. */
+const otherDayThisMonth = `${today.slice(0, 7)}-${today.endsWith("-01") ? "02" : "01"}`;
 function apt(i: number, over: Partial<Appointment> = {}): Appointment {
   return {
     id: `00000000-0000-4000-8000-00000000000${i}`, patientId: "p1", patientName: `Patient ${i}`, contact: null, email: null,
@@ -73,7 +75,7 @@ describe("staff dashboards", () => {
     h.role = "admin";
     h.calls = [];
     h.appts = [
-      apt(1, { status: "completed", date: `${today.slice(0, 7)}-01`, service: "Cleaning" }),
+      apt(1, { status: "completed", date: otherDayThisMonth, service: "Cleaning" }),
       apt(2),
       apt(3, { status: "pending", date: "2099-01-05", patientName: "Maria", service: "Root Canal" }),
     ];
@@ -168,7 +170,7 @@ describe("staff dashboards", () => {
 
   it("superadmin: staff cards in place of the patient ones", async () => {
     h.role = "superadmin";
-    h.appts = [apt(1), apt(2, { status: "completed", date: `${today.slice(0, 7)}-01` })];
+    h.appts = [apt(1), apt(2, { status: "completed", date: otherDayThisMonth })];
     h.leave = [{
       id: "lv1", dentistId: "d1", dentistName: "Dr. Mike Johnson", role: "dentist", startDate: "2099-01-05", endDate: "2099-01-06",
       startTime: null, endTime: null, reason: "Vacation", note: null, status: "pending", decidedBy: null, decidedAt: null,

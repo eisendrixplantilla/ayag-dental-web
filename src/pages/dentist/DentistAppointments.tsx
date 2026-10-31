@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +19,8 @@ import {
 } from "@/components/ui/table";
 import { COMPACT_TABLE, WRAP_CELL, PIN_COL, CODE_COL } from "@/lib/tableClass";
 import { toast } from "@/hooks/use-toast";
-import { Eye, Stethoscope, CalendarClock, XCircle, Loader2, Printer, Clock3, CalendarCheck, FileSignature } from "lucide-react";
-import { createDentalRecord, type TreatmentInput } from "@/lib/api/dentalRecords";
+import { Eye, Stethoscope, CalendarClock, XCircle, Loader2, Printer, Clock3, CalendarCheck, FileSignature, FileText, FilePlus2 } from "lucide-react";
+import { createDentalRecord, getDentalRecords, savePhotos, type PhotoDraft, type TreatmentInput } from "@/lib/api/dentalRecords";
 import { formatTimeRange, toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { getAppointments, rescheduleAppointment, cancelAppointment, completeAppointment, describeEmailOutcome, byNewestBooked, type Appointment } from "@/lib/api/appointments";
 import { getDentistSchedule, generateAvailableSlots, forServices, DAY_NAMES, type DentistScheduleData } from "@/lib/api/staff";
@@ -46,6 +47,7 @@ import { IconAction, MoreActions, RowActions } from "@/components/RowActions";
 import { DatePicker } from "@/components/DatePicker";
 import { ConsentDialog, ConsentSection } from "@/components/Consent";
 import { getConsents, type ConsentSummary } from "@/lib/api/consent";
+import { PhotoEditor } from "@/components/RecordPhotos";
 
 const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/20",
@@ -60,6 +62,7 @@ const emptyRecord = {
   // The first is the procedure typed in; the chart adds others as teeth are given them.
   treatments: [{ serviceName: "" }] as TreatmentInput[],
   diagnosis: "", toothNumber: "", toothCodes: {} as ToothCodes, toothNotes: {} as ToothNotes, treatmentNotes: "", prescription: "", nextVisit: "",
+  photos: [] as PhotoDraft[],
 };
 
 export default function DentistAppointments() {
@@ -78,8 +81,11 @@ export default function DentistAppointments() {
       .finally(() => { if (!silent) setLoading(false); });
     // Which visits the patient has signed the consent for: the consultation waits for it.
     getConsents().then(setConsents).catch(() => {});
+    // Which visits have a dental record written, so a completed one's details can open it.
+    getDentalRecords().then(rs => setRecorded(new Set(rs.map(r => r.appointmentId)))).catch(() => {});
   };
   const [consents, setConsents] = useState<Map<string, ConsentSummary>>(new Map());
+  const [recorded, setRecorded] = useState<Set<string> | null>(null);
   const [consentApt, setConsentApt] = useState<Appointment | null>(null);
 
   useEffect(() => load(), []);
@@ -212,7 +218,7 @@ export default function DentistAppointments() {
     setSaving(true);
     try {
       await completeAppointment(consult.id);
-      await createDentalRecord({
+      const record = await createDentalRecord({
         appointmentId: consult.id,
         date: consult.date,
         diagnosis: recordForm.diagnosis,
@@ -226,6 +232,16 @@ export default function DentistAppointments() {
         nextVisit: recordForm.nextVisit || undefined,
       });
       toast({ title: "Consultation saved", description: `Dental record added to ${consult.patientName}'s history. Appointment marked as Completed.` });
+      // The record is saved either way; a photo that didn't upload can be added from Records.
+      try {
+        await savePhotos(record.id, recordForm.photos);
+      } catch (err) {
+        toast({
+          title: "Some photos weren't saved",
+          description: `${err instanceof Error ? err.message.replace(/\.?$/, ".") : "The upload failed."} Add them again from Records → Edit.`,
+          variant: "destructive",
+        });
+      }
       setConsult(null);
       load();
     } catch (err) {
@@ -400,12 +416,13 @@ export default function DentistAppointments() {
         <DialogContent className="max-w-lg bg-background">
           <DialogHeader>
             <DialogTitle className="font-heading">Appointment Details</DialogTitle>
+            <DialogDescription className="sr-only">The visit, its consent and, once it's done, its dental record.</DialogDescription>
           </DialogHeader>
           {details && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <Field label="Patient Name" value={details.patientName} />
               <Field label="Contact Number" value={details.contact ?? "—"} />
-              <Field label="Email Address" value={details.email ?? "—"} />
+              <Field label="Email Address" value={details.email ?? "—"} className="normal-case break-all" />
               <Field label="Selected Service" value={details.service} />
               <Field label="Appointment Date" value={format(parseISO(details.date), "MMMM d, yyyy")} />
               <Field label="Appointment Time" value={formatTimeRange(details.time, details.endTime)} />
@@ -413,6 +430,24 @@ export default function DentistAppointments() {
               <Field label="Current Status" value={details.status} />
               {details.reason && <div className="col-span-2"><Field label="Reason" value={details.reason} /></div>}
               {details.remarks && <div className="col-span-2"><Field label="Remarks" value={details.remarks} /></div>}
+              {/* What was done lives on the dental record: open it, or write it if it's missing. */}
+              {details.status === "completed" && recorded && (
+                <div className="col-span-2">
+                  {recorded.has(details.id) ? (
+                    <Button asChild size="sm">
+                      <Link to="/dentist/records" state={{ viewFor: details.id }}>
+                        <FileText className="w-4 h-4 mr-1.5" /> View Dental Record
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" variant="outline">
+                      <Link to="/dentist/records" state={{ writeFor: details.id }}>
+                        <FilePlus2 className="w-4 h-4 mr-1.5" /> Write Dental Record
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              )}
               {["confirmed", "rescheduled", "completed"].includes(details.status) && (
                 <ConsentSection appointmentId={details.id} className="col-span-2" />
               )}
@@ -470,6 +505,10 @@ export default function DentistAppointments() {
                 })}
                 patientId={consult?.patientId}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Photos (optional)</Label>
+              <PhotoEditor photos={recordForm.photos} onChange={(photos) => setRecordForm((f) => ({ ...f, photos }))} disabled={saving} />
             </div>
             <div className="space-y-2">
               <Label>Treatment Notes</Label>
@@ -629,11 +668,11 @@ export default function DentistAppointments() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium text-foreground capitalize">{value}</p>
+      <p className={cn("font-medium text-foreground capitalize break-words", className)}>{value}</p>
     </div>
   );
 }

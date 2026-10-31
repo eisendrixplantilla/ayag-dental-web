@@ -65,9 +65,12 @@ export default function DentistPatientHistory() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<DentalRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  // The list of patients to pick from: not "you have none" until it has actually loaded.
+  const [listState, setListState] = useState<"loading" | "ready" | "failed">("loading");
   const print = usePrintDocument();
 
   useEffect(() => {
+    setListState("loading");
     Promise.all([getPatients(), getAppointments()])
       .then(([allPatients, allAppointments]) => {
         const mine = allAppointments.filter(a => !user?.name || a.dentistName === user.name);
@@ -78,8 +81,9 @@ export default function DentistPatientHistory() {
         if (mostRecent?.patientId) {
           setSelectedId(prev => prev || mostRecent.patientId!);
         }
+        setListState("ready");
       })
-      .catch(() => {});
+      .catch(() => setListState("failed"));
   }, [user?.name]);
 
   const myPatients = useMemo(() => patients.filter(p => myPatientIds.has(p.id)), [patients, myPatientIds]);
@@ -183,12 +187,12 @@ export default function DentistPatientHistory() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">Patient History</h1>
-          <p className="text-muted-foreground flex items-center gap-2">
+          <div className="text-muted-foreground flex items-center gap-2">
             Full clinical history of your patients
-            <Badge variant="outline" className="gap-1 text-muted-foreground">
+            <Badge variant="outline" className="gap-1 text-muted-foreground shrink-0 whitespace-nowrap">
               <Lock className="w-3 h-3" />View only
             </Badge>
-          </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 print:hidden">
           {selected && (
@@ -240,10 +244,14 @@ export default function DentistPatientHistory() {
         </div>
       </div>
 
-      {!selected ? (
+      {!selected && listState === "loading" ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : !selected ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            {myPatients.length === 0
+            {listState === "failed"
+              ? "Couldn't load your patients. Refresh the page to try again."
+              : myPatients.length === 0
               ? "You have no patients yet. Patients appear here automatically once you have an appointment with them."
               : "Select a patient to view their full history."}
           </CardContent>

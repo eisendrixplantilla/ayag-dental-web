@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
 // schema and checks the joins against it.
 const root = path.resolve(__dirname, "../..");
 const schema = fs.readFileSync(path.join(root, "api/_db/schema.ts"), "utf8");
+// The one-shot migrations drop columns the original CREATE TABLE still lists (users.name).
+const migrations = fs.readFileSync(path.join(root, "api/admin/db.ts"), "utf8");
 
-/** Every column `CREATE TABLE <name>` declares, plus whatever is added by ALTER. */
+/** Every column `CREATE TABLE <name>` declares, plus whatever is added by ALTER, less what a migration drops. */
 function columnsOf(table: string): Set<string> {
   const create = new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\n\\);`).exec(schema);
   const columns = new Set<string>();
@@ -18,6 +20,9 @@ function columnsOf(table: string): Set<string> {
   }
   for (const m of schema.matchAll(new RegExp(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ([a-z_]+)`, "g"))) {
     columns.add(m[1]);
+  }
+  for (const m of migrations.matchAll(new RegExp(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ([a-z_]+)`, "g"))) {
+    columns.delete(m[1]);
   }
   return columns;
 }
@@ -36,6 +41,25 @@ describe("the columns the handlers join on", () => {
     expect(columnsOf("patients").has("archived_at")).toBe(true); // added by ALTER
     expect(columnsOf("patients").has("patient_id")).toBe(false);
     expect(columnsOf("services").has("sort_order")).toBe(true);
+    expect(columnsOf("users").has("name")).toBe(false); // dropped by migrate_v2
+  });
+
+  it("only selects columns the table has", () => {
+    const wrong: string[] = [];
+    // The migrations read the old columns on purpose, before they drop them.
+    for (const file of apiFiles.filter((f) => !f.endsWith(path.join("admin", "db.ts")))) {
+      const source = fs.readFileSync(file, "utf8");
+      // A plain list straight off one table, e.g. "SELECT first_name, last_name FROM users"
+      for (const m of source.matchAll(/SELECT\s+([a-z_]+(?:\s*,\s*[a-z_]+)*)\s+FROM\s+([a-z_]+)\b/g)) {
+        const [, list, table] = m;
+        const columns = columnsOf(table);
+        if (columns.size === 0) continue;
+        for (const column of list.split(",").map((c) => c.trim())) {
+          if (!columns.has(column)) wrong.push(`${path.relative(root, file)}: ${table}.${column}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("only joins on columns the table declares", () => {

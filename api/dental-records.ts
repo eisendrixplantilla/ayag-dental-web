@@ -3,6 +3,7 @@ import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { displayService, legacyNames } from "./_lib/services.js";
 import { manilaDateStr } from "./_lib/date.js";
+import { photosHandler } from "./_lib/photos.js";
 
 function toDateStr(v: unknown): string | null {
   if (v == null) return null;
@@ -159,6 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!session) return res.status(401).json({ error: "Unauthorized" });
 
   const id = typeof req.query.id === "string" ? req.query.id : undefined;
+  if (req.query.photos || req.query.photo) return photosHandler(req, res, session);
 
   if (req.method === "GET") {
     if (req.query.services === "true") {

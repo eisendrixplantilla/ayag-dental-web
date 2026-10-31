@@ -191,3 +191,55 @@ export async function updateDentalRecord(id: string, patch: DentalRecordUpdate):
   });
   return data.record;
 }
+
+/** A clinical photo on a record, before or after the procedure. Dentists only. */
+export type PhotoKind = "before" | "after";
+export const PHOTO_LABELS = ["Front", "Upper", "Lower", "Left", "Right"] as const;
+export const MAX_PHOTOS_PER_KIND = 6;
+
+export interface RecordPhoto {
+  id: string;
+  recordId: string;
+  kind: PhotoKind;
+  label: string | null;
+  /** A JPEG data URL. */
+  image: string;
+  takenBy: string | null;
+  takenAt: string;
+}
+
+/** A photo in a form: one already saved has its id; a new one has none until it's saved. */
+export interface PhotoDraft {
+  id?: string;
+  kind: PhotoKind;
+  label: string | null;
+  image: string;
+}
+
+export async function getRecordPhotos(recordId: string): Promise<RecordPhoto[]> {
+  const data = await api<{ photos: RecordPhoto[] }>(`/dental-records?photos=${encodeURIComponent(recordId)}`);
+  return data.photos ?? [];
+}
+
+/**
+ * Brings a record's photos in line with the form: the saved ones taken off are deleted, the
+ * relabelled ones relabelled, and the new ones uploaded, one at a time (each is a few hundred
+ * KB). Throws on the first that fails, so the caller can say the record saved but a photo didn't.
+ */
+export async function savePhotos(recordId: string, photos: PhotoDraft[], before: PhotoDraft[] = []): Promise<void> {
+  const now = new Map(photos.filter((p) => p.id).map((p) => [p.id, p]));
+  for (const p of before) {
+    if (!p.id) continue;
+    const kept = now.get(p.id);
+    const path = `/dental-records?photo=${encodeURIComponent(p.id)}`;
+    if (!kept) await api(path, { method: "DELETE" });
+    else if (kept.label !== p.label) await api(path, { method: "PATCH", body: JSON.stringify({ label: kept.label }) });
+  }
+  for (const p of photos) {
+    if (p.id) continue;
+    await api("/dental-records?photos=true", {
+      method: "POST",
+      body: JSON.stringify({ recordId, kind: p.kind, label: p.label, image: p.image }),
+    });
+  }
+}

@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/lib/api/appointments";
+import type { DentalRecord } from "@/lib/api/dentalRecords";
 
 const h = vi.hoisted(() => ({
   appts: [] as Appointment[],
@@ -9,6 +10,8 @@ const h = vi.hoisted(() => ({
   schedule: { days: [] as any[], unavailable: [] as any[] },
   // Which visits the patient has signed the consent for.
   consents: [] as { appointmentId: string; status: "signed" | "declined"; signedAt: string }[],
+  // The dental records written so far.
+  records: [] as DentalRecord[],
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -19,6 +22,11 @@ vi.mock("@/contexts/AuthContext", () => ({
       const body = JSON.parse(String(init.body));
       return { consent: { appointmentId: body.appointmentId, status: body.decision, signedAt: "2026-10-30T07:00:00Z", text: "", patientName: body.printedName } };
     }
+    if (path.includes("dental-records?photos=true") && init?.method === "POST") return { photo: { id: "ph-1" } };
+    if (path.includes("dental-records") && init?.method === "POST") return { record: { id: "rec-1" } };
+    if (path === "/dental-records") return { records: h.records };
+    if (path.startsWith("/dental-records?id=")) return { record: h.records.find(r => path.endsWith(r.id)) };
+    if (path.includes("dental-records?photos=")) return { photos: [] };
     if (path.includes("consent=")) {
       return { consent: null, form: { patientName: "Juan Dela Cruz", procedure: "Oral", dentistName: "Dr. Mike Johnson", date: "September 25, 2026",
         text: "I, Juan Dela Cruz, give my consent.\n\nI may refuse at any time." } };
@@ -26,6 +34,8 @@ vi.mock("@/contexts/AuthContext", () => ({
     return { appointments: h.appts };
   }),
 }));
+// jsdom can't decode a picture; the shrunk photo is what the form keeps.
+vi.mock("@/lib/shrinkPhoto", () => ({ shrinkPhoto: vi.fn(async (f: File) => `data:image/jpeg;base64,${f.name.replace(/\W/g, "")}`) }));
 vi.mock("@/lib/api/staff", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/staff")>();
   return { ...actual, getDentistSchedule: vi.fn(async () => h.schedule) };
@@ -52,6 +62,7 @@ vi.mock("@/components/ui/dropdown-menu", () => import("./plainDropdown"));
 vi.mock("@/components/ui/popover", () => import("./plainPopover"));
 
 import DentistAppointments from "@/pages/dentist/DentistAppointments";
+import DentistRecords from "@/pages/dentist/DentistRecords";
 
 /** Runs one of a row's actions from its ▾ menu. */
 function pick(row: ReturnType<typeof within>, action: RegExp) {
@@ -64,7 +75,7 @@ beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
 afterEach(cleanup);
-beforeEach(() => { h.schedule = { days: [], unavailable: [] }; h.consents = []; });
+beforeEach(() => { h.schedule = { days: [], unavailable: [] }; h.consents = []; h.records = []; });
 
 function apt(over: Partial<Appointment>): Appointment {
   return {
@@ -273,6 +284,48 @@ describe("the consultation's dental chart", () => {
       });
     });
   });
+
+  it("keeps the before and after photos with the record, labelled, once it's saved", async () => {
+    const { api } = await import("@/contexts/AuthContext");
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    h.consents = [{ appointmentId: "c", status: "signed", signedAt: "2026-09-25T05:00:00Z" }];
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    await waitFor(() => {
+      fireEvent.click(row.getByRole("button", { name: "More options" }));
+      const item = row.getByRole("menuitem", { name: /Start Consultation/ });
+      expect(item).not.toHaveAttribute("aria-disabled");
+      fireEvent.click(item);
+    });
+    const form = within(await screen.findByRole("dialog"));
+    const [procedure, diagnosis] = form.getAllByRole("textbox");
+    fireEvent.change(procedure, { target: { value: "Veneers" } });
+    fireEvent.change(diagnosis, { target: { value: "Stained front teeth" } });
+
+    const file = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const add = (kind: "Before" | "After", name: string) => {
+      fireEvent.click(form.getByRole("button", { name: `Add ${kind} Photo` }));
+      fireEvent.change(file, { target: { files: [new File(["x"], name, { type: "image/jpeg" })] } });
+    };
+    add("Before", "front-before.jpg");
+    expect(await form.findByRole("img", { name: "Before photo 1" })).toHaveAttribute("src", "data:image/jpeg;base64,frontbeforejpg");
+    fireEvent.change(form.getByRole("combobox", { name: "Label for before photo 1" }), { target: { value: "Front" } });
+    add("After", "front-after.jpg");
+    await form.findByRole("img", { name: "After photo 1" });
+    add("After", "oops.jpg");
+    fireEvent.click(await form.findByRole("button", { name: "Remove after photo 2" }));
+    expect(within(form.getByRole("group", { name: "After photos" })).getAllByRole("img")).toHaveLength(1);
+
+    fireEvent.click(form.getByRole("button", { name: /Save Consultation/ }));
+    await waitFor(() => {
+      const sent = vi.mocked(api).mock.calls.filter(([path]) => String(path).includes("photos=true")).map(([, init]) => JSON.parse(String(init!.body)));
+      expect(sent).toEqual([
+        { recordId: "rec-1", kind: "before", label: "Front", image: "data:image/jpeg;base64,frontbeforejpg" },
+        { recordId: "rec-1", kind: "after", label: null, image: "data:image/jpeg;base64,frontafterjpg" },
+      ]);
+    });
+    await waitFor(() => expect(screen.queryByText("Dental Record Form")).toBeNull());
+  });
 });
 
 describe("the patient's consent before the consultation", () => {
@@ -365,5 +418,63 @@ describe("the patient's consent before the consultation", () => {
     fireEvent.click(row.getByRole("button", { name: "More options" }));
     expect(row.getByRole("menuitem", { name: /Patient Consent/ })).toHaveTextContent("Patient declined");
     expect(row.getByRole("menuitem", { name: /Start Consultation/ })).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+describe("checking back on a finished visit", () => {
+  const record = (over: Partial<DentalRecord>): DentalRecord => ({
+    id: "rec-9", appointmentId: "done", patientId: "p1", patientName: "Juan Dela Cruz",
+    dentistId: "dr-mike", dentistName: "Dr. Mike Johnson", date: "2026-09-25",
+    diagnosis: "Deep caries on 36", toothNumber: "36", treatmentNotes: "Filled with composite",
+    nextVisit: null, createdAt: "2026-09-25T06:00:00Z",
+    treatments: [{ id: "t1", serviceId: "s1", serviceName: "Restoration" }],
+    prescriptions: [],
+    ...over,
+  });
+
+  const openDetails = async (name: string) => {
+    const row = within((await screen.findByText(name)).closest("tr")!);
+    fireEvent.click(row.getByRole("button", { name: /View/ }));
+    return within(await screen.findByRole("dialog"));
+  };
+
+  const app = () => (
+    <MemoryRouter initialEntries={["/dentist/appointments"]}>
+      <Routes>
+        <Route path="/dentist/appointments" element={<DentistAppointments />} />
+        <Route path="/dentist/records" element={<DentistRecords />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  it("opens a completed appointment's dental record from its details", async () => {
+    h.appts = [apt({ id: "done", patientName: "Juan Dela Cruz", status: "completed" })];
+    h.records = [record({})];
+    render(app());
+
+    const details = await openDetails("Juan Dela Cruz");
+    fireEvent.click(await details.findByRole("link", { name: /View Dental Record/ }));
+
+    const view = within(await screen.findByRole("dialog", { name: "Dental Record Details" }));
+    expect(await view.findByText("Deep caries on 36")).toBeInTheDocument();
+    expect(view.getByText("Restoration")).toBeInTheDocument();
+    expect(view.getByText("Filled with composite")).toBeInTheDocument();
+  });
+
+  it("offers to write the record when a completed visit has none, and nothing on one not done yet", async () => {
+    h.appts = [
+      apt({ id: "done", patientName: "Juan Dela Cruz", status: "completed" }),
+      apt({ id: "next", patientName: "Maria Santos", status: "confirmed", time: "14:00" }),
+    ];
+    render(app());
+
+    const done = await openDetails("Juan Dela Cruz");
+    expect(await done.findByRole("link", { name: /Write Dental Record/ })).toBeInTheDocument();
+    expect(done.queryByRole("link", { name: /View Dental Record/ })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    const next = await openDetails("Maria Santos");
+    expect(next.queryByRole("link", { name: /Dental Record/ })).toBeNull();
   });
 });

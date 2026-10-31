@@ -22,8 +22,8 @@ import { toast } from "@/hooks/use-toast";
 import { FilePlus2, FileEdit, Eye, Loader2, Plus, X, Printer } from "lucide-react";
 import { IconAction, RowActions } from "@/components/RowActions";
 import {
-  getDentalRecords, getDentalRecord, createDentalRecord, updateDentalRecord,
-  type DentalRecord, type TreatmentInput, type PrescriptionInput,
+  getDentalRecords, getDentalRecord, createDentalRecord, updateDentalRecord, savePhotos,
+  type DentalRecord, type TreatmentInput, type PrescriptionInput, type PhotoDraft,
 } from "@/lib/api/dentalRecords";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
 import { formatManilaDate, manilaTodayDateStr } from "@/lib/formatDate";
@@ -42,6 +42,8 @@ import { useProcedureColors } from "@/lib/procedureColors";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/DatePicker";
 import { ConsentSection } from "@/components/Consent";
+import { PhotoEditor, PhotoGallery } from "@/components/RecordPhotos";
+import { useRecordPhotos } from "@/hooks/useRecordPhotos";
 
 const COLUMNS = ["Date", "Patient", "Procedures", "Tooth No.", "Diagnosis", "Prescriptions"];
 
@@ -133,11 +135,16 @@ export default function DentistRecords() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [treatments, setTreatments] = useState<TreatmentInput[]>([{ serviceName: "" }]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionInput[]>([]);
+  const [photos, setPhotos] = useState<PhotoDraft[]>([]);
 
   const [editTarget, setEditTarget] = useState<DentalRecord | null>(null);
   const [editForm, setEditForm] = useState({ diagnosis: "", toothNumber: "", toothCodes: {} as ToothCodes, toothNotes: {} as ToothNotes, treatmentNotes: "", nextVisit: "" });
   const [editTreatments, setEditTreatments] = useState<TreatmentInput[]>([]);
   const [editPrescriptions, setEditPrescriptions] = useState<PrescriptionInput[]>([]);
+  // The record's photos as saved, and as the form now has them.
+  const savedPhotos = useRecordPhotos(editTarget?.id);
+  const [editPhotos, setEditPhotos] = useState<PhotoDraft[]>([]);
+  useEffect(() => { setEditPhotos(savedPhotos.photos); }, [savedPhotos.photos]);
 
   const [viewTarget, setViewTarget] = useState<DentalRecord | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
@@ -146,6 +153,7 @@ export default function DentistRecords() {
     setForm(emptyForm);
     setTreatments([{ serviceName: "" }]);
     setPrescriptions([]);
+    setPhotos([]);
     setCreateOpen(true);
   };
 
@@ -166,6 +174,17 @@ export default function DentistRecords() {
     // Runs when the records have loaded with a consultation to write up; openCreate is the page's own.
   }, [writeFor, loading, appointmentsLoaded, availableAppointments]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sent here by a completed appointment's "View Dental Record": open the record saved for it.
+  const viewFor = (location.state as { viewFor?: unknown } | null)?.viewFor;
+  useEffect(() => {
+    if (typeof viewFor !== "string" || loading) return;
+    navigate(location.pathname, { replace: true, state: null });
+    const record = records.find(r => r.appointmentId === viewFor);
+    if (record) void openView(record);
+    else toast({ title: "No dental record for that appointment yet" });
+    // Runs once the records have loaded; openView is the page's own.
+  }, [viewFor, loading, records]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const submitCreate = async () => {
     const cleanTreatments = treatments.filter(t => t.serviceName?.trim());
     if (!form.appointmentId || !form.diagnosis.trim() || cleanTreatments.length === 0) {
@@ -174,7 +193,7 @@ export default function DentistRecords() {
     }
     setSaving(true);
     try {
-      await createDentalRecord({
+      const record = await createDentalRecord({
         appointmentId: form.appointmentId,
         date: form.date,
         diagnosis: form.diagnosis.trim(),
@@ -187,6 +206,7 @@ export default function DentistRecords() {
         prescriptions: prescriptions.filter(p => p.medicine?.trim()),
       });
       toast({ title: "Dental record saved", description: "The record now appears in the patient's Dental Records and Patient History." });
+      await savePhotosOrSay(record.id, photos);
       setCreateOpen(false);
       load();
     } catch (err) {
@@ -230,12 +250,27 @@ export default function DentistRecords() {
         prescriptions: editPrescriptions.filter(p => p.medicine?.trim()),
       });
       toast({ title: "Record updated" });
+      // Only once the saved photos have loaded, so a list that didn't load deletes nothing.
+      if (!savedPhotos.loading && !savedPhotos.failed) await savePhotosOrSay(editTarget.id, editPhotos, savedPhotos.photos);
       setEditTarget(null);
       load();
     } catch (err) {
       toast({ title: "Failed to save changes", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** The record is saved either way; a photo that didn't upload can be added again in Edit. */
+  const savePhotosOrSay = async (recordId: string, next: PhotoDraft[], before?: PhotoDraft[]) => {
+    try {
+      await savePhotos(recordId, next, before);
+    } catch (err) {
+      toast({
+        title: "Some photos weren't saved",
+        description: `${err instanceof Error ? err.message.replace(/\.?$/, ".") : "The upload failed."} Add them again with Edit.`,
+        variant: "destructive",
+      });
     }
   };
 
@@ -401,6 +436,10 @@ export default function DentistRecords() {
                 patientId={appointments.find(a => a.id === form.appointmentId)?.patientId}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Photos (optional)</Label>
+              <PhotoEditor photos={photos} onChange={setPhotos} disabled={saving} />
+            </div>
             <PrescriptionListEditor prescriptions={prescriptions} setPrescriptions={setPrescriptions} />
             <div className="space-y-2">
               <Label>Treatment Notes</Label>
@@ -449,6 +488,16 @@ export default function DentistRecords() {
                 excludeRecordId={editTarget?.id}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Photos</Label>
+              {savedPhotos.loading ? (
+                <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+              ) : savedPhotos.failed ? (
+                <p className="text-sm text-muted-foreground">Couldn't load the photos. Close and open Edit again to change them.</p>
+              ) : (
+                <PhotoEditor photos={editPhotos} onChange={setEditPhotos} disabled={saving} />
+              )}
+            </div>
             <PrescriptionListEditor prescriptions={editPrescriptions} setPrescriptions={setEditPrescriptions} />
             <div className="space-y-2">
               <Label>Treatment Notes</Label>
@@ -471,7 +520,7 @@ export default function DentistRecords() {
         <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">Dental Record Details</DialogTitle>
-            <DialogDescription className="sr-only">The record, its dental chart and the patient's consent.</DialogDescription>
+            <DialogDescription className="sr-only">The record, its dental chart, photos and the patient's consent.</DialogDescription>
           </DialogHeader>
           {viewTarget && (
             <div className="space-y-4">
@@ -515,6 +564,7 @@ export default function DentistRecords() {
                   </div>
                 )}
               </div>
+              <PhotoGallery recordId={viewTarget.id} className="border-t border-border pt-3" />
               <ConsentSection appointmentId={viewTarget.appointmentId} />
             </div>
           )}
@@ -667,9 +717,9 @@ function PrescriptionListEditor({ prescriptions, setPrescriptions }: { prescript
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium text-foreground">{value}</p>
+      <p className="font-medium text-foreground break-words">{value}</p>
     </div>
   );
 }
