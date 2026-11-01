@@ -1,10 +1,13 @@
 import { useRef, useState } from "react";
-import { Camera, Loader2, X } from "lucide-react";
+import { Camera, Images, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   MAX_PHOTOS_PER_KIND, PHOTO_LABELS, type PhotoDraft, type PhotoKind, type RecordPhoto,
 } from "@/lib/api/dentalRecords";
@@ -24,22 +27,27 @@ const KINDS: { kind: PhotoKind; title: string }[] = [
   { kind: "after", title: "After" },
 ];
 
+/** A phone or tablet: one that has a camera to offer, and a finger rather than a mouse. */
+const isTouch = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+
 /** The Photos section of a record's form. New photos stay in the form until it's saved. */
 export function PhotoEditor({ photos, onChange, disabled }: {
   photos: PhotoDraft[];
   onChange: (next: PhotoDraft[]) => void;
   disabled?: boolean;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const album = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
   const adding = useRef<PhotoKind>("before");
   const [busy, setBusy] = useState<PhotoKind | null>(null);
+  const [touch] = useState(isTouch);
   // The latest list, for photos that finish shrinking after it has changed.
   const latest = useRef(photos);
   latest.current = photos;
 
-  const pick = (kind: PhotoKind) => {
+  const pick = (kind: PhotoKind, from: "album" | "camera") => {
     adding.current = kind;
-    input.current?.click();
+    (from === "camera" ? camera : album).current?.click();
   };
 
   const add = async (files: FileList | null) => {
@@ -66,28 +74,63 @@ export function PhotoEditor({ photos, onChange, disabled }: {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {/* No `capture`: a phone offers the camera and the gallery both. */}
+      {/* The album takes several at once; the camera opens straight away, one shot at a time. */}
       <input
-        ref={input}
+        ref={album}
         type="file"
         accept="image/*"
         multiple
         className="hidden"
         aria-hidden
         tabIndex={-1}
+        data-testid="photo-album"
+        onChange={(e) => { void add(e.target.files); e.target.value = ""; }}
+      />
+      <input
+        ref={camera}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        aria-hidden
+        tabIndex={-1}
+        data-testid="photo-camera"
         onChange={(e) => { void add(e.target.files); e.target.value = ""; }}
       />
       {KINDS.map(({ kind, title }) => {
         const mine = photos.map((p, i) => ({ p, i })).filter(({ p }) => p.kind === kind);
         const full = mine.length >= MAX_PHOTOS_PER_KIND;
+        const button = (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={touch ? undefined : () => pick(kind, "album")}
+            disabled={disabled || full || busy !== null}
+          >
+            {busy === kind ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Camera className="mr-1.5 h-4 w-4" />}
+            Add {title} Photo
+          </Button>
+        );
         return (
           <div key={kind} className="space-y-2 rounded-md border border-border p-3" role="group" aria-label={`${title} photos`}>
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">{title} <span className="font-normal text-muted-foreground">({mine.length}/{MAX_PHOTOS_PER_KIND})</span></p>
-              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => pick(kind)} disabled={disabled || full || busy !== null}>
-                {busy === kind ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Camera className="mr-1.5 h-4 w-4" />}
-                Add {title} Photo
-              </Button>
+              {/* A phone asks where from; a PC has no camera to offer, so it goes straight to the files. */}
+              {touch ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-popover">
+                    <DropdownMenuItem onClick={() => pick(kind, "camera")}>
+                      <Camera className="mr-2 h-4 w-4" /> Take Photo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => pick(kind, "album")}>
+                      <Images className="mr-2 h-4 w-4" /> Choose from Album
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : button}
             </div>
             {mine.length === 0 ? (
               <p className="py-3 text-center text-xs text-muted-foreground">
