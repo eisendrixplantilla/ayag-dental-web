@@ -194,6 +194,27 @@ describe("staff dashboards", () => {
 
     expect(card("Appointments by Dentist")).toBeTruthy();
   });
+
+  it("success rate: early in a month, last month's stands in, named", async () => {
+    h.role = "admin";
+    const last = new Date(`${today.slice(0, 7)}-15T00:00:00Z`);
+    last.setUTCMonth(last.getUTCMonth() - 1);
+    const lastMonth = last.toISOString().slice(0, 7);
+    const lastLabel = last.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    // Nothing this month yet; last month, one visit done and one cancelled.
+    h.appts = [apt(1, { status: "completed", date: `${lastMonth}-10` }), apt(2, { status: "cancelled", date: `${lastMonth}-11` })];
+    show(<AdminDashboard />);
+    const stats = within(await waitFor(() => card("Success Stats")));
+    expect(await stats.findByText(`Success rate is 50% in ${lastLabel}`)).toBeInTheDocument();
+    expect(stats.getByText(`in ${lastLabel}`)).toBeInTheDocument();
+    expect(stats.getByText(/has come due yet/)).toBeInTheDocument();
+    cleanup();
+
+    h.appts = [];
+    show(<AdminDashboard />);
+    const none = within(await waitFor(() => card("Success Stats")));
+    expect(await none.findByText(/^No appointments have come due yet in /)).toBeInTheDocument();
+  });
 });
 
 describe("patient dashboard", () => {

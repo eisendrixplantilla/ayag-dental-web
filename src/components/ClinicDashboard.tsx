@@ -118,7 +118,7 @@ export default function ClinicDashboard({ appointments, period, links, patientTo
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bottomLeft}
-        <SuccessStats appointments={appointments} shown={shown} before={before} today={today} />
+        <SuccessStats appointments={appointments} shown={shown} before={before} period={period} today={today} />
         <PatientTotalsCard totals={patientTotals} link={links.patients} className="md:col-span-2 xl:col-span-1" />
       </div>
     </div>
@@ -482,12 +482,16 @@ export function TodaysAppointments({ appointments }: { appointments: Appointment
   );
 }
 
-function SuccessStats({ appointments, shown, before, today }: {
-  appointments: Appointment[]; shown: Appointment[]; before: Appointment[] | null; today: string;
+function SuccessStats({ appointments, shown, before, period, today }: {
+  appointments: Appointment[]; shown: Appointment[]; before: Appointment[] | null; period: Period; today: string;
 }) {
-  const rate = successRate(shown, today);
+  const now = successRate(shown, today);
   const was = before ? successRate(before, today) : null;
-  const change = rate !== null && was !== null ? rate - was : null;
+  const change = now !== null && was !== null ? now - was : null;
+  // Early in a period (the 1st of the month) nothing has come due yet: show the period
+  // before instead of a blank, and say which one it is.
+  const earlier = now === null && was !== null ? periodLabel(previousPeriod(period)!) : null;
+  const rate = now ?? was;
   const line = useMemo(() => monthlySuccess(appointments, today), [appointments, today]);
   return (
     <Card className="shadow-card min-w-0">
@@ -497,6 +501,7 @@ function SuccessStats({ appointments, shown, before, today }: {
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
           <span className="text-3xl font-bold font-heading">{rate === null ? "—" : `${rate}%`}</span>
+          {earlier && <span className="text-xs text-muted-foreground">in {earlier}</span>}
           {change !== null && (
             <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium",
               change >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
@@ -514,8 +519,15 @@ function SuccessStats({ appointments, shown, before, today }: {
           </LineChart>
         </ChartContainer>
         <div className="rounded-lg bg-muted/50 p-3">
-          <p className="text-sm font-medium text-foreground">Success rate is {rate === null ? "—" : `${rate}%`}</p>
+          <p className="text-sm font-medium text-foreground">
+            {rate === null
+              ? `No appointments have come due yet in ${periodLabel(period)}`
+              : earlier
+                ? `Success rate is ${rate}% in ${earlier}`
+                : `Success rate is ${rate}%`}
+          </p>
           <p className="text-xs text-muted-foreground mt-0.5">
+            {earlier && `Nothing in ${periodLabel(period)} has come due yet. `}
             The share of appointments that came due in this period and were completed. Cancelled, rejected and missed ones count against it.
           </p>
         </div>
