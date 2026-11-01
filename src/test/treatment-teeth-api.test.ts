@@ -10,6 +10,7 @@ vi.mock("../../api/_lib/db.js", () => {
     if (text.includes("treatment-teeth-column")) { h.altered += 1; return []; }
     if (text.includes("tooth-codes-column") || text.includes("tooth-notes-column")) return [];
     if (text.includes("SELECT id, date FROM appointments")) return [{ id: "apt-1", date: "2026-10-01" }];
+    if (text.includes("own-check")) return [{ own: true }];
     if (text.includes("INSERT INTO dental_records")) { h.codes = v[4]; h.notes = v[5]; return [{ id: "rec-1" }]; }
     if (text.includes("DELETE FROM treatments")) { h.treatments = h.treatments.filter((t) => t.record_id !== v[0]); return []; }
     if (text.includes("SELECT id FROM services")) return [{ id: `svc-${v[0][0]}` }];

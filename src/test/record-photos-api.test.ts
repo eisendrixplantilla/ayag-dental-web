@@ -6,11 +6,19 @@ const h = vi.hoisted(() => ({
   session: { sub: "dr-1", email: "d@x.y", role: "dentist" } as { sub: string; email: string; role: string },
   photos: [] as Record<string, unknown>[],
   next: 1,
+  /** Whether the record's visit was this dentist's. */
+  own: true,
 }));
 
 vi.mock("../../api/_lib/db.js", () => {
-  const sql = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const text = strings.join("?");
+  const sql = vi.fn(async (strings: TemplateStringsArray | string, ...values: unknown[]) => {
+    const text = typeof strings === "string" ? strings : strings.join("?");
+    // sql.query(text, [id, dentist]): the photo or record has to be there for the check to find it.
+    if (text.includes("own-check")) {
+      const id = (values[0] as unknown[])[0];
+      const there = text.includes("own-check:photo") ? h.photos.some((p) => p.id === id) : id === "rec-1";
+      return there ? [{ own: h.own }] : [];
+    }
     if (text.includes("record-photos-table") || text.includes("record-photos-index")) return [];
     if (text.includes("record-photos-record")) return values[0] === "rec-1" ? [{ id: "rec-1" }] : [];
     if (text.includes("record-photos-taker")) return [{ first_name: "Mike", last_name: "Johnson" }];
@@ -59,6 +67,7 @@ beforeEach(() => {
   h.session = { sub: "dr-1", email: "d@x.y", role: "dentist" };
   h.photos = [];
   h.next = 1;
+  h.own = true;
 });
 
 describe("a dental record's photos", () => {
@@ -105,5 +114,17 @@ describe("a dental record's photos", () => {
       expect((await call("DELETE", { photo: "ph-1" })).code).toBe(403);
     }
     expect(h.photos).toHaveLength(1);
+  });
+
+  it("on another dentist's visit can be seen but not added, relabelled or taken off", async () => {
+    await add();
+    h.own = false;
+    expect((await call("GET", { photos: "rec-1" })).body.photos).toHaveLength(1);
+    const added = await add();
+    expect(added.code).toBe(403);
+    expect(added.body.error).toMatch(/another dentist's/);
+    expect((await call("PATCH", { photo: "ph-1" }, { label: "Upper" })).code).toBe(403);
+    expect((await call("DELETE", { photo: "ph-1" })).code).toBe(403);
+    expect(h.photos).toEqual([expect.objectContaining({ id: "ph-1", label: "Front" })]);
   });
 });

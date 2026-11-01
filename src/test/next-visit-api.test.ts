@@ -6,9 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({ saved: 0, stored: "2020-01-15" as string | null }));
 
 vi.mock("../../api/_lib/db.js", () => {
-  const sql = vi.fn(async (strings: TemplateStringsArray) => {
-    const text = strings.join("?");
+  const sql = vi.fn(async (strings: TemplateStringsArray | string) => {
+    const text = typeof strings === "string" ? strings : strings.join("?");
     if (text.includes("SELECT id, date FROM appointments")) return [{ id: "apt-1", date: "2026-10-01" }];
+    if (text.includes("own-check")) return [{ own: true }];
     if (text.includes("SELECT id, next_visit FROM dental_records")) return [{ id: "rec-1", next_visit: h.stored }];
     // The save itself, and everything after it.
     h.saved += 1;

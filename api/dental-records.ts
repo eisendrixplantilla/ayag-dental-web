@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "./_lib/auth.js";
 import { displayService, legacyNames } from "./_lib/services.js";
 import { manilaDateStr } from "./_lib/date.js";
 import { photosHandler } from "./_lib/photos.js";
+import { NOT_YOURS, othersWork, ownAppointmentSql } from "./_lib/own.js";
 
 function toDateStr(v: unknown): string | null {
   if (v == null) return null;
@@ -194,7 +195,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (session.role === "patient") {
       push("a.patient_id", session.sub);
     } else if (typeof req.query.patientId === "string") {
+      // One patient's whole history, whoever saw them: a dentist reads it before treating.
       push("a.patient_id", req.query.patientId);
+    } else if (session.role === "dentist") {
+      // A dentist's own list: the records of their own visits.
+      params.push(session.sub);
+      conditions.push(ownAppointmentSql(`$${params.length}`));
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -334,6 +340,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const apptRows = await sql`SELECT id, date FROM appointments WHERE id = ${appointmentId}`;
     if (!apptRows[0]) return res.status(400).json({ error: "Appointment not found" });
+    if (await othersWork(session, "appointment", appointmentId)) return res.status(403).json({ error: NOT_YOURS });
     if (nextVisit && nextVisit < manilaDateStr(new Date())) return res.status(400).json({ error: PAST_NEXT_VISIT });
 
     await ensureChartColumns();
@@ -358,6 +365,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const existingRows = await sql`SELECT id, next_visit FROM dental_records WHERE id = ${id}`;
     if (!existingRows[0]) return res.status(404).json({ error: "Dental record not found" });
+    if (await othersWork(session, "record", id)) return res.status(403).json({ error: NOT_YOURS });
     // A record saved with a next visit that has since passed can still be edited; a new
     // next visit has to be today or later.
     if (nextVisit && nextVisit !== toDateStr(existingRows[0].next_visit) && nextVisit < manilaDateStr(new Date())) {

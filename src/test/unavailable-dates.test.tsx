@@ -9,7 +9,11 @@ const h = vi.hoisted(() => ({
   added: [] as unknown[][],
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "s1", name: "Super", role: "superadmin" } }), api: vi.fn() }));
+vi.mock("@/contexts/AuthContext", async (orig) => ({
+  ApiError: (await orig<typeof import("@/contexts/AuthContext")>()).ApiError,
+  useAuth: () => ({ user: { id: "s1", name: "Super", role: "superadmin" } }),
+  api: vi.fn(),
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/api/staff", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/staff")>()),
@@ -84,5 +88,22 @@ describe("days off on a staff schedule page", () => {
   it("can't be added here any more: leave is added on the Schedule page", async () => {
     const card = await renderPage();
     expect(card.queryByRole("button", { name: /Add Day Off/ })).toBeNull();
+  });
+});
+
+describe("a staff schedule page for an account that isn't there", () => {
+  it("says so, with no empty schedule to save over", async () => {
+    const { ApiError } = await import("@/contexts/AuthContext");
+    const { getStaffMember } = await import("@/lib/api/staff");
+    vi.mocked(getStaffMember).mockRejectedValueOnce(new ApiError("Staff account not found", {}, 404));
+    render(
+      <MemoryRouter initialEntries={["/superadmin/staff/DT-261001/schedule"]}>
+        <Routes><Route path="/superadmin/staff/:id/schedule" element={<SuperAdminDentistSchedule />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("This staff account isn't there anymore.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Staff" })).toBeInTheDocument();
+    expect(screen.queryByText("Save Working Days")).toBeNull();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
 });

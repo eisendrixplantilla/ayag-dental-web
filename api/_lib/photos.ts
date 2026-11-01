@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./db.js";
 import type { SessionPayload } from "./auth.js";
+import { NOT_YOURS, othersWork } from "./own.js";
 
 /*
  * Clinical photos on a dental record: what the teeth looked like before the procedure and
@@ -74,6 +75,7 @@ export async function photosHandler(req: VercelRequest, res: VercelResponse, ses
     }
     const [record] = await sql`/* record-photos-record */ SELECT id FROM dental_records WHERE id = ${recordId}`;
     if (!record) return res.status(404).json({ error: "Dental record not found" });
+    if (await othersWork(session, "record", recordId)) return res.status(403).json({ error: NOT_YOURS });
     const [{ n }] = await sql`/* record-photos-count */ SELECT count(*)::int AS n FROM record_photos
       WHERE record_id = ${recordId} AND kind = ${kind}`;
     if (n >= MAX_PHOTOS_PER_KIND) {
@@ -85,6 +87,11 @@ export async function photosHandler(req: VercelRequest, res: VercelResponse, ses
     const [row] = await sql`/* record-photos-save */ INSERT INTO record_photos (record_id, kind, label, image, taken_by)
       VALUES (${recordId}, ${kind}, ${name}, ${image}, ${takenBy}) RETURNING *`;
     return res.status(201).json({ photo: mapPhoto(row as PhotoRow) });
+  }
+
+  if ((req.method === "PATCH" || req.method === "DELETE") && typeof req.query.photo === "string"
+    && await othersWork(session, "photo", req.query.photo)) {
+    return res.status(403).json({ error: NOT_YOURS });
   }
 
   if (req.method === "PATCH" && typeof req.query.photo === "string") {

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useReadableId } from "@/hooks/useReadableId";
 import { ArrowLeft, Clock, Loader2, Save, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
+import { ApiError } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,22 +46,28 @@ const emptyDayConfig = (): DayConfig => ({
 export default function SuperAdminDentistSchedule() {
   const navigate = useNavigate();
   const { id, missing } = useReadableId(async (code) => (await getStaff()).find((s) => s.employeeId === code)?.id);
-  if (missing) {
-    return (
-      <div className="py-20 text-center text-muted-foreground">
-        <p>No staff account has that ID.</p>
-        <Button variant="link" onClick={() => navigate("/superadmin/staff")}>Back to Staff</Button>
-      </div>
-    );
-  }
+  if (missing) return <NoSchedule message="No staff account has that ID." />;
   if (!id) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   return <StaffSchedule id={id} />;
+}
+
+/** In place of the schedule when there's none to show: never an empty form to save over. */
+function NoSchedule({ message }: { message: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="py-20 text-center text-muted-foreground">
+      <p>{message}</p>
+      <Button variant="link" onClick={() => navigate("/superadmin/staff")}>Back to Staff</Button>
+    </div>
+  );
 }
 
 function StaffSchedule({ id }: { id: string }) {
   const navigate = useNavigate();
   const [dentist, setDentist] = useState<StaffMember | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the schedule didn't load: the account isn't there (an old link), or anything else.
+  const [loadError, setLoadError] = useState<"missing" | "failed" | null>(null);
   const [savingDays, setSavingDays] = useState(false);
   const [savingServices, setSavingServices] = useState(false);
   // Each section as last saved, to tell whether it has changes still to save.
@@ -79,6 +86,7 @@ function StaffSchedule({ id }: { id: string }) {
   useEffect(() => {
     let live = true;
     setLoading(true);
+    setLoadError(null);
     // The schedule itself has to load; the services, limits and what the dentist offers are
     // extras, so one of those failing leaves its section empty rather than the whole page.
     const orEmpty = <T,>(p: Promise<T[]>) => p.then((v) => (Array.isArray(v) ? v : [])).catch(() => [] as T[]);
@@ -124,7 +132,10 @@ function StaffSchedule({ id }: { id: string }) {
         setOffered(new Set(offers));
         setSavedServices(servicesKey(new Set(offers), drafts, working));
       })
-      .catch(() => { if (live) toast.error("Failed to load this dentist's schedule"); })
+      .catch((err) => {
+        if (!live) return;
+        setLoadError(err instanceof ApiError && err.status === 404 ? "missing" : "failed");
+      })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [id]);
@@ -243,6 +254,8 @@ function StaffSchedule({ id }: { id: string }) {
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
+  if (loadError === "missing") return <NoSchedule message="This staff account isn't there anymore." />;
+  if (loadError) return <NoSchedule message="This schedule couldn't be loaded. Please try again." />;
 
   return (
     <div className="space-y-6">

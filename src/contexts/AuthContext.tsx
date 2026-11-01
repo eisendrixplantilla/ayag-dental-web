@@ -74,7 +74,7 @@ function useTabValue(key: string) {
 /** A request the server refused, carrying whatever it said besides the message —
  * a 409 often explains what is in the way, not just that something is. */
 export class ApiError extends Error {
-  constructor(message: string, readonly data: Record<string, unknown> = {}) {
+  constructor(message: string, readonly data: Record<string, unknown> = {}, readonly status?: number) {
     super(message);
     this.name = "ApiError";
   }
@@ -91,7 +91,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error ?? "Something went wrong. Please try again.", data);
+  if (!res.ok) throw new ApiError(data.error ?? "Something went wrong. Please try again.", data, res.status);
   return data as T;
 }
 

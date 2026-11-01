@@ -69,7 +69,7 @@ export default function SuperAdminStaff() {
 
   const rows = useMemo(
     () => staff.map(s => [
-      s.employeeId ?? "—", s.name, s.email, s.contact ?? "—", roleLabel(s.role), s.status,
+      s.employeeId ?? "—", s.name, s.email, s.contact || "—", roleLabel(s.role), s.status,
     ]),
     [staff],
   );
@@ -231,7 +231,7 @@ export default function SuperAdminStaff() {
                     )}
                   </TableCell>
                   <TableCell><CollapsedEmail email={s.email} /></TableCell>
-                  <TableCell className={CODE_COL}>{s.contact ?? "—"}</TableCell>
+                  <TableCell className={CODE_COL}>{s.contact || "—"}</TableCell>
                   <TableCell className={CODE_COL}><Badge variant="outline" className="bg-secondary text-secondary-foreground">{roleLabel(s.role)}</Badge></TableCell>
                   <TableCell className={CODE_COL}>
                     <Badge variant="outline" className={s.status === "active" ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20"}>
@@ -272,7 +272,7 @@ export default function SuperAdminStaff() {
               <Row label="Employee ID" value={viewing.employeeId ?? "—"} />
               <Row label="Full Name" value={viewing.name} />
               <Row label="Email Address" value={viewing.email} />
-              <Row label="Contact Number" value={viewing.contact ?? "—"} />
+              <Row label="Contact Number" value={viewing.contact || "—"} />
               <Row label="Role" value={roleLabel(viewing.role)} />
               <Row label="Account Status" value={viewing.status} />
               <Row label="Date Added" value={viewing.createdAt ?? "—"} />
