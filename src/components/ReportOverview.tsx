@@ -163,7 +163,7 @@ export function PeriodPicker({ period, onChange }: { period: Period; onChange: (
       {period.kind === "month" && (
         <>
           <Label htmlFor="report-month" className="sr-only">Month</Label>
-          <MonthPicker id="report-month" className={cn(field, "w-44")} value={period.month} required
+          <MonthPicker id="report-month" className={cn(field, "w-52")} value={period.month} required
             onChange={(v) => v && onChange({ kind: "month", month: v })} />
         </>
       )}
