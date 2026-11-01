@@ -10,7 +10,7 @@ import { assignCodes, ensureCodes } from "./_lib/codes.js";
 import { CONSENT_FIELDS, DEFAULT_CONSENT, MAX_CONSENT_TEXT, consentTemplate, ensureConsentTables } from "./_lib/consent.js";
 import {
   MAX_LEAVE_DAYS, TIME, approveLeave, changeOf, datesBetween, ensureLeaveTable, ensureUnavailableTimes, leaveDates, mapLeave, nameOf,
-  removeLeaveDays, saveChange, shortenLeave,
+  parseLeaveDayId, removeLeaveDays, saveChange, shortenLeave, withLeave, type AwayRow,
 } from "./_lib/leave.js";
 
 function mapStaff(u: any) {
@@ -90,7 +90,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sql`/* profile-hours */ SELECT dentist_id, service_name, days, start_time, end_time, day_limits FROM dentist_service_hours`,
       // Only the coming dates, each with why (shown when pointing at it).
       sql`/* profile-unavailable */ SELECT dentist_id, unavailable_date, reason, start_time, end_time FROM dentist_unavailable
-        WHERE unavailable_date >= ${today} ORDER BY unavailable_date`,
+        WHERE unavailable_date >= ${today} ORDER BY unavailable_date`
+        // Approved leave closes its days too, even one with no Unavailable Date for it.
+        .then((rows) => withLeave(rows as AwayRow[], null)
+          .then((all) => all.filter((r) => new Date(r.unavailable_date as string).toISOString().slice(0, 10) >= today))
+          .catch(() => rows)),
     ]);
     const forDentist = <T extends { dentist_id: string }>(rows: T[], id: string) => rows.filter((r) => r.dentist_id === id);
     return res.status(200).json({
@@ -213,7 +217,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!requireSuperAdmin(req, res)) return;
       const [days, unavailable] = await Promise.all([
         sql`/* schedules-all-days */ SELECT dentist_id, day_of_week, start_time, end_time, lunch_start, lunch_end, duration_minutes, max_patient FROM dentist_schedules ORDER BY day_of_week`,
-        sql`/* schedules-all-unavailable */ SELECT id, dentist_id, unavailable_date, reason, remarks, start_time, end_time FROM dentist_unavailable ORDER BY unavailable_date`,
+        sql`/* schedules-all-unavailable */ SELECT id, dentist_id, unavailable_date, reason, remarks, start_time, end_time FROM dentist_unavailable ORDER BY unavailable_date`
+          .then((rows) => withLeave(rows as AwayRow[], null).catch(() => rows)),
       ]);
       const schedules: Record<string, { days: ReturnType<typeof mapDay>[]; unavailable: ReturnType<typeof mapUnavailable>[] }> = {};
       const of = (id: string) => (schedules[id] ??= { days: [], unavailable: [] });
@@ -227,7 +232,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!dentistId) return res.status(400).json({ error: "Missing dentistId" });
       const [days, unavailable, serviceHours] = await Promise.all([
         sql`SELECT day_of_week, start_time, end_time, lunch_start, lunch_end, duration_minutes, max_patient FROM dentist_schedules WHERE dentist_id = ${dentistId} ORDER BY day_of_week`,
-        sql`SELECT id, unavailable_date, reason, remarks, start_time, end_time FROM dentist_unavailable WHERE dentist_id = ${dentistId} ORDER BY unavailable_date`,
+        sql`/* schedule-unavailable */ SELECT id, dentist_id, unavailable_date, reason, remarks, start_time, end_time FROM dentist_unavailable WHERE dentist_id = ${dentistId} ORDER BY unavailable_date`
+          // Approved leave closes its days too, even one with no Unavailable Date for it.
+          .then((rows) => withLeave(rows as AwayRow[], dentistId as string).catch(() => rows)),
         // Extra: a schedule still loads if these can't be read.
         hoursFor(dentistId, null).catch(() => []),
       ]);
@@ -589,7 +596,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "DELETE") {
       const unavailId = typeof req.query.id === "string" ? req.query.id : undefined;
       if (!unavailId) return res.status(400).json({ error: "Missing id" });
-      await sql`DELETE FROM dentist_unavailable WHERE id = ${unavailId}`;
+      // A day an approved leave covers is taken off the leave too, as the leave page would,
+      // or the leave would go on closing it (and still read as covering it).
+      await ensureLeaveTable();
+      const leaveDay = parseLeaveDayId(unavailId);
+      const [day] = leaveDay
+        ? [{ dentist_id: null, date: leaveDay.date, reason: null, remarks: null }]
+        : (await sql`/* unavailable-row */ SELECT dentist_id, unavailable_date, reason, remarks FROM dentist_unavailable WHERE id = ${unavailId}`)
+          .map((r: any) => ({ dentist_id: r.dentist_id, date: new Date(r.unavailable_date).toISOString().slice(0, 10), reason: r.reason, remarks: r.remarks }));
+      if (!day) return res.status(404).json({ error: "Unavailable date not found" });
+      const leaves = leaveDay
+        ? await sql`/* unavailable-leave */ SELECT * FROM leave_requests WHERE id = ${leaveDay.leaveId} AND status = 'approved'`
+        : await sql`/* unavailable-leave */ SELECT * FROM leave_requests WHERE dentist_id = ${day.dentist_id} AND status = 'approved'
+            AND reason = ${day.reason} AND note IS NOT DISTINCT FROM ${day.remarks}`;
+      const leave = (leaves as any[]).find((l) => leaveDates(l).includes(day.date));
+      if (leave) await removeLeaveDays(leave, [day.date], await nameOf(getSessionFromRequest(req)!));
+      if (!leaveDay) await sql`DELETE FROM dentist_unavailable WHERE id = ${unavailId}`;
       return res.status(200).json({ ok: true });
     }
 

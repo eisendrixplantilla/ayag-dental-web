@@ -9,6 +9,7 @@ import { MIN_REASON_LENGTH, VERIFICATION_METHODS, ageFrom, assessLink } from "./
 import { notOffered, outsideServiceHours, overLimit, servicesOf } from "./_lib/bookingLimits.js";
 import { assignCodes, ensureCodes } from "./_lib/codes.js";
 import { consentHandler } from "./_lib/consent.js";
+import { awayAt } from "./_lib/leave.js";
 
 const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
 
@@ -291,6 +292,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (await slotTaken({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, date, time, endTime: endTime ?? null })) {
       return res.status(409).json({ error: SLOT_TAKEN });
     }
+    // Nor while the dentist is off: a day off, or the hours of approved leave.
+    const away = await awayAt({ dentistId: dentistId ?? null, date, time, endTime: endTime ?? null });
+    if (away) return res.status(409).json({ error: away });
     // The dentist has to offer the service, and takes only so many of some in a day.
     const unoffered = await notOffered({ dentistId: dentistId ?? null, dentistName: dentistName ?? null, service });
     if (unoffered) return res.status(409).json({ error: unoffered });
@@ -461,6 +465,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: moving ? SLOT_TAKEN : "Another approved appointment already holds this time slot. Reject this request or ask the patient to reschedule.",
         });
       }
+      // Nor onto (or approved during) the dentist's time off.
+      const away = await awayAt({
+        dentistId: next.dentistId, date: next.date, time: next.time, endTime: nextEndTime ?? existing.end_time ?? null,
+      });
+      if (away) return res.status(409).json({ error: approving && !moving ? `${away.replace(/ Please choose another (day|time)\.$/, "")} Ask the patient to reschedule.` : away });
       // Moving onto another day (or dentist) needs room for its procedures there too.
       // An approval leaves the day's count as it was: a pending request already counts.
       const changesDay = next.date !== isoDate(existing.date)

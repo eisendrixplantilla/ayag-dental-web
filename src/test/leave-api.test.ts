@@ -90,6 +90,19 @@ vi.mock("../../api/_lib/db.js", () => {
       }
       return [];
     }
+    if (text.includes("away-leave")) return h.leave.filter((l) => l.status === "approved" && (v[0] === null || l.dentist_id === v[0]));
+    if (text.includes("schedule-unavailable")) return h.unavailable.filter((u) => u.dentist_id === v[0]);
+    if (text.includes("FROM dentist_schedules WHERE dentist_id")) return [];
+    if (text.includes("unavailable-row")) return h.unavailable.filter((u) => u.id === v[0]);
+    if (text.includes("unavailable-leave")) {
+      return text.includes("WHERE id =")
+        ? h.leave.filter((l) => l.id === v[0] && l.status === "approved")
+        : h.leave.filter((l) => l.dentist_id === v[0] && l.status === "approved" && l.reason === v[1] && (l.note ?? null) === (v[2] ?? null));
+    }
+    if (text.includes("DELETE FROM dentist_unavailable WHERE id")) {
+      h.unavailable = h.unavailable.filter((u) => u.id !== v[0]);
+      return [];
+    }
     if (text.includes("leave-staff")) return h.users.filter((u) => u.id === v[0] && ["dentist", "admin"].includes(u.role));
     if (text.includes("FROM users WHERE id")) return h.users.filter((u) => u.id === v[0]);
     throw new Error(`unexpected query: ${text}`);
@@ -494,5 +507,56 @@ describe("the superadmin cutting part-day leave to fewer hours", () => {
     expect((await decide(id, { action: "shorten", startTime: "12:00", endTime: "15:00" })).code).toBe(400);
     h.session = DENTIST;
     expect((await decide(id, { action: "shorten", startTime: "13:00", endTime: "15:00" })).code).toBe(403);
+  });
+});
+
+describe("approved leave closing its days on the schedule", () => {
+  // Straight to the handler, without the ?leave=true the others go through.
+  function raw(method: string, query: Record<string, string>): Promise<Res> {
+    const out: Res = {};
+    const res: any = { status(code: number) { out.code = code; return res; }, json(body: unknown) { out.body = body; return res; } };
+    return Promise.resolve(handler({ method, query } as any, res)).then(() => out);
+  }
+  // The Nov 2 case: approved for part of a day, but no Unavailable Date was made for it.
+  const lost = () => ({
+    id: "lv-1", dentist_id: "dr-1", start_date: "2026-11-02", end_date: "2026-11-02", reason: "Personal", note: null,
+    status: "approved", removed_dates: [], start_time: "10:00", end_time: "15:30",
+  });
+  const schedule = () => raw("GET", { schedule: "true", dentistId: "dr-1" });
+
+  it("shows the leave's hours on the dentist's schedule, so the booking pages close them", async () => {
+    h.leave = [lost()];
+    const res = await schedule();
+    expect(res.code).toBe(200);
+    expect(res.body.unavailable).toEqual([{
+      id: "leave:lv-1:2026-11-02", date: "2026-11-02", reason: "Personal", remarks: null, startTime: "10:00", endTime: "15:30",
+    }]);
+  });
+
+  it("doesn't double a day that already has its Unavailable Date, and leaves out days taken off", async () => {
+    h.leave = [{ ...lost(), end_date: "2026-11-03", removed_dates: ["2026-11-03"] }];
+    h.unavailable = [{ id: "u-1", dentist_id: "dr-1", unavailable_date: "2026-11-02", reason: "Personal", remarks: null, start_time: "10:00", end_time: "15:30" }];
+    expect((await schedule()).body.unavailable.map((u: any) => u.id)).toEqual(["u-1"]);
+  });
+
+  it("takes the day off the leave when the superadmin removes it, either way it is listed", async () => {
+    h.session = SUPER;
+    h.leave = [lost()];
+    expect((await raw("DELETE", { unavailable: "true", id: "leave:lv-1:2026-11-02" })).code).toBe(200);
+    expect(h.leave[0]).toMatchObject({ status: "cancelled", removed_dates: ["2026-11-02"], changed_by: "Super Admin" });
+    expect((await schedule()).body.unavailable).toEqual([]);
+
+    // A leave's own Unavailable Date, removed by hand: the leave loses the day as well.
+    h.leave = [{ ...lost(), id: "lv-2", end_date: "2026-11-03" }];
+    h.unavailable = [{ id: "u-2", dentist_id: "dr-1", unavailable_date: "2026-11-03", reason: "Personal", remarks: null }];
+    expect((await raw("DELETE", { unavailable: "true", id: "u-2" })).code).toBe(200);
+    expect(h.unavailable).toEqual([]);
+    expect(h.leave[0]).toMatchObject({ status: "approved", removed_dates: ["2026-11-03"] });
+    expect((await schedule()).body.unavailable.map((u: any) => u.date)).toEqual(["2026-11-02"]);
+
+    // A day off marked for something else is just removed; no leave is touched.
+    h.unavailable = [{ id: "u-3", dentist_id: "dr-1", unavailable_date: "2026-11-04", reason: "Seminar", remarks: null }];
+    expect((await raw("DELETE", { unavailable: "true", id: "u-3" })).code).toBe(200);
+    expect(h.leave[0].removed_dates).toEqual(["2026-11-03"]);
   });
 });

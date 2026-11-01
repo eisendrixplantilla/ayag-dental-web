@@ -17,6 +17,10 @@ const h = vi.hoisted(() => ({
   /** Whether overdue pending requests are closed. Off for the older tests, whose
    * pending requests sit on dates that are past by now. */
   expire: false,
+  /** dentist_unavailable rows: { dentist_id, unavailable_date, reason, start_time, end_time }. */
+  away: [] as Row[],
+  /** leave_requests rows: { id, dentist_id, start_date, end_date, status, removed_dates, start_time, end_time }. */
+  leave: [] as Row[],
   n: 0,
 }));
 
@@ -52,6 +56,9 @@ vi.mock("../../api/_lib/db.js", () => ({
         .map(r => ({ service: r.service, time: r.time }));
     }
     if (text.includes("guest-columns")) return [];
+    if (text.includes("unavailable-times") || text.includes("leave-requests-table") || text.includes("leave-columns")) return [];
+    if (text.includes("away-day")) return h.away.filter(u => u.dentist_id === v[0] && u.unavailable_date === v[1]);
+    if (text.includes("away-leave")) return h.leave.filter(l => l.status === "approved" && (v[0] === null || l.dentist_id === v[0]));
     if (text.includes("booking-limits-table") || text.includes("calendar-style-column") || text.includes("dentist-services-table")
       || text.includes("service-hours-table") || text.includes("service-day-limits-column")) return [];
     if (text.includes("service-hours")) return h.hours.filter(r => r.dentist_id === v[0]);
@@ -142,6 +149,8 @@ beforeEach(() => {
   h.offered = [];
   h.hours = [];
   h.expire = false;
+  h.away = [];
+  h.leave = [];
   h.n = 0;
   h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
   sendAppointmentEmail.mockReset().mockResolvedValue(undefined);
@@ -803,5 +812,52 @@ describe("one visit per service a day", () => {
     expect(res.code).toBe(409);
     // Moving within its own day is not a clash with itself.
     expect((await patch("b", { time: "15:00" })).code).toBe(200);
+  });
+});
+
+describe("the dentist's time off", () => {
+  // The Nov 2 case: leave approved for 10:00–15:30 with no Unavailable Date made for it.
+  const leave = { id: "lv-1", dentist_id: DR, start_date: "2026-12-07", end_date: "2026-12-07", status: "approved",
+    removed_dates: [], reason: "Personal", note: null, start_time: "10:00", end_time: "15:30" };
+
+  it("refuses a booking in the hours of approved leave, even with no Unavailable Date for it", async () => {
+    h.leave = [leave];
+    const res = await call("POST", { body: { ...booking, date: "2026-12-07", time: "11:00", endTime: "11:30" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe("The dentist is away from 10:00 AM to 3:30 PM that day. Please choose another time.");
+    // A visit running into the leave counts too; one ending as it starts doesn't.
+    expect((await call("POST", { body: { ...booking, date: "2026-12-07", time: "09:30", endTime: "10:30" } })).code).toBe(409);
+    expect((await call("POST", { body: { ...booking, date: "2026-12-07", time: "09:30", endTime: "10:00" } })).code).toBe(201);
+    expect((await call("POST", { body: { ...booking, date: "2026-12-07", time: "15:30", endTime: "16:00" } })).code).toBe(201);
+    expect(h.rows).toHaveLength(2);
+  });
+
+  it("frees the hours again once that day is taken off the leave, or the leave is cancelled", async () => {
+    h.leave = [{ ...leave, removed_dates: ["2026-12-07"] }];
+    expect((await call("POST", { body: { ...booking, date: "2026-12-07", time: "11:00", endTime: "11:30" } })).code).toBe(201);
+    h.leave = [{ ...leave, status: "cancelled" }];
+    expect((await call("POST", { body: { ...booking, date: "2026-12-07", time: "13:00", endTime: "13:30" } })).code).toBe(201);
+  });
+
+  it("refuses the whole of a day off, and only for that dentist", async () => {
+    h.away = [{ dentist_id: DR, unavailable_date: "2026-12-08", reason: "Vacation", start_time: null, end_time: null }];
+    const res = await call("POST", { body: { ...booking, date: "2026-12-08", time: "16:00" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe("The dentist isn't in that day. Please choose another day.");
+    expect((await call("POST", { body: { ...booking, dentistId: "dr-other", dentistName: "Aerhol Gocalin", date: "2026-12-08", time: "16:00" } })).code).toBe(201);
+  });
+
+  it("won't move a visit onto leave, nor approve one that sits in it", async () => {
+    h.leave = [leave];
+    h.rows = [row({ date: "2026-12-04", time: "11:00", status: "confirmed" })];
+    const move = await patch("apt-1", { status: "rescheduled", date: "2026-12-07", time: "11:00" });
+    expect(move.code).toBe(409);
+    expect(move.body.error).toMatch(/away from 10:00 AM to 3:30 PM/);
+
+    h.rows = [row({ date: "2026-12-07", time: "11:00", status: "pending" })];
+    const approve = await patch("apt-1", { status: "confirmed" });
+    expect(approve.code).toBe(409);
+    expect(approve.body.error).toBe("The dentist is away from 10:00 AM to 3:30 PM that day. Ask the patient to reschedule.");
+    expect(h.rows[0].status).toBe("pending");
   });
 });

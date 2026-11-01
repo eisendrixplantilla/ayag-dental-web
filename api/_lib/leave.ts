@@ -210,6 +210,69 @@ export async function removeLeaveDays(
     WHERE id = ${row.id}`;
 }
 
+/** A day off as dentist_unavailable keeps it. */
+export interface AwayRow {
+  id: string; dentist_id: string; unavailable_date: unknown;
+  reason: string | null; remarks: string | null; start_time: string | null; end_time: string | null;
+}
+
+/** The id a leave's day carries when it has no Unavailable Date of its own. */
+export const leaveDayId = (leaveId: string, date: string) => `leave:${leaveId}:${date}`;
+export const parseLeaveDayId = (id: string) => {
+  const m = /^leave:([^:]+):(\d{4}-\d{2}-\d{2})$/.exec(id);
+  return m ? { leaveId: m[1], date: m[2] } : null;
+};
+
+/**
+ * The Unavailable Dates, plus each day an approved leave still covers that has none: a leave
+ * approved before approving made them, or a day taken off the list by hand. Approved leave
+ * always closes its days, whatever the list says. `dentistId` null: everyone's.
+ */
+export async function withLeave(rows: AwayRow[], dentistId: string | null): Promise<AwayRow[]> {
+  await ensureLeaveTable();
+  const leaves = await sql`/* away-leave */ SELECT id, dentist_id, start_date, end_date, removed_dates, reason, note, start_time, end_time
+    FROM leave_requests WHERE status = 'approved' AND (${dentistId}::uuid IS NULL OR dentist_id = ${dentistId}::uuid)`;
+  const have = new Set(rows.map((r) => `${r.dentist_id} ${day(r.unavailable_date)}`));
+  const out = [...rows];
+  for (const l of leaves as any[]) {
+    for (const date of leaveDates(l)) {
+      if (have.has(`${l.dentist_id} ${date}`)) continue;
+      out.push({
+        id: leaveDayId(l.id, date), dentist_id: l.dentist_id, unavailable_date: date,
+        reason: l.reason, remarks: l.note ?? null, start_time: l.start_time ?? null, end_time: l.end_time ?? null,
+      });
+    }
+  }
+  return out.sort((a, b) => day(a.unavailable_date).localeCompare(day(b.unavailable_date)));
+}
+
+const clock = (t: string) => {
+  const m = minutes(t);
+  return `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, "0")} ${m < 720 ? "AM" : "PM"}`;
+};
+
+/**
+ * Whether the dentist is away for any of a booking's time: a day off, or the hours of leave
+ * for part of one. Returns the message to answer with, or null. Leave that can't be read
+ * doesn't stop a booking the Unavailable Dates allow.
+ */
+export async function awayAt(opts: { dentistId: string | null; date: string; time: string; endTime: string | null }): Promise<string | null> {
+  if (!opts.dentistId) return null;
+  await ensureUnavailableTimes();
+  const rows = await sql`/* away-day */ SELECT id, dentist_id, unavailable_date, reason, remarks, start_time, end_time
+    FROM dentist_unavailable WHERE dentist_id = ${opts.dentistId} AND unavailable_date = ${opts.date}` as AwayRow[];
+  const away = (await withLeave(rows, opts.dentistId).catch(() => rows)).filter((r) => day(r.unavailable_date) === opts.date);
+  const from = minutes(opts.time);
+  const to = opts.endTime ? minutes(opts.endTime) : from + 30;
+  for (const u of away) {
+    if (!u.start_time || !u.end_time) return "The dentist isn't in that day. Please choose another day.";
+    if (from < minutes(u.end_time) && to > minutes(u.start_time)) {
+      return `The dentist is away from ${clock(u.start_time)} to ${clock(u.end_time)} that day. Please choose another time.`;
+    }
+  }
+  return null;
+}
+
 /** The signed-in person's name, as a decision records who made it. */
 export async function nameOf(session: { sub: string; email: string }): Promise<string> {
   const [me] = await sql`SELECT first_name, middle_name, last_name FROM users WHERE id = ${session.sub}`;
