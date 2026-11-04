@@ -12,6 +12,10 @@ const h = vi.hoisted(() => ({
   consents: [] as { appointmentId: string; status: "signed" | "declined"; signedAt: string }[],
   // The dental records written so far.
   records: [] as DentalRecord[],
+  // Visits marked completed: the server refuses to complete one twice.
+  completed: new Set<string>(),
+  // How many record saves fail before one goes through.
+  recordFailures: 0,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -23,7 +27,16 @@ vi.mock("@/contexts/AuthContext", () => ({
       return { consent: { appointmentId: body.appointmentId, status: body.decision, signedAt: "2026-10-30T07:00:00Z", text: "", patientName: body.printedName } };
     }
     if (path.includes("dental-records?photos=true") && init?.method === "POST") return { photo: { id: "ph-1" } };
-    if (path.includes("dental-records") && init?.method === "POST") return { record: { id: "rec-1" } };
+    if (path.includes("dental-records") && init?.method === "POST") {
+      if (h.recordFailures > 0) { h.recordFailures--; throw new Error("The next visit can't be in the past. Choose today or a later date."); }
+      return { record: { id: "rec-1" } };
+    }
+    if (path.startsWith("/appointments?id=") && init?.method === "PATCH" && JSON.parse(String(init.body)).status === "completed") {
+      const id = path.slice("/appointments?id=".length);
+      if (h.completed.has(id)) throw new Error("Only approved appointments can be completed. Approve it first.");
+      h.completed.add(id);
+      return { appointment: { ...h.appts.find((a) => a.id === id), status: "completed" } };
+    }
     if (path === "/dental-records") return { records: h.records };
     if (path.startsWith("/dental-records?id=")) return { record: h.records.find(r => path.endsWith(r.id)) };
     if (path.includes("dental-records?photos=")) return { photos: [] };
@@ -75,7 +88,12 @@ beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
 afterEach(cleanup);
-beforeEach(() => { h.schedule = { days: [], unavailable: [] }; h.consents = []; h.records = []; });
+beforeEach(async () => {
+  h.schedule = { days: [], unavailable: [] }; h.consents = []; h.records = []; h.completed = new Set(); h.recordFailures = 0;
+  // Each test reads the calls it made, not an earlier test's.
+  const { api } = await import("@/contexts/AuthContext");
+  vi.mocked(api).mockClear();
+});
 
 function apt(over: Partial<Appointment>): Appointment {
   return {
@@ -248,6 +266,42 @@ describe("the dentist's list puts the newest booking on top", () => {
     const names = Array.from(document.querySelectorAll("tbody tr"))
       .map(r => (r as HTMLTableRowElement).cells[0].textContent);
     expect(names).toEqual(["Pedro Reyes", "Maria Santos", "Allen Estrella"]);
+  });
+});
+
+describe("saving a consultation", () => {
+  it("can be saved again when the dental record fails the first time, without completing the visit twice", async () => {
+    const { api } = await import("@/contexts/AuthContext");
+    h.appts = [apt({ id: "c", patientName: "Juan Dela Cruz", status: "confirmed" })];
+    h.consents = [{ appointmentId: "c", status: "signed", signedAt: "2026-09-25T05:00:00Z" }];
+    h.recordFailures = 1;
+    render(<MemoryRouter><DentistAppointments /></MemoryRouter>);
+
+    const row = within((await screen.findByText("Juan Dela Cruz")).closest("tr")!);
+    await waitFor(() => {
+      fireEvent.click(row.getByRole("button", { name: "More options" }));
+      const item = row.getByRole("menuitem", { name: /Start Consultation/ });
+      expect(item).not.toHaveAttribute("aria-disabled");
+      fireEvent.click(item);
+    });
+    const form = within(await screen.findByRole("dialog"));
+    const [procedure, diagnosis] = form.getAllByRole("textbox");
+    fireEvent.change(procedure, { target: { value: "Oral Prophylaxis" } });
+    fireEvent.change(diagnosis, { target: { value: "Plaque" } });
+
+    const recordSaves = () => vi.mocked(api).mock.calls.filter(([p, init]) => p === "/dental-records" && init?.method === "POST").length;
+    const completions = () => vi.mocked(api).mock.calls.filter(([p, init]) => String(p).startsWith("/appointments?id=c") && init?.method === "PATCH").length;
+
+    // The first try: the visit is completed, the record isn't saved, the form stays open.
+    fireEvent.click(form.getByRole("button", { name: /Save Consultation/ }));
+    await waitFor(() => expect(recordSaves()).toBe(1));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // Saved again: only the record is sent this time, and it goes through.
+    fireEvent.click(form.getByRole("button", { name: /Save Consultation/ }));
+    await waitFor(() => expect(recordSaves()).toBe(2));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(completions()).toBe(1);
   });
 });
 

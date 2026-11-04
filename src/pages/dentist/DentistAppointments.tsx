@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -156,6 +156,9 @@ export default function DentistAppointments() {
   );
 
   const [consult, setConsult] = useState<Appointment | null>(null);
+  // Visits this page has marked completed. If the record then fails to save, saving
+  // again sends only the record: the server won't complete a visit twice.
+  const completedHere = useRef(new Set<string>());
   const [resched, setResched] = useState<Appointment | null>(null);
   const [cancelApt, setCancelApt] = useState<Appointment | null>(null);
 
@@ -217,7 +220,10 @@ export default function DentistAppointments() {
     }
     setSaving(true);
     try {
-      await completeAppointment(consult.id);
+      if (!completedHere.current.has(consult.id)) {
+        await completeAppointment(consult.id);
+        completedHere.current.add(consult.id);
+      }
       const record = await createDentalRecord({
         appointmentId: consult.id,
         date: consult.date,
@@ -245,7 +251,11 @@ export default function DentistAppointments() {
       setConsult(null);
       load();
     } catch (err) {
-      toast({ title: "Failed to save consultation", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+      const why = err instanceof Error ? err.message : undefined;
+      toast(completedHere.current.has(consult.id)
+        // The visit went through; only its record didn't. Say so, so it isn't redone.
+        ? { title: "Dental record not saved", description: `The visit is marked Completed. ${why ? `${why.replace(/\.?$/, ".")} ` : ""}Fix it and save again.`, variant: "destructive" }
+        : { title: "Failed to save consultation", description: why, variant: "destructive" });
     } finally {
       setSaving(false);
     }
