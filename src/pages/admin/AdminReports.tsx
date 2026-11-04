@@ -21,7 +21,8 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { EMPTY_FILTER, describeReportFilter, filterIsActive, filterReportRows } from "@/lib/reportFilter";
 import { toast } from "sonner";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { groupGuests } from "@/lib/guests";
+import { groupGuests, guestSince } from "@/lib/guests";
+import { newestFirst } from "@/lib/newest";
 import { getPatients, type Patient } from "@/lib/api/patients";
 import { toLabel, toMinutes } from "@/lib/dentistSchedules";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -111,7 +112,7 @@ export default function AdminReports() {
         .map((p) => {
           const own = appointments.filter((a) => a.patientId === p.id);
           const latest = own.map((a) => a.date).sort().at(-1) ?? "";
-          return { info: [p.name, p.code ?? "—", p.phone || "—", p.email || "—", "Registered"], total: own.length, latest };
+          return { info: [p.name, p.code ?? "—", p.phone || "—", p.email || "—", "Registered"], total: own.length, latest, since: p.createdAt };
         });
 
       // Walk-ins booked for someone with no account have no patients row to hang off,
@@ -120,9 +121,10 @@ export default function AdminReports() {
         info: [g.name, "—", g.contact || "—", "—", "No account"],
         total: g.visits.length,
         latest: g.visits[0]?.date ?? "",
+        since: guestSince(g),
       }));
 
-      rows = [...accountRows, ...guestRows]
+      rows = newestFirst([...accountRows, ...guestRows], (r) => r.since)
         .map(({ info, total, latest }) => [...info, String(total), latest || "—"]);
     }
 

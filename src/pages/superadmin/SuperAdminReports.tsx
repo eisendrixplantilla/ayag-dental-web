@@ -23,7 +23,8 @@ import { DAY_NAMES, getAllSchedules, getStaff, type DentistScheduleData, type St
 import { getLeave, leaveHours, shortRange, type LeaveRequest } from "@/lib/api/leave";
 import { formatTimeRange } from "@/lib/dentistSchedules";
 import { getAppointments, type Appointment } from "@/lib/api/appointments";
-import { groupGuests } from "@/lib/guests";
+import { groupGuests, guestSince } from "@/lib/guests";
+import { newestFirst as byNewestDate } from "@/lib/newest";
 import { getDentalRecords, type DentalRecord } from "@/lib/api/dentalRecords";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
 import { useAuth } from "@/contexts/AuthContext";
@@ -195,14 +196,14 @@ export default function SuperAdminReports() {
     } else if (type === "accounts") {
       rows = patients.map((p) => [p.name, p.code ?? "—", p.email || "—", p.status === "active" ? "Active" : "Deactivated", p.createdAt?.slice(0, 10) ?? "—"]);
     } else if (type === "records") {
-      // Account holders, then guests booked at the desk with no account.
-      rows = [
-        ...patients.map((p) => [
+      // Newest first: an account by when it was made, a guest by their first booking.
+      rows = byNewestDate([
+        ...patients.map((p) => ({ since: p.createdAt, row: [
           p.name, p.code ?? "—", p.age != null ? String(p.age) : "—", p.phone || "—", p.email || "—", capitalize(p.status),
           appointments.some((a) => a.patientId === p.id && a.type === "walk-in") ? "Yes" : "No",
-        ]),
-        ...groupGuests(appointments).map((g) => [g.name, "—", "—", g.contact || "—", g.visits.find((a) => a.email)?.email ?? "—", "No account", "Yes"]),
-      ];
+        ] })),
+        ...groupGuests(appointments).map((g) => ({ since: guestSince(g), row: [g.name, "—", "—", g.contact || "—", g.visits.find((a) => a.email)?.email ?? "—", "No account", "Yes"] })),
+      ], (r) => r.since).map((r) => r.row);
     } else if (type === "dental") {
       rows = [...records].sort((a, b) => b.date.localeCompare(a.date)).map((r) => [
         r.date, r.patientName ?? "—", r.dentistName ?? "—",

@@ -82,9 +82,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const archived = req.query.archived === "true";
+    // Newest first: the latest archived, or the latest to sign up or be added at the desk.
     const rows = archived
-      ? await sql`SELECT * FROM patients WHERE archived_at IS NOT NULL ORDER BY first_name, last_name`
-      : await sql`SELECT * FROM patients WHERE archived_at IS NULL ORDER BY first_name, last_name`;
+      ? await sql`SELECT * FROM patients WHERE archived_at IS NOT NULL ORDER BY archived_at DESC, created_at DESC NULLS LAST`
+      : await sql`SELECT * FROM patients WHERE archived_at IS NULL ORDER BY created_at DESC NULLS LAST, first_name, last_name`;
     return res.status(200).json({ patients: rows.map((r) => mapPatient(r)) });
   }
 

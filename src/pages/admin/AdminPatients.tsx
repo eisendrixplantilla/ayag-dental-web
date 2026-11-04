@@ -15,7 +15,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { getPatients, createPatient, updatePatient, type Patient } from "@/lib/api/patients";
 import { getAppointments, linkGuestToAccount, type Appointment } from "@/lib/api/appointments";
-import { groupGuests, guestLabel, type GuestGroup } from "@/lib/guests";
+import { groupGuests, guestLabel, guestSince, type GuestGroup } from "@/lib/guests";
+import { newestFirst } from "@/lib/newest";
 import { formatManilaDate } from "@/lib/formatDate";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { usePrintDocument } from "@/hooks/usePrintDocument";
@@ -127,7 +128,8 @@ export default function AdminPatients() {
       guest: g,
     }));
 
-    return [...accountRows, ...guestRows];
+    // Newest first: an account by when it was made, a guest by their first booking.
+    return newestFirst([...accountRows, ...guestRows], r => r.patient?.createdAt ?? (r.guest && guestSince(r.guest)));
   }, [patients, appointments]);
 
   const textRows = useMemo(

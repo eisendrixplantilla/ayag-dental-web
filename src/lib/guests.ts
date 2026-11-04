@@ -1,4 +1,5 @@
 import type { Appointment } from "@/lib/api/appointments";
+import { manilaDateOf } from "@/lib/formatDate";
 
 /** A phone number reduced to its digits, so "0917-123-4567" and "0917 123 4567" are the same. */
 export const contactDigits = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
@@ -34,3 +35,11 @@ export function groupGuests(appointments: Appointment[]): GuestGroup[] {
 
 /** How a guest is named in lists: with their number, which is what tells namesakes apart. */
 export const guestLabel = (g: Pick<GuestGroup, "name" | "contact">) => (g.contact ? `${g.name} (${g.contact})` : g.name);
+
+/** When the clinic first booked this guest, as a Manila date: what a patient account's
+ * sign-up date is to an account holder, so the two can share one newest-first list. */
+export function guestSince(g: GuestGroup): string | null {
+  const first = g.visits.reduce<string | null>(
+    (min, a) => (a.createdAt && (!min || Date.parse(a.createdAt) < Date.parse(min)) ? a.createdAt : min), null);
+  return first ? manilaDateOf(first) : null;
+}

@@ -156,7 +156,7 @@ export default function AdminAppointments() {
       .then(setDentists)
       .catch(() => toast.error("Failed to load dentists"))
       .finally(() => setLoadingDentists(false));
-    getPatients().then(setPatients).catch(() => {});
+    getPatients().then((p) => setPatients([...p].sort((a, b) => a.name.localeCompare(b.name)))).catch(() => {});
   }, []);
 
   useEffect(() => {

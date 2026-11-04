@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { newestFirst } from "@/lib/newest";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,7 @@ export default function SuperAdminArchives() {
     setLoading(true);
     try {
       const [staff, patients] = await Promise.all([getArchivedStaff(), getArchivedPatients()]);
-      setRows([
+      setRows(newestFirst([
         ...staff.map<ArchiveRow>((s) => ({
           id: s.id,
           ref: s.employeeId ?? "—",
@@ -72,7 +73,7 @@ export default function SuperAdminArchives() {
           archivedBy: p.archivedBy ?? "Super Admin",
           reason: "—",
         })),
-      ]);
+      ], (r) => r.archivedAt)); // latest archived first
     } catch {
       toast.error("Failed to load archived accounts");
     } finally {

@@ -664,8 +664,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const archived = req.query.archived === "true";
     const rows = archived
-      ? await sql`SELECT * FROM users WHERE role IN ('admin', 'dentist') AND status = 'archived' ORDER BY last_name`
-      : await sql`SELECT * FROM users WHERE role IN ('admin', 'dentist') AND status != 'archived' ORDER BY role, last_name`;
+      ? await sql`SELECT * FROM users WHERE role IN ('admin', 'dentist') AND status = 'archived' ORDER BY archived_at DESC NULLS LAST, created_at DESC NULLS LAST`
+      : await sql`SELECT * FROM users WHERE role IN ('admin', 'dentist') AND status != 'archived' ORDER BY created_at DESC NULLS LAST, last_name`;
     return res.status(200).json({ staff: rows.map(mapStaff) });
   }
 
