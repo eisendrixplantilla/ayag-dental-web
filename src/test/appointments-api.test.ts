@@ -204,6 +204,21 @@ describe("an email for every status", () => {
     expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status: "rescheduled", time: "15:00" }));
   });
 
+  it.each(["juan.delacruz@sample.ayag.test", "user@user.com", "someone@clinic.invalid"])(
+    "sends nothing to the demo address %s", async (email) => {
+      h.rows = [row({ status: "pending", email })];
+      const res = await patch("apt-1", { status: "confirmed" });
+      expect(res.body.appointment.status).toBe("confirmed");
+      expect(res.body.emailSent).toBeNull();
+      expect(sendAppointmentEmail).not.toHaveBeenCalled();
+    });
+
+  it("still emails a real address", async () => {
+    h.rows = [row({ status: "pending", email: "eisen@gmail.com" })];
+    const res = await patch("apt-1", { status: "confirmed" });
+    expect(res.body.emailSent).toBe(true);
+  });
+
   it("sends nothing when only a remark changes", async () => {
     h.rows = [row({ status: "confirmed" })];
     const res = await patch("apt-1", { remarks: "Bring x-rays" });

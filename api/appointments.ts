@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
 import { sendAppointmentEmail, type AppointmentEmailParams } from "./_lib/email.js";
+import { isDemoAddress } from "./_lib/demoEmail.js";
 import { displayService } from "./_lib/services.js";
 import { joinName } from "./_lib/name.js";
 import { manilaDateStr, manilaNowMinutes } from "./_lib/date.js";
@@ -27,7 +28,8 @@ const EMAIL_STATUSES = new Set<string>(["pending", "confirmed", "rejected", "can
  * response is sent, which would silently kill an un-awaited send.
  */
 async function notifyPatient(row: EmailRow, status: EmailStatus, message: string): Promise<boolean | null> {
-  if (!row?.email) return null;
+  // Demo bookings carry made-up addresses: nothing is due to them.
+  if (!row?.email || isDemoAddress(row.email)) return null;
   try {
     await sendAppointmentEmail({
       email: row.email,
