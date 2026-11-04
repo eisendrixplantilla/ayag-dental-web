@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
-  ArrowDownRight, ArrowUpRight, CalendarCheck, CalendarDays, Check, ClipboardList, Clock, Eye, Loader2, type LucideIcon, MoreVertical,
+  ArrowDownRight, ArrowUpRight, CalendarCheck, CalendarDays, Check, ClipboardList, Clock, Eye, Loader2, type LucideIcon,
   Stethoscope, TrendingUp, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,9 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import Segmented from "@/components/Segmented";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   byNewestBooked, confirmAppointment, describeEmailOutcome, rejectAppointment, type Appointment,
@@ -369,26 +366,25 @@ export function ApprovalRequests({ appointments, onChanged }: { appointments: Ap
                     {format(parseISO(a.date), "EEE, MMM d")} · {toLabel(toMinutes(a.time))}
                   </p>
                 </div>
-                {/* One menu, so the patient's name keeps the row's width. */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" aria-label={`Options for ${a.patientName}`} disabled={busy !== null}
-                      className="h-8 w-8 shrink-0 text-muted-foreground">
-                      {busy === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreVertical className="w-4 h-4" />}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem className="text-success focus:text-success" onClick={() => approve(a)}>
-                      <Check className="w-4 h-4 mr-2" /> Approve
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => { setReason(""); setRejecting(a); }}>
-                      <X className="w-4 h-4 mr-2" /> Reject
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setViewing(a)}>
-                      <Eye className="w-4 h-4 mr-2" /> View details
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {/* Each action is its own button on the row: one click, nothing to open or wait for.
+                    Icons only, so the patient's name keeps the row's width; the label says which. */}
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="icon" variant="outline" disabled={busy !== null} onClick={() => approve(a)}
+                    aria-label={`Approve ${a.patientName}'s request`} title="Approve"
+                    className="h-8 w-8 border-success/30 text-success hover:bg-success/10 hover:text-success">
+                    {busy === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </Button>
+                  <Button size="icon" variant="outline" disabled={busy !== null} onClick={() => { setReason(""); setRejecting(a); }}
+                    aria-label={`Reject ${a.patientName}'s request`} title="Reject"
+                    className="h-8 w-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                    <X className="w-4 h-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" disabled={busy !== null} onClick={() => setViewing(a)}
+                    aria-label={`View ${a.patientName}'s request`} title="View details"
+                    className="h-8 w-8 text-muted-foreground">
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

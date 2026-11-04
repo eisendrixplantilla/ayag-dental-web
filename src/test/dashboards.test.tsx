@@ -64,7 +64,6 @@ function apt(i: number, over: Partial<Appointment> = {}): Appointment {
 
 const show = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 /** The plain stand-in menu is always open; the trigger is still clicked, as a person would. */
-const openMenu = (trigger: HTMLElement) => fireEvent.click(trigger);
 /** The card a title heads (a legend can repeat a title's word, so the card's own text is looked for first). */
 const card = (title: string) =>
   screen.getAllByText(title).map((el) => el.closest(".shadow-card") as HTMLElement)
@@ -98,8 +97,8 @@ describe("staff dashboards", () => {
 
     const requests = within(card("Approval Requests"));
     expect(requests.getByText("Maria")).toBeInTheDocument();
-    openMenu(requests.getByRole("button", { name: "Options for Maria" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Approve/ }));
+    // One click on the row approves it: no menu to open first.
+    fireEvent.click(requests.getByRole("button", { name: "Approve Maria's request" }));
     await waitFor(() => expect(h.calls.some((c) => c.body?.includes('"confirmed"'))).toBe(true));
   });
 
@@ -120,13 +119,28 @@ describe("staff dashboards", () => {
     h.calls = [];
     h.appts = [apt(3, { status: "pending", date: "2099-01-05", patientName: "Maria" })];
     show(<AdminDashboard />);
-    openMenu(await screen.findByRole("button", { name: "Options for Maria" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Reject/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reject Maria's request" }));
     const send = screen.getByRole("button", { name: "Reject & Notify" });
     expect(send).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Dentist unavailable" } });
     fireEvent.click(send);
     await waitFor(() => expect(h.calls.some((c) => c.body?.includes("Dentist unavailable"))).toBe(true));
+  });
+
+  it("admin: each request has its own Approve, Reject and View buttons, no menu to open", async () => {
+    h.role = "admin";
+    h.calls = [];
+    h.appts = [apt(3, { status: "pending", date: "2099-01-05", patientName: "Maria" })];
+    show(<AdminDashboard />);
+    await screen.findByText("Maria");
+    const requests = within(card("Approval Requests"));
+    expect(requests.queryByRole("button", { name: /Options for/ })).toBeNull();
+    for (const name of ["Approve Maria's request", "Reject Maria's request", "View Maria's request"]) {
+      expect(requests.getByRole("button", { name })).toBeEnabled();
+    }
+    fireEvent.click(requests.getByRole("button", { name: "View Maria's request" }));
+    expect(await screen.findByRole("dialog", { name: "Appointment Request" })).toBeInTheDocument();
+    expect(h.calls.some((c) => c.body?.includes('"confirmed"'))).toBe(false); // looking changes nothing
   });
 
   it("dentist: only their own appointments, and their own patient totals", async () => {
