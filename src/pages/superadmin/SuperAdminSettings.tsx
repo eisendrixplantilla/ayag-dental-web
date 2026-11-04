@@ -23,7 +23,6 @@ import { useAuth, ApiError } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import Hint from "@/components/Hint";
 import { IconAction, RowActions } from "@/components/RowActions";
-import PriceInput from "@/components/PriceInput";
 
 export default function SuperAdminSettings() {
   const [loading, setLoading] = useState(true);
@@ -32,7 +31,6 @@ export default function SuperAdminSettings() {
   const [savingHours, setSavingHours] = useState(false);
 
   const [services, setServices] = useState<Service[]>([]);
-  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
   // Which row is being dragged, and which one it is currently over.
@@ -55,7 +53,7 @@ export default function SuperAdminSettings() {
   const [savingRemoval, setSavingRemoval] = useState(false);
 
   const [adding, setAdding] = useState(false);
-  const [newService, setNewService] = useState({ name: "", duration: "30", price: "" });
+  const [newService, setNewService] = useState({ name: "", duration: "30" });
   const [savingNew, setSavingNew] = useState(false);
 
   const [info, setInfo] = useState<ClinicInfo>({ name: "", phone: "", email: "", address: "" });
@@ -80,13 +78,9 @@ export default function SuperAdminSettings() {
           emptyText: "No clinic hours set.",
         },
         {
-          heading: "Dental Services & Pricing",
-          columns: ["Service", "Duration", "Price (₱)"],
-          rows: services.map(s => [
-            s.name,
-            s.duration != null ? `${s.duration} min` : "—",
-            s.price != null ? Number(s.price).toLocaleString() : "—",
-          ]),
+          heading: "Dental Services",
+          columns: ["Service", "Duration"],
+          rows: services.map(s => [s.name, s.duration != null ? `${s.duration} min` : "—"]),
           emptyText: "No services configured.",
         },
       ],
@@ -98,7 +92,6 @@ export default function SuperAdminSettings() {
         setHours(h);
         setServices(s);
         setRemoved(gone);
-        setPriceDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.price != null ? String(svc.price) : ""])));
         setDurationDrafts(Object.fromEntries(s.map((svc) => [svc.id, svc.duration != null ? String(svc.duration) : ""])));
         setInfo(i);
       })
@@ -139,7 +132,6 @@ export default function SuperAdminSettings() {
       const back = await restoreService(service.id);
       setServices(await getServices());
       setRemoved((prev) => prev.filter((s) => s.id !== service.id));
-      setPriceDrafts((prev) => ({ ...prev, [back.id]: back.price != null ? String(back.price) : "" }));
       setDurationDrafts((prev) => ({ ...prev, [back.id]: back.duration != null ? String(back.duration) : "" }));
       toast.success(`${back.name} is offered again`);
     } catch (err) {
@@ -211,16 +203,15 @@ export default function SuperAdminSettings() {
   };
 
   const openAddService = () => {
-    setNewService({ name: "", duration: "30", price: "" });
+    setNewService({ name: "", duration: "30" });
     setAdding(true);
   };
 
-  // A new service joins the list the booking forms read, so it needs the same two
-  // numbers an existing one does: how long it takes, and what it costs.
+  // A new service joins the list the booking forms read, so it needs what an existing
+  // one has: how long it takes.
   const addService = async () => {
     const name = newService.name.trim();
     const duration = Number(newService.duration);
-    const price = Number(newService.price);
     if (!name) {
       toast.error("Enter the service name");
       return;
@@ -229,16 +220,10 @@ export default function SuperAdminSettings() {
       toast.error("Enter the minutes this service takes");
       return;
     }
-    if (!newService.price || Number.isNaN(price) || price < 0) {
-      toast.error("Enter a valid price");
-      return;
-    }
-
     setSavingNew(true);
     try {
-      const created = await createService({ name, duration, price });
+      const created = await createService({ name, duration });
       setServices(await getServices());
-      setPriceDrafts((prev) => ({ ...prev, [created.id]: created.price != null ? String(created.price) : "" }));
       setDurationDrafts((prev) => ({ ...prev, [created.id]: created.duration != null ? String(created.duration) : "" }));
       setAdding(false);
       toast.success(`${created.name} added`);
@@ -266,19 +251,14 @@ export default function SuperAdminSettings() {
   };
 
   const saveService = async (service: Service) => {
-    const price = Number(priceDrafts[service.id]);
     const duration = Number(durationDrafts[service.id]);
-    if (!priceDrafts[service.id] || Number.isNaN(price) || price < 0) {
-      toast.error("Enter a valid price");
-      return;
-    }
     if (!durationDrafts[service.id] || !Number.isInteger(duration) || duration <= 0) {
       toast.error("Enter the minutes this service takes");
       return;
     }
     setSavingServiceId(service.id);
     try {
-      const updated = await updateService(service.id, { price, duration });
+      const updated = await updateService(service.id, { duration });
       setServices((prev) => prev.map((s) => (s.id === service.id ? updated : s)));
       toast.success(`${updated.name} updated`);
     } catch (err) {
@@ -307,13 +287,13 @@ export default function SuperAdminSettings() {
         <img src="/clinic-logo.png" alt="Ayag Dental Clinic" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-bold font-heading">Ayag Dental Clinic</p>
-          <p className="text-xs">Dental Services &amp; Pricing · Generated {formatManilaDate()}</p>
+          <p className="text-xs">Dental Services · Generated {formatManilaDate()}</p>
         </div>
       </div>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">System Settings</h1>
-          <p className="text-muted-foreground">Configure clinic hours, services, and pricing</p>
+          <p className="text-muted-foreground">Configure clinic hours and services</p>
         </div>
         <Button onClick={handlePrint} disabled={loading} variant="outline" className="print:hidden">
           <Printer className="w-4 h-4 mr-2" /> Print
@@ -420,27 +400,16 @@ export default function SuperAdminSettings() {
                 placeholder="e.g. Fluoride Treatment"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="service-duration">Duration (minutes)</Label>
-                <Input
-                  id="service-duration"
-                  type="number"
-                  min={5}
-                  step={5}
-                  value={newService.duration}
-                  onChange={(e) => setNewService((s) => ({ ...s, duration: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="service-price">Price (₱)</Label>
-                <PriceInput
-                  id="service-price"
-                  value={newService.price}
-                  onValueChange={(price) => setNewService((s) => ({ ...s, price }))}
-                  placeholder="0"
-                />
-              </div>
+            <div>
+              <Label htmlFor="service-duration">Duration (minutes)</Label>
+              <Input
+                id="service-duration"
+                type="number"
+                min={5}
+                step={5}
+                value={newService.duration}
+                onChange={(e) => setNewService((s) => ({ ...s, duration: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -485,7 +454,7 @@ export default function SuperAdminSettings() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="font-heading text-lg flex items-center gap-2"><Stethoscope className="w-5 h-5 text-primary" /> Dental Services & Pricing</CardTitle>
+              <CardTitle className="font-heading text-lg flex items-center gap-2"><Stethoscope className="w-5 h-5 text-primary" /> Dental Services</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Duration is what the booking forms reserve: a visit is offered only the time slots
                 long enough for the services chosen. A service can be booked once it has one.
@@ -505,7 +474,6 @@ export default function SuperAdminSettings() {
                 <TableHead className={`w-10 print:hidden ${CODE_COL}`}><span className="sr-only">Reorder</span></TableHead>
                 <TableHead className={PIN_COL}>Service</TableHead>
                 <TableHead className={NUM_COL}>Duration</TableHead>
-                <TableHead className={NUM_COL}>Price (₱)</TableHead>
                 <TableHead className={`print:hidden ${CODE_COL}`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -561,14 +529,6 @@ export default function SuperAdminSettings() {
                       <span className="text-sm text-muted-foreground">min</span>
                     </div>
                   </TableCell>
-                  <TableCell className={NUM_COL}>
-                    <PriceInput
-                      aria-label={`Price for ${s.name}`}
-                      value={priceDrafts[s.id] ?? ""}
-                      onValueChange={(price) => setPriceDrafts((prev) => ({ ...prev, [s.id]: price }))}
-                      className="w-32 text-right"
-                    />
-                  </TableCell>
                   <TableCell className={`print:hidden ${CODE_COL}`}>
                     <RowActions>
                       <IconAction
@@ -586,7 +546,7 @@ export default function SuperAdminSettings() {
               ))}
               {!loading && services.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">No services found</TableCell>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">No services found</TableCell>
                 </TableRow>
               )}
             </TableBody>

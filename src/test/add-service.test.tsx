@@ -117,7 +117,7 @@ const openDialog = async () => {
   fireEvent.click(screen.getByRole("button", { name: /Add Service/ }));
   await screen.findByText("Add Dental Service");
 };
-// The table has its own per-row Duration/Price boxes, so look inside the dialog.
+// The table has its own per-row Duration boxes, so look inside the dialog.
 const dialog = () => document.querySelector("[role=dialog]") as HTMLElement;
 const field = (label: RegExp) => within(dialog()).getByLabelText(label) as HTMLInputElement;
 const submit = () =>
@@ -131,18 +131,18 @@ describe("adding a dental service", () => {
 
     expect(field(/Service Name/)).toHaveValue("");
     expect(field(/Duration/)).toHaveValue(30);
-    expect(field(/Price/)).toHaveValue(""); // a text box, so it can show 1,500
+    // Services have no price: the clinic doesn't list one.
+    expect(within(dialog()).queryByLabelText(/Price/)).toBeNull();
   });
 
   it("saves the service and shows it in the table straight away", async () => {
     await openDialog();
     fireEvent.change(field(/Service Name/), { target: { value: "  Fluoride Treatment  " } });
     fireEvent.change(field(/Duration/), { target: { value: "45" } });
-    fireEvent.change(field(/Price/), { target: { value: "2000" } });
     submit();
 
     await waitFor(() => expect(h.created).toHaveLength(1));
-    expect(h.created[0]).toEqual({ name: "Fluoride Treatment", duration: 45, price: 2000 }); // trimmed, as numbers
+    expect(h.created[0]).toEqual({ name: "Fluoride Treatment", duration: 45 }); // trimmed, minutes as a number
     await waitFor(() => expect(screen.getByText("Fluoride Treatment")).toBeInTheDocument());
     expect(screen.queryByText("Add Dental Service")).toBeNull(); // dialog closed
   });
@@ -150,7 +150,6 @@ describe("adding a dental service", () => {
   it("puts a new service at the end of the catalogue, to be dragged where it belongs", async () => {
     await openDialog();
     fireEvent.change(field(/Service Name/), { target: { value: "Braces" } });
-    fireEvent.change(field(/Price/), { target: { value: "25000" } });
     submit();
 
     // The order is the Super Admin's, not the alphabet's, so nothing is inserted
@@ -159,7 +158,7 @@ describe("adding a dental service", () => {
     expect(serviceNames()).toEqual(["Oral", "Braces"]);
   });
 
-  it("won't save without a name, minutes or a price", async () => {
+  it("won't save without a name or minutes", async () => {
     await openDialog();
     submit(); // nothing typed at all
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("Enter the service name"));
@@ -169,18 +168,30 @@ describe("adding a dental service", () => {
     submit();
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("Enter the minutes this service takes"));
 
-    fireEvent.change(field(/Duration/), { target: { value: "45" } });
-    submit();
-    await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("Enter a valid price"));
-
     expect(h.created).toHaveLength(0);
+  });
+
+  it("has no price anywhere in the service list", async () => {
+    render(<SuperAdminSettings />);
+    await screen.findByText("Oral");
+    expect(screen.queryByText(/Price/)).toBeNull();
+    expect(screen.queryByLabelText(/Price for/)).toBeNull();
+    expect(screen.queryByText(/Pricing/)).toBeNull();
+  });
+
+  it("saves a service's new minutes alone", async () => {
+    const { updateService } = await import("@/lib/api/dentalRecords");
+    render(<SuperAdminSettings />);
+    await screen.findByText("Oral");
+    fireEvent.change(screen.getByLabelText("Duration for Oral in minutes"), { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Oral" }));
+    await waitFor(() => expect(updateService).toHaveBeenCalledWith("sv-oral", { duration: 45 }));
   });
 
   it("says so when the clinic already has that service", async () => {
     h.failWith = "A service with this name already exists";
     await openDialog();
     fireEvent.change(field(/Service Name/), { target: { value: "Oral" } });
-    fireEvent.change(field(/Price/), { target: { value: "1500" } });
     submit();
 
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("A service with this name already exists"));
