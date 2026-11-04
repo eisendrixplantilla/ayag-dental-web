@@ -17,9 +17,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminPatients from "./pages/admin/AdminPatients";
 import AdminPatientHistory from "./pages/admin/AdminPatientHistory";
 import AdminAppointments from "./pages/admin/AdminAppointments";
-import AdminQueue from "./pages/admin/AdminQueue";
 import AdminInventory from "./pages/admin/AdminInventory";
-import AdminSales from "./pages/admin/AdminSales";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminTreatment from "./pages/admin/AdminTreatment";
 import AdminAccounts from "./pages/admin/AdminAccounts";
@@ -29,7 +27,6 @@ import AdminProfile from "./pages/admin/AdminProfile";
 import PatientDashboard from "./pages/patient/PatientDashboard";
 import PatientBook from "./pages/patient/PatientBook";
 import PatientAppointments from "./pages/patient/PatientAppointments";
-import PatientQueue from "./pages/patient/PatientQueue";
 import PatientRecords from "./pages/patient/PatientRecords";
 import PatientProfile from "./pages/patient/PatientProfile";
 
@@ -85,10 +82,8 @@ function AppRoutes() {
       <Route path="/admin/schedule" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><DentistSchedule /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/online-appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout wide><AdminOnlineAppointments /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/queue" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminQueue /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/treatment" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminTreatment /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/inventory" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminInventory /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/sales" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminSales /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminReports /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminProfile /></DashboardLayout></ProtectedRoute>} />
 
@@ -96,7 +91,6 @@ function AppRoutes() {
       <Route path="/patient" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientDashboard /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/book" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientBook /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/appointments" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientAppointments /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/patient/queue" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientQueue /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/records" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientRecords /></DashboardLayout></ProtectedRoute>} />
       <Route path="/patient/profile" element={<ProtectedRoute roles={["patient"]}><DashboardLayout><PatientProfile /></DashboardLayout></ProtectedRoute>} />
 
