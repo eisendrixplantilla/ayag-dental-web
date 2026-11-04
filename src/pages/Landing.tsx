@@ -10,8 +10,9 @@ import {
 import { getLetterhead, type ClinicInfo } from "@/lib/api/settings";
 import { describeClinicHours } from "@/lib/clinicHours";
 import { getDentistProfiles, type DentistProfile } from "@/lib/api/booking";
-import { describeServiceHours, describeWorkingDays } from "@/lib/workingDays";
+import { describeWorkingDays } from "@/lib/workingDays";
 import DentistAvatar from "@/components/DentistAvatar";
+import { ServiceDays } from "@/components/DentistCards";
 
 const services = [
   { name: "Orthodontics (Braces)", icon: Smile },
@@ -208,18 +209,21 @@ export default function Landing() {
                           <p className="text-sm text-muted-foreground">Dentist</p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(d.services ?? ["All services"]).map((sv) => (
-                          <span key={sv} className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-xs text-foreground">{sv}</span>
-                        ))}
-                      </div>
                       {d.days.length > 0 && (
                         <div className="space-y-1 text-sm text-muted-foreground">
                           {describeWorkingDays(d.days).map((line) => (
                             <p key={line} className="flex items-start gap-2"><Clock className="w-4 h-4 mt-0.5 shrink-0 text-primary" />{line}</p>
                           ))}
-                          {(d.hours ?? []).filter((h) => !d.services || d.services.includes(h.service)).map((h) => (
-                            <p key={h.service} className="pl-6 text-xs">{h.service}: {describeServiceHours(h)}</p>
+                        </div>
+                      )}
+                      {/* What they offer and how many a day, as a table of their working days
+                          (the same one the booking form shows); otherwise just what they offer. */}
+                      {d.services && d.days.length > 0 ? (
+                        <ServiceDays d={d} days={[...new Set(d.days.map((w) => w.dayOfWeek))].sort((a, b) => a - b)} />
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {(d.services ?? ["All services"]).map((sv) => (
+                            <span key={sv} className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-xs text-foreground">{sv}</span>
                           ))}
                         </div>
                       )}

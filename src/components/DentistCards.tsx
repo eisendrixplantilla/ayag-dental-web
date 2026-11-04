@@ -206,8 +206,9 @@ export default function DentistCards({ open, onOpenChange, services, visitMinute
 }
 
 /** A dentist's services against their working days: how many of each they take that day,
- * or — when they don't do it then. The services being booked are highlighted. */
-function ServiceDays({ d, days, highlight }: { d: DentistProfile; days: number[]; highlight: string[] }) {
+ * or — when they don't do it then. The services being booked are highlighted. Also the
+ * home page's dentist cards, which highlight nothing. */
+export function ServiceDays({ d, days, highlight = [] }: { d: DentistProfile; days: number[]; highlight?: string[] }) {
   const cell = (service: string, day: number): string => {
     const rule = (d.hours ?? []).find((h) => h.service === service);
     if (rule?.days.length && !rule.days.includes(day)) return "—";
