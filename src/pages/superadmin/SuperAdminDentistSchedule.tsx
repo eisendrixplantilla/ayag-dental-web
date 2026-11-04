@@ -73,6 +73,8 @@ function StaffSchedule({ id }: { id: string }) {
   // Each section as last saved, to tell whether it has changes still to save.
   const [savedDays, setSavedDays] = useState("");
   const [savedServices, setSavedServices] = useState("");
+  // Whether some service still holds numbers for days the dentist doesn't work.
+  const [staleDays, setStaleDays] = useState(false);
 
   const [dayConfigs, setDayConfigs] = useState<DayConfig[]>(Array.from({ length: 7 }, emptyDayConfig));
   // How many of each offered procedure this dentist takes on each working day, as typed:
@@ -130,7 +132,12 @@ function StaffSchedule({ id }: { id: string }) {
         setServiceNames(names);
         setLimitDrafts(drafts);
         setOffered(new Set(offers));
-        setSavedServices(servicesKey(new Set(offers), drafts, working));
+        // Numbers kept for days the dentist no longer works aren't shown here, so nothing on
+        // screen would ever differ from them: flag them as unsaved, and a save clears them.
+        const stale = (schedule.serviceHours ?? []).some((h) =>
+          [...h.days, ...Object.keys(h.dayLimits ?? {}).map(Number)].some((d) => !working.includes(d)));
+        setStaleDays(stale);
+        setSavedServices(stale ? STALE : servicesKey(new Set(offers), drafts, working));
       })
       .catch((err) => {
         if (!live) return;
@@ -221,6 +228,7 @@ function StaffSchedule({ id }: { id: string }) {
       // The numbers now live with each day; the old same-every-day limits are cleared.
       await saveServiceLimits(id, []);
       setSavedServices(servicesKey(offered, limitDrafts, workingDays));
+      setStaleDays(false);
       toast.success("Services, limits and days saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save services and limits");
@@ -432,6 +440,11 @@ function StaffSchedule({ id }: { id: string }) {
             Every working day of a ticked service needs a number: how many they take that day, or <span className="font-medium">0</span> if
             they don't do it then. Boxes in red still need one. Greyed days aren't working days; set those above.
           </p>
+          {staleDays && (
+            <p className="mt-2 text-xs text-warning">
+              Some services still have numbers for days this dentist no longer works. Save to clear them.
+            </p>
+          )}
           <SectionSave dirty={servicesDirty} saving={savingServices} onSave={saveServices} label="Save Services, Limits & Days" />
         </CardContent>
       </Card>}
@@ -447,6 +460,9 @@ function StaffSchedule({ id }: { id: string }) {
 function daysKey(configs: DayConfig[]): string {
   return JSON.stringify(configs.map((c) => (c.enabled ? c : { enabled: false })));
 }
+/** Stands in for what was saved when it holds days no longer worked: matches no key, so the section reads as unsaved. */
+const STALE = "stale";
+
 function servicesKey(offered: Set<string>, limits: Record<string, Record<string, string>>, workingDays: number[]): string {
   const ticked = [...offered].sort();
   return JSON.stringify({

@@ -107,3 +107,23 @@ describe("a staff schedule page for an account that isn't there", () => {
     expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
 });
+
+describe("a dentist's services with numbers for days they no longer work", () => {
+  it("says so, and offers to save them away", async () => {
+    const { getDentistSchedule } = await import("@/lib/api/staff");
+    const day = (dayOfWeek: number) => ({ dayOfWeek, start: "09:00", end: "17:00", lunchStart: "12:00", lunchEnd: "13:00", duration: 30, maxPatients: 20 });
+    vi.mocked(getDentistSchedule).mockResolvedValueOnce({
+      // Works Mon, Wed, Fri; Restoration still has a number for Tuesday from an older week.
+      days: [day(1), day(3), day(5)], unavailable: [],
+      serviceHours: [{ service: "Restoration", days: [1, 2], start: null, end: null, dayLimits: { "1": 2, "2": 3 } }],
+    } as never);
+    render(
+      <MemoryRouter initialEntries={["/superadmin/staff/DT-261001/schedule"]}>
+        <Routes><Route path="/superadmin/staff/:id/schedule" element={<SuperAdminDentistSchedule />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/still have numbers for days this dentist no longer works/)).toBeInTheDocument();
+    const save = screen.getByRole("button", { name: /Save Services, Limits & Days/ });
+    expect(save).not.toBeDisabled();
+  });
+});
