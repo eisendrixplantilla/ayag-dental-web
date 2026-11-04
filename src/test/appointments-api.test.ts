@@ -577,7 +577,8 @@ describe("a month of a dentist's bookings, for the calendar", () => {
     expect(res.body.days).toEqual({
       "2026-09-25": {
         slots: [{ time: "09:00", endTime: "10:00" }, { time: "13:00", endTime: null }],
-        services: { Veneers: 2, Oral: 1 },
+        // Counted under the clinic's current name: "Oral" is Oral Prophylaxis.
+        services: { Veneers: 2, "Oral Prophylaxis": 1 },
       },
     });
     expect(JSON.stringify(res.body)).not.toMatch(/Allen|example\.com/);
@@ -770,7 +771,15 @@ describe("one visit per service a day", () => {
     h.rows = [row({ status: "confirmed", date: "2099-01-05", time: "09:00", service: "Oral" })];
     const res = await call("POST", { body: { ...booking, patientName: "Allen Estrella", date: "2099-01-05", time: "14:00" } });
     expect(res.code).toBe(409);
-    expect(res.body.error).toMatch(/Oral is already booked for this patient on this day, at 9:00 AM/);
+    expect(res.body.error).toMatch(/Oral Prophylaxis is already booked for this patient on this day, at 9:00 AM/);
+  });
+
+  it("knows a visit saved as Oral is the same service as Oral Prophylaxis", async () => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    h.rows = [row({ status: "confirmed", date: "2099-01-05", time: "09:00", service: "Oral" })];
+    const res = await call("POST", { body: { ...booking, service: "Oral Prophylaxis", patientName: "Allen Estrella", date: "2099-01-05", time: "14:00" } });
+    expect(res.code).toBe(409);
+    expect(res.body.error).toMatch(/^Oral Prophylaxis is already booked/);
   });
 
   it("matches one service inside a visit for several", async () => {

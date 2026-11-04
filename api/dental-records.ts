@@ -310,8 +310,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // One row per service: the name is what booking forms and records match on. A name
     // that belongs to a removed service is its own case — adding it again would leave two
     // rows answering to the same name, so the Super Admin is sent to restore it instead.
+    // A service's old name counts too: "Oral" is Oral Prophylaxis under the name it was saved with.
+    const current = displayService(serviceName);
+    const names = [current, ...legacyNames(current)].map((n) => n.toLowerCase());
     const existing = await sql`
-      SELECT id, removed_at FROM services WHERE lower(service_name) = ${serviceName.toLowerCase()}
+      SELECT id, removed_at FROM services WHERE lower(service_name) = ANY(${names}::text[])
     `;
     if (existing.length > 0) {
       return res.status(409).json({

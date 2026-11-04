@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { sql } from "../_lib/db.js";
 import { SCHEMA_SQL } from "../_db/schema.js";
 import { splitName } from "../_lib/name.js";
+import { legacyNames } from "../_lib/services.js";
 
 const DEFAULT_USERS = [
   { email: "admin@admin.com", name: "Dr. Sarah Chen", role: "admin", password: "admin123" },
@@ -61,8 +62,8 @@ const DEFAULT_SERVICES = [
   { name: "Orthodontics (Braces)", duration: 60, price: 25000 },
   { name: "EXO (Bunot)", duration: 45, price: 3000 },
   { name: "Restoration", duration: 30, price: 2500 },
-  { name: "Oral", duration: 30, price: 1500 },
-  { name: "Veeners", duration: 60, price: 15000 },
+  { name: "Oral Prophylaxis", duration: 30, price: 1500 },
+  { name: "Veneers", duration: 60, price: 15000 },
   { name: "Denture (Pustiso)", duration: 60, price: 12000 },
   { name: "Implant", duration: 90, price: 35000 },
   { name: "Surgery", duration: 90, price: 20000 },
@@ -100,7 +101,8 @@ async function seedSettings() {
 
     let seededServices = 0;
     for (const s of DEFAULT_SERVICES) {
-      const existing = await client.query(`SELECT id, price, duration FROM services WHERE service_name = $1`, [s.name]);
+      // Under an old name too ("Oral", "Venners"), so seeding again never adds a second row beside it.
+      const existing = await client.query(`SELECT id, price, duration FROM services WHERE service_name = ANY($1)`, [[s.name, ...legacyNames(s.name)]]);
       if (existing.rows.length === 0) {
         await client.query(`INSERT INTO services (service_name, duration, price) VALUES ($1,$2,$3)`, [s.name, s.duration, s.price]);
         seededServices++;

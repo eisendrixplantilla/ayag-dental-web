@@ -34,6 +34,10 @@ vi.mock("../../api/_lib/db.js", () => ({
       h.services = h.services.filter(s => s.id !== v[0]);
       return [];
     }
+    // Adding a service: is the name (or an old name for it) taken already?
+    if (text.includes("SELECT id, removed_at FROM services WHERE lower(service_name) = ANY")) {
+      return h.services.filter(s => v[0].includes(s.service_name.toLowerCase())).map(s => ({ id: s.id, removed_at: s.removed_at }));
+    }
     throw new Error(`unexpected query: ${text}`);
   }),
 }));
@@ -121,5 +125,27 @@ describe("deleting a service for good", () => {
   it("says so when there is no such service", async () => {
     const res = await call({ services: "true", id: "sv-nope" });
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe("adding a service under a name the clinic already has", () => {
+  const add = async (name: string) => {
+    const res: any = {
+      statusCode: 0,
+      body: null as any,
+      status(code: number) { this.statusCode = code; return this; },
+      json(payload: any) { this.body = payload; return this; },
+    };
+    await handler({ method: "POST", query: { services: "true" }, body: { name, duration: 30 }, headers: {} } as any, res);
+    return res;
+  };
+
+  it("won't add Oral Prophylaxis beside the service saved as Oral", async () => {
+    h.services = [{ id: "sv-oral", service_name: "Oral", removed_at: null }];
+    for (const name of ["Oral Prophylaxis", "oral prophylaxis", "Oral"]) {
+      const res = await add(name);
+      expect(res.statusCode).toBe(409);
+      expect(res.body.error).toBe("A service with this name already exists");
+    }
   });
 });

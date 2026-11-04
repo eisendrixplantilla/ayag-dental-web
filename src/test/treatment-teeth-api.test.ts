@@ -54,8 +54,9 @@ describe("the dental chart on a record", () => {
     });
     expect(res.code).toBe(201);
     expect(h.treatments.map((t) => [t.service_name, t.teeth])).toEqual([["Oral", "16, 26"], ["Root Canal", "16"], ["Scaling", null]]);
+    // Read back under the clinic's current name: "Oral" is Oral Prophylaxis.
     expect(res.body.record.treatments.map((t: Row) => [t.serviceName, t.teeth])).toEqual(
-      [["Oral", "16, 26"], ["Root Canal", "16"], ["Scaling", null]],
+      [["Oral Prophylaxis", "16, 26"], ["Root Canal", "16"], ["Scaling", null]],
     );
     expect(res.body.record.toothCodes).toEqual({ 16: ["D", "Am"] });
     expect(res.body.record.toothNotes).toEqual({ 16: "Sensitive to cold" });

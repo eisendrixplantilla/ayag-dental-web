@@ -185,8 +185,8 @@ describe("one service per walk-in", () => {
     await renderPage();
     await nameAndAssign();
 
-    fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(picker().value).toBe("Oral"));
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
+    await waitFor(() => expect(picker().value).toBe("Oral Prophylaxis"));
     fireEvent.change(picker(), { target: { value: "Veneers" } });
     await waitFor(() => expect(picker().value).toBe("Veneers"));
   });
@@ -203,7 +203,7 @@ describe("what the walk-in list lets you do", () => {
     gender: "Female",
     dentistId: "dr-mike",
     dentistName: "Dr. Mike Johnson",
-    service: "Oral",
+    service: "Oral Prophylaxis",
     date: "2026-09-25",
     time: "09:00",
     endTime: "09:30",
@@ -289,7 +289,7 @@ describe("what the walk-in form tells you about the date you are picking", () =>
     h.schedule = FULL_WEEK;
     await renderPage();
     await nameAndAssign();
-    fireEvent.change(picker(), { target: { value: "Oral" } });
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
     await screen.findByText("Working hours:");
     fireEvent.click(screen.getByRole("button", { name: "Pick Mar 10" }));
     await waitFor(() => expect(within(slotGroup()).getAllByRole("button").length).toBeGreaterThan(0));
@@ -319,7 +319,7 @@ describe("what the walk-in form tells you about the date you are picking", () =>
     fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
 
     const readback = (await screen.findByText("March 10th, 2027")).closest("p")!;
-    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
+    expect(readback.textContent).toBe("Oral Prophylaxis with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
     expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|March 10th, 2027|9:00 AM – 9:30 AM/)
       .every(el => /font-semibold/.test(el.className))).toBe(true);
     expect(readback.className).toContain("bg-primary/5");
@@ -331,7 +331,7 @@ describe("what the walk-in form tells you about the date you are picking", () =>
     fireEvent.click(screen.getByRole("button", { name: /Add Walk-in/ }));
 
     const note = (await screen.findByText(/Choose another service below for the same patient/)).closest("p")!;
-    expect(note.textContent).toMatch(/Added Oral on Wed, Mar 10 at 9:00 AM – 9:30 AM for Rosa Mendoza with Dr. Mike Johnson/);
+    expect(note.textContent).toMatch(/Added Oral Prophylaxis on Wed, Mar 10 at 9:00 AM – 9:30 AM for Rosa Mendoza with Dr. Mike Johnson/);
     expect((screen.getByPlaceholderText("Patient's full name") as HTMLInputElement).value).toBe("Rosa Mendoza");
     expect((screen.getByLabelText("Assign dentist") as HTMLSelectElement).value).toBe("dr-mike");
     expect(picker().value).toBe(""); // the next service starts empty
@@ -351,13 +351,13 @@ describe("what the walk-in form tells you about the date you are picking", () =>
 describe("the walk-in list puts the newest booking on top", () => {
   it("orders by when it was taken at the desk, not by the date it is for", async () => {
     h.walkIns = [
-      { id: "a", patientName: "Allen Estrella", service: "Oral", dentistName: "Dr. Mike Johnson",
+      { id: "a", patientName: "Allen Estrella", service: "Oral Prophylaxis", dentistName: "Dr. Mike Johnson",
         date: "2026-10-02", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
         createdAt: "2026-09-18T09:00:00Z" },
-      { id: "b", patientName: "Pedro Reyes", service: "Oral", dentistName: "Dr. Mike Johnson",
+      { id: "b", patientName: "Pedro Reyes", service: "Oral Prophylaxis", dentistName: "Dr. Mike Johnson",
         date: "2027-03-10", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
         createdAt: "2026-09-25T08:00:00Z" },
-      { id: "c", patientName: "Maria Santos", service: "Oral", dentistName: "Dr. Mike Johnson",
+      { id: "c", patientName: "Maria Santos", service: "Oral Prophylaxis", dentistName: "Dr. Mike Johnson",
         date: "2026-09-26", time: "09:00", endTime: null, type: "walk-in", status: "confirmed",
         createdAt: "2026-09-24T17:00:00Z" },
     ];

@@ -142,20 +142,20 @@ describe("one service per booking", () => {
     await renderPage();
     await chooseMike();
 
-    fireEvent.change(picker(), { target: { value: "Oral" } });
-    await waitFor(() => expect(picker().value).toBe("Oral"));
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
+    await waitFor(() => expect(picker().value).toBe("Oral Prophylaxis"));
     fireEvent.change(picker(), { target: { value: "Veneers" } });
     await waitFor(() => expect(picker().value).toBe("Veneers"));
-    expect(options()).toContain("Oral"); // still on offer, just not chosen
+    expect(options()).toContain("Oral Prophylaxis"); // still on offer, just not chosen
   });
 
   it("offers only the services the chosen dentist does", async () => {
-    h.profiles = [{ id: "dr-mike", name: "Dr. Mike Johnson", photoUrl: null, services: ["Oral", "Veneers"], days: [], limits: [], hours: [] }];
+    h.profiles = [{ id: "dr-mike", name: "Dr. Mike Johnson", photoUrl: null, services: ["Oral Prophylaxis", "Veneers"], days: [], limits: [], hours: [] }];
     await renderPage();
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
 
-    await waitFor(() => expect(options()).toEqual(["Oral", "Veneers"]));
+    await waitFor(() => expect(options()).toEqual(["Oral Prophylaxis", "Veneers"]));
   });
 
   it("asks for the dentist first, and only then offers services", async () => {
@@ -215,7 +215,7 @@ describe("slots while the form sits open", () => {
 
   const pickVisit = async () => {
     await renderPage();
-    fireEvent.change(picker(), { target: { value: "Oral" } });
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
     fireEvent.click(await screen.findByRole("button", { name: "Pick Mar 10" }));
@@ -293,7 +293,7 @@ describe("what the form tells you about the date you are picking", () => {
 
   const pickVisit = async () => {
     await renderPage();
-    fireEvent.change(picker(), { target: { value: "Oral" } });
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
     fireEvent.click(await screen.findByRole("button", { name: "Pick Mar 10" }));
@@ -302,7 +302,7 @@ describe("what the form tells you about the date you are picking", () => {
 
   it("spells out the dentist's working hours, and doesn't whisper them", async () => {
     await renderPage();
-    fireEvent.change(picker(), { target: { value: "Oral" } });
+    fireEvent.change(picker(), { target: { value: "Oral Prophylaxis" } });
     await waitFor(() => expect(screen.getByLabelText("Choose a dentist")).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Choose a dentist"), { target: { value: "dr-mike" } });
 
@@ -332,7 +332,7 @@ describe("what the form tells you about the date you are picking", () => {
     fireEvent.click(within(slotGroup()).getByRole("button", { name: "9:00 AM – 9:30 AM" }));
 
     const readback = (await screen.findByText("March 10th, 2027")).closest("p")!;
-    expect(readback.textContent).toBe("Oral with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
+    expect(readback.textContent).toBe("Oral Prophylaxis with Dr. Mike Johnson on March 10th, 2027 at 9:00 AM – 9:30 AM.");
     // Each thing being booked carries weight, and the whole line is set apart.
     expect(within(readback).getAllByText(/Oral|Dr. Mike Johnson|March 10th, 2027|9:00 AM – 9:30 AM/)
       .every(el => /font-semibold/.test(el.className))).toBe(true);
