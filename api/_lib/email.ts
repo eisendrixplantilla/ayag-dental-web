@@ -22,7 +22,7 @@ export async function sendOtpEmail(email: string, code: string, validMinutes: nu
 
 export interface AppointmentEmailParams {
   email: string;
-  status: "confirmed" | "rejected" | "cancelled" | "rescheduled";
+  status: "pending" | "confirmed" | "rejected" | "cancelled" | "rescheduled" | "completed";
   patientName: string;
   service: string;
   dentistName: string | null;
@@ -31,11 +31,14 @@ export interface AppointmentEmailParams {
   message?: string;
 }
 
+// Read as "Your appointment has been {{status}}" in the EmailJS template, so each is a past participle.
 const STATUS_LABELS: Record<AppointmentEmailParams["status"], string> = {
+  pending: "Received",
   confirmed: "Confirmed",
   rejected: "Rejected",
   cancelled: "Cancelled",
   rescheduled: "Rescheduled",
+  completed: "Completed",
 };
 
 /** "13:00" -> "1:00 PM", matching how times are shown in the app. */

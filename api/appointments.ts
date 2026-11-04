@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "./_lib/db.js";
 import { getSessionFromRequest } from "./_lib/auth.js";
-import { sendAppointmentEmail } from "./_lib/email.js";
+import { sendAppointmentEmail, type AppointmentEmailParams } from "./_lib/email.js";
 import { displayService } from "./_lib/services.js";
 import { joinName } from "./_lib/name.js";
 import { manilaDateStr, manilaNowMinutes } from "./_lib/date.js";
@@ -11,7 +11,59 @@ import { assignCodes, ensureCodes } from "./_lib/codes.js";
 import { consentHandler } from "./_lib/consent.js";
 import { awayAt } from "./_lib/leave.js";
 
-const NOTIFY_STATUSES = new Set(["confirmed", "rejected", "cancelled", "rescheduled"]);
+type EmailStatus = AppointmentEmailParams["status"];
+/** The columns of an appointments row the patient's email is written from. */
+interface EmailRow {
+  email?: string | null; patient_name?: string; service?: string; dentist_name?: string | null;
+  date?: string | Date; time?: string; reason?: string | null; remarks?: string | null;
+}
+const EMAIL_STATUSES = new Set<string>(["pending", "confirmed", "rejected", "cancelled", "rescheduled", "completed"]);
+
+/**
+ * Emails the patient where the appointment now stands. Every status is told: a request
+ * received, approved, moved, turned down, called off, or the visit done.
+ * null = nothing to send (no address on file); otherwise whether it actually went.
+ * Awaited by callers (not fire-and-forget): Vercel can freeze the function as soon as the
+ * response is sent, which would silently kill an un-awaited send.
+ */
+async function notifyPatient(row: EmailRow, status: EmailStatus, message: string): Promise<boolean | null> {
+  if (!row?.email) return null;
+  try {
+    await sendAppointmentEmail({
+      email: row.email,
+      status,
+      patientName: row.patient_name ?? "",
+      service: displayService(row.service ?? ""),
+      dentistName: row.dentist_name ?? null,
+      date: new Date(row.date ?? "").toISOString().slice(0, 10),
+      time: row.time ?? "",
+      message,
+    });
+    return true;
+  } catch (err) {
+    console.error("Appointment email failed:", err);
+    return false;
+  }
+}
+
+/** The line under the details, for each status. */
+function emailMessage(status: EmailStatus, row: EmailRow, opts: { rescheduleRequest?: boolean } = {}): string {
+  const why = [row.reason, row.remarks].filter(Boolean).join(" — ");
+  switch (status) {
+    case "pending":
+      return opts.rescheduleRequest
+        ? "We got your request to move this appointment to the date and time above. We'll email you again once the clinic approves it."
+        : "We got your appointment request. We'll email you again once the clinic confirms it.";
+    case "confirmed":
+      return "Please arrive 10 minutes early and bring a valid ID.";
+    case "completed":
+      return "Thank you for visiting Ayag Dental Clinic. We hope to see you again for your next check-up.";
+    case "rescheduled":
+      return why || "Your appointment has moved to the date and time above.";
+    default:
+      return why;
+  }
+}
 
 /** Statuses that occupy a dentist's time slot. */
 const HOLDING = ["pending", "confirmed", "rescheduled"];
@@ -168,10 +220,15 @@ export const EXPIRED_REASON = "Expired: not approved before the appointment time
 async function expireOverduePending() {
   const today = manilaDateStr(new Date());
   const now = toTime(manilaNowMinutes());
-  await sql`
+  const expired = await sql`
     UPDATE appointments /* expire-pending */
     SET status = 'rejected', reason = ${EXPIRED_REASON}, updated_at = now()
-    WHERE status = 'pending' AND (date < ${today}::date OR (date = ${today}::date AND time <= ${now}))`;
+    WHERE status = 'pending' AND (date < ${today}::date OR (date = ${today}::date AND time <= ${now}))
+    RETURNING *`;
+  // Each patient hears their request closed, so nobody turns up for a time that was never approved.
+  for (const row of Array.isArray(expired) ? expired : []) {
+    await notifyPatient(row, "rejected", "Your request wasn't approved before the appointment time, so it has been closed. Please book a new time.");
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -320,7 +377,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Could not give the appointment its reference", err);
       return new Map<string, string>();
     });
-    return res.status(201).json({ appointment: mapRow({ ...inserted[0], reference: codes.get(inserted[0].id) ?? null }) });
+    // The patient hears it came through: an online request as received, a walk-in as booked.
+    const emailSent = await notifyPatient(inserted[0], status, emailMessage(status, inserted[0]));
+    return res.status(201).json({ appointment: mapRow({ ...inserted[0], reference: codes.get(inserted[0].id) ?? null }), emailSent });
   }
 
   // A guest who walked in without an account has since made one: staff move that guest's
@@ -522,33 +581,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `;
     const updatedRow = updated[0];
 
-    // null = no email was due (status unchanged, or no address on file); otherwise
-    // whether it actually sent. Returned so the UI can say what really happened
-    // instead of always claiming success.
-    let emailSent: boolean | null = null;
-    if (status && status !== existing.status && NOTIFY_STATUSES.has(status) && updatedRow.email) {
-      const message = status === "confirmed"
-        ? "Please arrive 10 minutes early and bring a valid ID."
-        : [updatedRow.reason, updatedRow.remarks].filter(Boolean).join(" — ");
-      // Awaited (not fire-and-forget): Vercel can freeze the function as soon as the response is
-      // sent, which would silently kill an un-awaited email send before it completes.
-      try {
-        await sendAppointmentEmail({
-          email: updatedRow.email,
-          status,
-          patientName: updatedRow.patient_name,
-          service: displayService(updatedRow.service),
-          dentistName: updatedRow.dentist_name,
-          date: new Date(updatedRow.date).toISOString().slice(0, 10),
-          time: updatedRow.time,
-          message,
-        });
-        emailSent = true;
-      } catch (err) {
-        console.error("Appointment email failed:", err);
-        emailSent = false;
-      }
-    }
+    // Every change of status is emailed, and so is a move that keeps its status (moved
+    // again, or to another dentist): the patient always knows where the visit stands.
+    // null = no email was due (nothing changed, or no address on file); otherwise whether
+    // it actually sent, so the UI can say what really happened.
+    const nowStatus: string = updatedRow.status;
+    const changed = nowStatus !== existing.status;
+    const emailAs: EmailStatus | null = !EMAIL_STATUSES.has(nowStatus) ? null
+      : changed ? nowStatus as EmailStatus
+      : moving && HOLDING.includes(nowStatus) ? (nowStatus === "pending" ? "pending" : "rescheduled")
+      : null;
+    const emailSent = emailAs
+      ? await notifyPatient(updatedRow, emailAs, emailMessage(emailAs, updatedRow, { rescheduleRequest: emailAs === "pending" && moving }))
+      : null;
 
     return res.status(200).json({ appointment: mapRow(updatedRow), emailSent });
   }

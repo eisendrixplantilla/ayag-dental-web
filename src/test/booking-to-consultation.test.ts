@@ -201,7 +201,8 @@ describe("a visit from booking to consultation", () => {
     const approved = await call(appointments, "PATCH", { id: apt.id }, { status: "confirmed" });
     expect(approved.code, JSON.stringify(approved.body)).toBe(200);
     expect(approved.body.appointment.status).toBe("confirmed");
-    expect(sendAppointmentEmail).toHaveBeenCalledTimes(1);
+    // One email so far for the request coming through, and now one for its approval.
+    expect(sendAppointmentEmail.mock.calls.map((c: any[]) => c[0].status)).toEqual(["pending", "confirmed"]);
 
     // 3. At the clinic the patient signs the consent on the dentist's screen.
     as("dentist", DR);
@@ -220,6 +221,7 @@ describe("a visit from booking to consultation", () => {
     const done = await call(appointments, "PATCH", { id: apt.id }, { status: "completed" });
     expect(done.code, JSON.stringify(done.body)).toBe(200);
     expect(done.body.appointment.status).toBe("completed");
+    expect(sendAppointmentEmail).toHaveBeenLastCalledWith(expect.objectContaining({ status: "completed", service: "Oral Prophylaxis" }));
     const record = await call(dentalRecords, "POST", {}, {
       appointmentId: apt.id, date: apt.date, diagnosis: "Mild plaque and tartar buildup", toothNumber: "16",
       treatments: [{ serviceName: "Oral Prophylaxis", teeth: "16" }],

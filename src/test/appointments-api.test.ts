@@ -97,12 +97,14 @@ vi.mock("../../api/_lib/db.js", () => ({
     if (text.includes("expire-pending")) {
       if (!h.expire) return [];
       const [reason, today, , now] = v;
+      const closed: Row[] = [];
       for (const r of h.rows) {
         if (r.status === "pending" && (r.date < today || (r.date === today && r.time <= now))) {
           Object.assign(r, { status: "rejected", reason });
+          closed.push(r);
         }
       }
-      return [];
+      return closed;
     }
     if (text.includes("UPDATE appointments")) {
       const [status, date, time, end_time, reason, remarks, dentist_id, dentist_name, inc, id] = v;
@@ -155,6 +157,59 @@ beforeEach(() => {
   h.session = { sub: "admin-1", email: "admin@admin.com", role: "admin" };
   sendAppointmentEmail.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("an email for every status", () => {
+  it("tells the patient their online request came through", async () => {
+    h.session = { sub: "p1", email: "allen@example.com", role: "patient" };
+    const res = await call("POST", { body: { ...booking, email: "allen@example.com", date: "2026-09-25", time: "13:00" } });
+    expect(res.code).toBe(201);
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pending", email: "allen@example.com", message: expect.stringMatching(/got your appointment request/),
+    }));
+  });
+
+  it("tells a walk-in with an email address that the visit is booked", async () => {
+    const res = await call("POST", { body: { ...booking, type: "walk-in", email: "guest@example.com", date: "2026-09-25", time: "13:00" } });
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status: "confirmed", email: "guest@example.com" }));
+  });
+
+  it("sends nothing for a booking with no email address", async () => {
+    const res = await call("POST", { body: { ...booking, type: "walk-in", date: "2026-09-25", time: "13:00" } });
+    expect(res.code).toBe(201);
+    expect(res.body.emailSent).toBeNull();
+    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+  });
+
+  it("tells the patient when the visit is completed", async () => {
+    h.rows = [row({ status: "confirmed" })];
+    const res = await patch("apt-1", { status: "completed" });
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status: "completed", message: expect.stringMatching(/Thank you/) }));
+  });
+
+  it.each(["rejected", "cancelled"])("tells the patient when it's %s, with the reason", async (status) => {
+    h.rows = [row({ status: "pending" })];
+    const res = await patch("apt-1", { status, reason: "The dentist is away that day" });
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status, message: "The dentist is away that day" }));
+  });
+
+  it("tells the patient when the clinic moves it again, though it was already rescheduled", async () => {
+    h.rows = [row({ status: "rescheduled", date: "2026-09-25", time: "13:00" })];
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-25", time: "15:00" });
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({ status: "rescheduled", time: "15:00" }));
+  });
+
+  it("sends nothing when only a remark changes", async () => {
+    h.rows = [row({ status: "confirmed" })];
+    const res = await patch("apt-1", { remarks: "Bring x-rays" });
+    expect(res.body.emailSent).toBeNull();
+    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+  });
 });
 
 describe("approval email", () => {
@@ -376,9 +431,12 @@ describe("a patient rescheduling", () => {
     expect(res.body.appointment.rescheduleCount).toBe(1);
   });
 
-  it("sends no email for the patient's own request", async () => {
-    await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
-    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+  it("emails the patient that their request to move it came through", async () => {
+    const res = await patch("apt-1", { status: "rescheduled", date: "2026-09-26", time: "09:00" });
+    expect(res.body.emailSent).toBe(true);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pending", date: "2026-09-26", time: "09:00", message: expect.stringMatching(/request to move/),
+    }));
   });
 
   it("emails the patient once the clinic approves the new time", async () => {
@@ -743,6 +801,16 @@ describe("a request still pending when its time comes", () => {
     expect(h.rows[0].reason).toMatch(/not approved before the appointment time/);
   });
 
+  it("emails each patient whose request was closed, once", async () => {
+    h.rows = [pending("yesterday", "2026-10-25", "15:00"), pending("tomorrow", "2026-10-27", "09:00")];
+    await call("GET", { query: { bookedSlots: "1", date: "2026-10-27", dentistId: DR } });
+    await call("GET", { query: { bookedSlots: "1", date: "2026-10-27", dentistId: DR } });
+    expect(sendAppointmentEmail).toHaveBeenCalledTimes(1);
+    expect(sendAppointmentEmail).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rejected", date: "2026-10-25", message: expect.stringMatching(/wasn't approved before the appointment time/),
+    }));
+  });
+
   it("stops holding the dentist's time", async () => {
     h.rows = [pending("earlier-today", "2026-10-26", "10:00")];
     const res = await call("GET", { query: { bookedSlots: "1", date: "2026-10-26", dentistId: DR } });
@@ -754,7 +822,8 @@ describe("a request still pending when its time comes", () => {
     const res = await patch("yesterday", { status: "confirmed" });
     expect(res.code).toBe(409);
     expect(res.body.error).toMatch(/time passed before it was approved/);
-    expect(sendAppointmentEmail).not.toHaveBeenCalled();
+    // Only the closing was emailed, never an approval.
+    expect(sendAppointmentEmail.mock.calls.map((c) => c[0].status)).toEqual(["rejected"]);
   });
 
   it("can still be approved before its time", async () => {
