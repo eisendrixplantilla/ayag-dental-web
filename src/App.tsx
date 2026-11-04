@@ -17,7 +17,6 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminPatients from "./pages/admin/AdminPatients";
 import AdminPatientHistory from "./pages/admin/AdminPatientHistory";
 import AdminAppointments from "./pages/admin/AdminAppointments";
-import AdminInventory from "./pages/admin/AdminInventory";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminTreatment from "./pages/admin/AdminTreatment";
 import AdminAccounts from "./pages/admin/AdminAccounts";
@@ -83,7 +82,6 @@ function AppRoutes() {
       <Route path="/admin/appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/online-appointments" element={<ProtectedRoute roles={["admin"]}><DashboardLayout wide><AdminOnlineAppointments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/treatment" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminTreatment /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/inventory" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminInventory /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminReports /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute roles={["admin"]}><DashboardLayout><AdminProfile /></DashboardLayout></ProtectedRoute>} />
 

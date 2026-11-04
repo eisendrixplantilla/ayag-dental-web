@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A dental clinic management app (Ayag Dental): patients book online, admins run the front desk (walk-ins, treatment, inventory, reports), dentists manage schedules and dental records, and a superadmin manages staff, clinic settings, and archives. Started as a Lovable project (Vite + React + TypeScript + shadcn/ui + Tailwind); the backend is Vercel serverless functions on Neon Postgres.
+A dental clinic management app (Ayag Dental): patients book online, admins run the front desk (walk-ins, treatment, reports), dentists manage schedules and dental records, and a superadmin manages staff, clinic settings, and archives. Started as a Lovable project (Vite + React + TypeScript + shadcn/ui + Tailwind); the backend is Vercel serverless functions on Neon Postgres.
 
 ## Commands
 

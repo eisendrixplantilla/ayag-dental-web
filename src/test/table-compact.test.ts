@@ -56,7 +56,6 @@ describe("every table is compact", () => {
     const textHeavy = [
       "src/pages/admin/AdminAccounts.tsx",
       "src/pages/admin/AdminPatients.tsx",
-      "src/pages/admin/AdminInventory.tsx",
       "src/pages/admin/AdminReports.tsx",
       "src/pages/admin/AdminPatientHistory.tsx",
       "src/pages/dentist/DentistRecords.tsx",
