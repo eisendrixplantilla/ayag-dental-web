@@ -241,9 +241,18 @@ const joined = (id: string) => {
   d.setUTCDate(d.getUTCDate() - 7);
   return d.toISOString();
 };
+// When a visit was booked: a few days ahead of it, and never after TODAY, since a booking
+// can't have been made later than now. (Lists put the newest booking first, so one "booked"
+// in the future would sit above every real request.)
 const bookedOn = (date: string, from: number) => {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 2 - Math.floor(rand() * 9));
+  const latest = new Date(`${TODAY}T00:00:00Z`);
+  latest.setUTCDate(latest.getUTCDate() - 1);
+  if (d > latest) {
+    d.setTime(latest.getTime());
+    d.setUTCDate(d.getUTCDate() - Math.floor(rand() * 6));
+  }
   return `${d.toISOString().slice(0, 10)}T${toTime(Math.max(0, from - 480))}:00Z`;
 };
 
