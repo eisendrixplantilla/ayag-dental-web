@@ -116,8 +116,11 @@ export function DentistsToday({ dentists, schedules, appointments }: {
       const mine = list.filter((a) => a.dentistId === d.id || a.dentistName === d.name);
       const held = mine.filter((a) => HOLDING.includes(a.status)).map((a) => ({ time: a.time, endTime: a.endTime }));
       const cell = cellFor(schedule, date);
-      const free = schedule && cell.kind === "work" ? generateAvailableSlots(schedule, date, held)[0]?.label ?? null : null;
-      return { d, cell, booked: mine.length, free };
+      const working = !!schedule && cell.kind === "work";
+      const free = working ? generateAvailableSlots(schedule, date, held)[0]?.label ?? null : null;
+      // No time left even with nobody booked: their hours are over, which isn't "fully booked".
+      const closed = working && !free && generateAvailableSlots(schedule, date, []).length === 0;
+      return { d, cell, booked: mine.length, free, closed };
     }).sort((a, b) => order[a.cell.kind] - order[b.cell.kind] || a.d.name.localeCompare(b.d.name));
   }, [dentists, schedules, appointments]);
   const working = rows.filter((r) => r.cell.kind === "work").length;
@@ -130,7 +133,7 @@ export function DentistsToday({ dentists, schedules, appointments }: {
       <CardContent>
         {rows.length === 0 ? <Empty text="No active dentists." /> : (
           <ul className="divide-y divide-border max-h-[260px] overflow-y-auto pr-1 -mr-1" aria-label="Dentists available today">
-            {rows.map(({ d, cell, booked, free }) => (
+            {rows.map(({ d, cell, booked, free, closed }) => (
               <li key={d.id} className={cn("flex items-center gap-3 py-2.5", cell.kind !== "work" && "opacity-70")}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground truncate">{d.name}</p>
@@ -142,7 +145,7 @@ export function DentistsToday({ dentists, schedules, appointments }: {
                   free ? (
                     <Badge variant="outline" className="shrink-0 bg-success/10 text-success border-success/20">Free {free}</Badge>
                   ) : (
-                    <Badge variant="outline" className="shrink-0 bg-muted text-muted-foreground">Fully booked</Badge>
+                    <Badge variant="outline" className="shrink-0 bg-muted text-muted-foreground">{closed ? "Closed for today" : "Fully booked"}</Badge>
                   )
                 )}
               </li>

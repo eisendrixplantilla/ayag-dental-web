@@ -37,6 +37,7 @@ const DOT: Record<DayAvailability["state"], string> = {
   few: "bg-warning",
   full: "bg-destructive",
   off: "bg-muted-foreground/40",
+  closed: "bg-transparent",
   past: "bg-transparent",
 };
 
@@ -84,7 +85,7 @@ export default function BookingCalendar({
 
   const blocked = useCallback((date: Date) => {
     const a = availabilityOf(date);
-    return isCurrent(date) || a.state === "past" || a.state === "off" || (loaded && a.state === "full");
+    return isCurrent(date) || a.state === "past" || a.state === "off" || a.state === "closed" || (loaded && a.state === "full");
   }, [availabilityOf, loaded, isCurrent]);
 
   // A day picked earlier can fill up — someone else books the last place, or another
@@ -123,7 +124,8 @@ export default function BookingCalendar({
     const quiet = current || a.state === "past" || a.state === "off" || activeModifiers.outside;
     // Days off (a day they don't work, or a day of leave) and past days say nothing (the
     // legend covers them), so the days that can be booked stand out.
-    const note = quiet ? "" : !loaded ? "…" : a.state === "full" ? "Full" : `${a.left} left`;
+    // Today after its last time: closed, not full (nothing was booked out).
+    const note = quiet ? "" : a.state === "closed" ? "Closed" : !loaded ? "…" : a.state === "full" ? "Full" : `${a.left} left`;
     return (
       <span className="flex flex-col items-center justify-center gap-0.5 leading-none max-w-full">
         {activeModifiers.today && (
@@ -134,7 +136,7 @@ export default function BookingCalendar({
         {note && (
           <span className={cn(
             "flex items-center gap-1 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-medium whitespace-nowrap",
-            !activeModifiers.selected && (a.state === "full" ? "text-destructive" : a.state === "few" ? "text-warning" : "text-success"),
+            !activeModifiers.selected && (a.state === "closed" ? "text-muted-foreground" : a.state === "full" ? "text-destructive" : a.state === "few" ? "text-warning" : "text-success"),
           )}>
             {loaded && (a.state === "open" || a.state === "few") && (
               <span className={cn("hidden min-[360px]:inline-block w-1.5 h-1.5 rounded-full shrink-0", activeModifiers.selected ? "bg-primary-foreground" : DOT[a.state])} aria-hidden />
@@ -189,6 +191,7 @@ export default function BookingCalendar({
           few: (d) => loaded && inMonth(d) && availabilityOf(d).state === "few",
           full: (d) => loaded && inMonth(d) && availabilityOf(d).state === "full",
           off: (d) => availabilityOf(d).state === "off",
+          closed: (d) => inMonth(d) && availabilityOf(d).state === "closed",
           past: (d) => availabilityOf(d).state === "past",
           current: (d) => inMonth(d) && isCurrent(d),
         }}
@@ -197,6 +200,7 @@ export default function BookingCalendar({
           few: "bg-warning/15 border-warning/50 hover:bg-warning/25",
           full: "bg-destructive/10 border-destructive/25 text-destructive/80",
           off: "text-muted-foreground/50",
+          closed: "text-muted-foreground/60",
           past: "text-muted-foreground/35",
           current: "!bg-primary/5 !border-dashed !border-primary/50",
         }}

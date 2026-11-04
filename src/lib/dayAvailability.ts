@@ -4,7 +4,9 @@ import { forServices, generateAvailableSlots, isDentistAvailableOn, type Dentist
 import type { DayBookings, ServiceLimit } from "@/lib/api/booking";
 
 /** How a day reads on a booking calendar. */
-export type DayState = "past" | "off" | "full" | "few" | "open";
+/** `closed`: today, once the last time the visit could start has gone by. Nothing can be
+ * booked, but not because it's full, so it doesn't say so. */
+export type DayState = "past" | "off" | "closed" | "full" | "few" | "open";
 
 export interface DayAvailability {
   state: DayState;
@@ -38,6 +40,10 @@ export function dayAvailability(opts: {
   const schedule = opts.schedule && forServices(opts.schedule, opts.services);
   if (toKey(date) < manilaTodayDateStr()) return { state: "past", left: 0, limitedBy: null };
   if (!schedule || !isDentistAvailableOn(schedule, date)) return { state: "off", left: 0, limitedBy: null };
+  if (toKey(date) === manilaTodayDateStr()
+    && generateAvailableSlots(schedule, date, [], opts.visitMinutes, opts.leadMinutes).length === 0) {
+    return { state: "closed", left: 0, limitedBy: null };
+  }
 
   let left = generateAvailableSlots(schedule, date, opts.bookings?.slots ?? [], opts.visitMinutes, opts.leadMinutes).length;
   let limitedBy: string | null = null;

@@ -70,3 +70,17 @@ describe("a different number on each day", () => {
     expect(dayAvailability({ date: wednesday, schedule: s, bookings: undefined, limits: veneersLimit, services: ["Veneers"] }).left).toBe(3);
   });
 });
+
+describe("today, once its hours are over", () => {
+  it("reads as closed, not full, even with nothing booked", () => {
+    vi.setSystemTime(new Date("2027-03-15T05:00:00Z")); // Monday 1:00 PM in Manila; hours end at noon
+    expect(dayAvailability({ date: monday, schedule, bookings: undefined, limits: [], services: ["Oral"] }))
+      .toEqual({ state: "closed", left: 0, limitedBy: null });
+  });
+
+  it("still reads as full while there are hours left but every time is taken", () => {
+    vi.setSystemTime(new Date("2027-03-15T02:00:00Z")); // 10:00 AM in Manila
+    const bookings = { slots: ["10:30", "11:00", "11:30"].map((time) => ({ time, endTime: null })), services: {} };
+    expect(dayAvailability({ date: monday, schedule, bookings, limits: [], services: ["Oral"] }).state).toBe("full");
+  });
+});
